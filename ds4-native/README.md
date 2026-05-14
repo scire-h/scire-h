@@ -78,8 +78,14 @@ codesign --deep --force --options runtime --timestamp \
 ## Development roadmap
 
 * [x] **Phase 1** — JUCE skeleton, working subtractive synth voice, parameter tree, basic UI, AU/VST3/Standalone targets.
-* [ ] **Phase 2** — Component-level analog model. Detailed design in [`docs/CIRCUIT_RESEARCH.md`](docs/CIRCUIT_RESEARCH.md) (panel-to-circuit mapping + IC inventory) and [`docs/PHASE2_DESIGN.md`](docs/PHASE2_DESIGN.md) (DSP module breakdown). Status:
-  * [x] **2.1 `TriangleCoreVCO`** — landed. ICL8038-style triangle-core + 3rd-order Bhaskara sine shaper. Verify by ear: with WAVEFORM = ∿ the new sine should have an audibly hollow / flute-like character that a pure `std::sin` doesn't, especially at high VCO output (the 3rd harmonic sitting at -28 dBc is the "tell").
+* [x] **Phase 2** — Component-level analog model. Detailed design in [`docs/CIRCUIT_RESEARCH.md`](docs/CIRCUIT_RESEARCH.md) (panel-to-circuit mapping + IC inventory) and [`docs/PHASE2_DESIGN.md`](docs/PHASE2_DESIGN.md) (DSP module breakdown). Status:
+  * [x] **2.1 `TriangleCoreVCO`** — ICL8038-style triangle-core + 3rd-order Bhaskara sine shaper. Verified: H3 = -38 dB (≈ 1.3 % THD), H2/H4 below -45 dB.
+  * [x] **2.2 `OTAVCA`** — CA3080 / LM13700 tanh VCA. Replaces the inline `softSat` in `Voice`. Signal-level-dependent third-harmonic distortion that fades naturally as the envelope decays.
+  * [x] **2.3 `NoiseBPState` via `TPTSvf`** — Zavalishin-style zero-delay-feedback state-variable filter as a header-only helper. `NoiseVoice` now uses two TPT-SVFs (main BP + parallel peaking emphasis) with no per-block heap allocations.
+  * [x] **2.4 `PiezoTrigger`** — peak-detector + Schmitt-trigger front-end. Plugin now exposes an optional stereo *Trigger In* side-chain bus; L → Ch1, R → Ch2 fire on hard hits.
+  * [x] **2.5 `LFOSchmitt`** — op-amp Schmitt + RC integrator relaxation LFO. Same triangle-core state machine as `TriangleCoreVCO`, exponential 0.8-22 Hz FREQUENCY taper.
+  * [x] **2.6 MULTI VCO cascade** — corrected: triggering Ch_n with PULL engaged also fires Ch_(n+1) at 80 % velocity, exactly one hop. Implemented in `PluginProcessor::fireChannel`.
+  * [x] **DSP unit tests** — five JUCE-independent test binaries under `tests/` (17 assertions total, all passing under g++ -O2). Run `tests/run_all.sh` or use the `tests/CMakeLists.txt` ctest target.
   * `PiezoTrigger` — peak-detector + Schmitt-trigger so the plug-in can be driven by an actual piezo on a side-chain audio input.
   * `OTAVCA` — CA3080 / LM13700-style tanh VCA, replacing the plain `tanh(x · 1.4)` hack.
   * `NoiseBPState` — TPT state-variable band-pass + peaking, no per-block heap allocations.
