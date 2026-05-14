@@ -22,5 +22,9 @@ private:
     std::array<std::unique_ptr<ChannelStripComponent>, P::kNumChannels> strips;
     std::unique_ptr<MasterStripComponent> master;
 
+    /* Top-bar preset selector. */
+    juce::ComboBox  presetBox;
+    juce::TextButton helpButton { "?" };
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DS4MEditor)
 };

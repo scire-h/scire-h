@@ -1,0 +1,8 @@
+bin/
+build/
+test_TriangleCoreVCO
+test_ExpEnvelope
+test_OTAVCA
+test_LFOSchmitt
+test_PiezoTrigger
+*.o

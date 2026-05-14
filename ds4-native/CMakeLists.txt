@@ -56,6 +56,7 @@ target_sources(DS4M PRIVATE
     Source/OTAVCA.cpp
     Source/LFOSchmitt.cpp
     Source/PiezoTrigger.cpp
+    Source/Presets.cpp
     Source/PanelLookAndFeel.cpp
     Source/ChannelStripComponent.cpp
     Source/MasterStripComponent.cpp
