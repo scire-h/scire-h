@@ -602,8 +602,8 @@
     fill: #ff3030;
     font-family: "Arial Narrow", Arial, sans-serif;
     font-weight: 900;
-    font-size: 16px;
-    letter-spacing: 4px;
+    font-size: 12px;
+    letter-spacing: 2px;
   }
   .pad .felt {
     width: 48%; height: 48%; border-radius: 50%;
@@ -1327,9 +1327,18 @@ function masterCol() {
   m.appendChild(el("div", "model", "DS-4M"));
   m.appendChild(el("div", "custom", "CUSTOM"));
 
-  m.appendChild(el("div", "jack-pill", "PHONES"));
-  m.appendChild(el("div", "jack"));
-  m.appendChild(el("div", "jack-pill", "VOLUME"));
+  /* phones jack with caption */
+  const jackWrap = el("div");
+  jackWrap.style.display = "flex";
+  jackWrap.style.flexDirection = "column";
+  jackWrap.style.alignItems = "center";
+  jackWrap.style.gap = "3px";
+  jackWrap.style.marginTop = "6px";
+  jackWrap.appendChild(el("div", "jack"));
+  jackWrap.appendChild(el("div", "jack-pill", "PHONES"));
+  m.appendChild(jackWrap);
+
+  m.appendChild(el("div", "jack-pill", "MASTER VOLUME"));
 
   const mv = el("div", "mv-slider");
   const cap = el("div", "cap");
@@ -1343,7 +1352,6 @@ function masterCol() {
     v => { state.masterVolume = v; renderMV(); }, 0, 1, 160);
   m.appendChild(mv);
   m.appendChild(el("div", "min-max", "<span>MIN</span><span>MAX</span>"));
-  m.appendChild(el("div", "lbl s", "MASTER VOLUME"));
 
   /* POWER block */
   const pw = el("div", "power-wrap");
