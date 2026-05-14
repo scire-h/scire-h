@@ -252,20 +252,22 @@
     transform: translate(-50%,-50%);
     border: 1px solid rgba(0,0,0,0.2);
   }
-  .knob::before { /* indicator */
+  .knob::before { /* indicator: pivots around knob centre */
     content: "";
     position: absolute;
     left: 50%; top: 3px;
     width: 3px; height: 10px;
     background: #111;
     transform: translateX(-50%) rotate(var(--rot, -135deg));
-    transform-origin: 50% calc(100% + 18px);
+    /* knob 42, indicator y3..y13 -> origin at y=21 -> 100%+8px */
+    transform-origin: 50% calc(100% + 8px);
     border-radius: 2px;
     z-index: 1;
   }
   .knob.s::before {
+    /* knob 30, indicator y2..y10 -> origin at y=15 -> 100%+5px */
     top: 2px; height: 8px;
-    transform-origin: 50% calc(100% + 13px);
+    transform-origin: 50% calc(100% + 5px);
   }
 
   /* note-ring SVG for the VCO knob */
