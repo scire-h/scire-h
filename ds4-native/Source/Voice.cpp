@@ -3,23 +3,17 @@
 #include <random>
 
 namespace {
-    constexpr float kSemitone   = 1.0f / 12.0f;
-    constexpr float kRefA3      = 220.0f;
-    /* Tunings in cents for the three detuned multi-vco siblings.
-       7 cents is just under a syntonic comma -- enough to fatten
-       without sounding overtly out of tune. */
-    constexpr float kMultiVoiceCents[3] = { +7.0f, -7.0f, +0.0f };
+    constexpr float kSemitone = 1.0f / 12.0f;
+    constexpr float kRefA3    = 220.0f;
 }
 
 Voice::Voice() = default;
 
-void Voice::setChannelIndex(int idx) {
-    channelIdx = idx;
-}
+void Voice::setChannelIndex(int idx) { channelIdx = idx; }
 
 void Voice::prepare(double sr, int blockSize) {
     sampleRate = sr;
-    for (auto& v : vco) v.prepare(sr);
+    vco.prepare(sr);
     noise.prepare(sr);
     noise.setCharacter(characterFor(channelIdx));
 
@@ -30,6 +24,10 @@ void Voice::prepare(double sr, int blockSize) {
     ladder.setResonance(0.3f);
     ladder.setDrive(1.0f);
 
+    vca.prepare(sr);
+    lfo.prepare(sr);
+    lfo.setOutput(LFOSchmitt::Output::Triangle);
+
     ampEnv.prepare(sr);
     pitchEnv.prepare(sr);
     filterEnv.prepare(sr);
@@ -37,26 +35,23 @@ void Voice::prepare(double sr, int blockSize) {
 }
 
 void Voice::reset() {
-    for (auto& v : vco) v.reset();
+    vco.reset();
     noise.reset();
     ladder.reset();
+    vca.reset();
+    lfo.reset();
     ampEnv.reset();
     pitchEnv.reset();
     filterEnv.reset();
-    lfoPhase = 0.0f;
 }
 
 NoiseVoice::Character Voice::characterFor(int chIdx) const {
-    /* Match the silk-screen pills: Ch1 + Ch2 = CYMBAL, Ch3 = SNARE,
-       Ch4 = NOISE. */
     if (chIdx <= 1) return NoiseVoice::Character::Cymbal;
     if (chIdx == 2) return NoiseVoice::Character::Snare;
     return NoiseVoice::Character::Noise;
 }
 
 float Voice::computeBaseFreq(float tuning01, int octave, float beatTune01) {
-    /* Knob covers two octaves around A3, beatTune is 0..200 cents up,
-       OCTAVE selector is 1..5 with 3 = unity. */
     const float semis   = (tuning01 - 0.5f) * 24.0f;
     const float octShft = (float)(octave - 3) * 12.0f;
     const float cents   = beatTune01 * 200.0f;
@@ -85,78 +80,60 @@ void Voice::updateParameters(const juce::AudioProcessorValueTreeState& apvts,
     pSense    = apvts.getRawParameterValue(p + pid::sense)->load();
     pMultiVCO = apvts.getRawParameterValue(p + pid::multiVCO)->load() > 0.5f;
     beatSenseGlobal = beatSense;
+
+    /* LFO frequency: 0.8 .. 22 Hz, exponential taper. */
+    const float lfoHz = 0.8f * std::pow(22.0f / 0.8f, pLfoRate);
+    lfo.setFrequency(lfoHz);
 }
 
 void Voice::trigger(float velocity) {
     hitVelocity = juce::jlimit(0.0f, 1.0f, velocity);
-
     baseFreq = computeBaseFreq(pTuning, pOctave, pBeatTune);
 
-    /* Pitch sweep parameters. */
+    /* Pitch sweep extents (0 .. 6 oct WIDTH). */
     const float widthOct = 6.0f * pSweep;
     const float widthMul = std::pow(2.0f, widthOct);
-    if (pSweepDir == 0) {            /* up */
-        sweepFromHz = baseFreq;
-        sweepToHz   = baseFreq * widthMul;
-    } else if (pSweepDir == 2) {     /* down */
-        sweepFromHz = baseFreq * widthMul;
-        sweepToHz   = baseFreq;
-    } else {                          /* off */
-        sweepFromHz = sweepToHz = baseFreq;
-    }
+    if (pSweepDir == 0)         { sweepFromHz = baseFreq;            sweepToHz = baseFreq * widthMul; }
+    else if (pSweepDir == 2)    { sweepFromHz = baseFreq * widthMul; sweepToHz = baseFreq;            }
+    else                        { sweepFromHz = sweepToHz = baseFreq; }
     sweepSeconds = 0.025f + std::pow(pSweep, 0.85f) * 0.25f;
 
-    /* Trigger envelopes. */
+    /* Envelope time constants. */
     const float attackSec = 0.001f + std::pow(pAttack, 1.4f) * 0.35f;
     const float decaySec  = 0.03f  + std::pow(pSustain, 1.4f) * 4.5f;
+
+    /* Per-hit peak voltage: BEAT SENSE ON tracks velocity, OFF is fixed. */
     const float sense = beatSenseGlobal
                       ? juce::jmax(0.15f, hitVelocity)
                       : 1.0f;
-    const float peak = (0.05f + pOutput * 0.95f)
-                     * (0.25f + pSense * 0.75f)
-                     * sense;
-    ampEnv.trigger(0.0f, peak, 0.0f, attackSec, decaySec);
+    const float peak  = (0.05f + pOutput * 0.95f)
+                      * (0.25f + pSense * 0.75f)
+                      * sense;
 
-    /* Pitch envelope is a normalised RC sweep we'll scale to Hz inside
-       the audio callback. We just need it to fall from 1 to 0 with the
-       correct time constant. */
-    pitchEnv.trigger(1.0f, 1.0f, 0.0f, 0.001f, sweepSeconds);
-
-    /* Filter envelope: 1 = wide open, 0 = closed down to "resting" cutoff. */
+    ampEnv.trigger   (0.0f, peak, 0.0f, attackSec, decaySec);
+    pitchEnv.trigger (1.0f, 1.0f, 0.0f, 0.001f, sweepSeconds);
     filterEnv.trigger(1.0f, 1.0f, 0.0f, 0.001f, decaySec * 0.9f);
 
-    /* Retrigger VCOs (this regenerates the per-hit drift). */
+    /* Reseed the VCO's analog drift -- new per-hit detune
+       offset + slow random walk increment. */
     std::random_device rd;
-    const uint32_t baseSeed = rd();
-    int idx = 0;
-    vco[idx].setWaveform((TriangleCoreVCO::Waveform)pWaveform);
-    vco[idx].setDetuneCents(0.0f);
-    vco[idx].retrigger(baseSeed);
-    ++idx;
-    if (pMultiVCO) {
-        for (int k = 0; k < 3; ++k, ++idx) {
-            vco[idx].setWaveform((TriangleCoreVCO::Waveform)pWaveform);
-            vco[idx].setDetuneCents(kMultiVoiceCents[k]);
-            vco[idx].retrigger(baseSeed ^ (uint32_t)(0xDEADBEEFu * (k + 1)));
-        }
-    }
+    vco.setWaveform((TriangleCoreVCO::Waveform)pWaveform);
+    vco.setDetuneCents(0.0f);
+    vco.retrigger(rd());
 
-    /* Tell the noise voice where to sweep the filter centre. */
     if (pNoiseOn) {
-        const auto chr   = characterFor(channelIdx);
-        noise.setCharacter(chr);
-        /* Pick centre frequencies per character, scaled by VCO knob. */
+        noise.setCharacter(characterFor(channelIdx));
         float centerLo = 0.0f, centerHi = 0.0f;
-        switch (chr) {
+        switch (characterFor(channelIdx)) {
             case NoiseVoice::Character::Cymbal: centerLo = 2500.0f; centerHi = 9000.0f; break;
             case NoiseVoice::Character::Snare:  centerLo =  600.0f; centerHi = 4200.0f; break;
             case NoiseVoice::Character::Noise:  centerLo =  140.0f; centerHi = 2200.0f; break;
         }
-        const float c = centerLo + (centerHi - centerLo) * pTuning;
-        const float widthMul2 = std::pow(2.0f, widthOct * 0.5f);
+        const float c  = centerLo + (centerHi - centerLo) * pTuning;
+        const float wm = std::pow(2.0f, widthOct * 0.5f);
         float f0 = c, f1 = c;
-        if (pSweepDir == 0)       { f0 = c; f1 = c * widthMul2; }
-        else if (pSweepDir == 2)  { f0 = c * widthMul2; f1 = c; }
+        if (pSweepDir == 0)      { f0 = c;       f1 = c * wm;  }
+        else if (pSweepDir == 2) { f0 = c * wm;  f1 = c;       }
         noise.startSweep(f0, f1, sweepSeconds);
     }
 }
@@ -164,63 +141,51 @@ void Voice::trigger(float velocity) {
 void Voice::processBlock(float* outL, float* outR, int numSamples) {
     if (!ampEnv.isActive()) return;
 
-    const float oscMix = (pWaveform == 0) ? 1.0f        /* sine */
-                       : (pWaveform == 1) ? 0.85f       /* triangle */
-                       : (pWaveform == 2) ? 0.45f       /* square */
-                                          : 0.55f;       /* sawtooth */
-    const int activeVCOs = pMultiVCO ? 4 : 1;
-    const float vcoNorm  = 1.0f / std::sqrt((float)activeVCOs);
+    /* per-sample LFO output (Hz already set in updateParameters). */
+    const float lfoCents = pLfoOn ? 20.0f + pLfoDepth * 180.0f : 0.0f;
 
-    const float lfoRateHz = 0.8f + pLfoRate * 22.0f;
-    const float lfoCents  = pLfoOn ? 20.0f + pLfoDepth * 180.0f : 0.0f;
-
-    /* Pre-compute filter envelope target floor (the "closed" cutoff). */
     const float fClose = 220.0f + 1400.0f * pSustain;
     const float fOpen  = 18000.0f;
     const float reso   = 0.05f + pSweep * 0.55f;
     ladder.setResonance(reso);
 
+    /* per-sample loop */
     for (int n = 0; n < numSamples; ++n) {
-        /* 1) Envelopes. */
         const float aE = ampEnv.processSample();
         const float pE = pitchEnv.processSample();
         const float fE = filterEnv.processSample();
 
-        /* 2) Compute current pitch (Hz) via exponential sweep. */
+        /* Pitch -- exponential sweep from sweepFromHz to sweepToHz. */
         const float currHz = sweepToHz *
             std::pow(sweepFromHz / sweepToHz, pE);
 
-        /* 3) LFO -> detune (cents). */
-        lfoPhase += (float)(lfoRateHz / sampleRate);
-        if (lfoPhase >= 1.0f) lfoPhase -= 1.0f;
-        const float lfoVal = lfoCents *
-                             std::sin(6.28318530718f * lfoPhase);
+        /* LFO -> detune cents. */
+        const float lfoVal = lfoCents * lfo.processSample();
 
-        /* 4) Sum oscillators. */
-        float vcoSum = 0.0f;
-        for (int i = 0; i < activeVCOs; ++i) {
-            vco[i].setFrequency(currHz);
-            vco[i].setExternalDetuneCents(lfoVal);
-            vcoSum += vco[i].processSample();
-        }
-        vcoSum *= vcoNorm * oscMix;
+        vco.setFrequency(currHz);
+        vco.setExternalDetuneCents(lfoVal);
+        float vcoSum = vco.processSample();
 
-        /* 5) Noise. */
+        /* Per-waveform attenuation to keep mix at sensible level. */
+        const float oscMix = (pWaveform == 0) ? 1.0f
+                           : (pWaveform == 1) ? 0.85f
+                           : (pWaveform == 2) ? 0.45f
+                                              : 0.55f;
+        vcoSum *= oscMix;
+
         float noiseSig = 0.0f;
-        if (pNoiseOn) noiseSig = noise.processSample() * 0.6f;
+        if (pNoiseOn) noiseSig = noise.processSample() * 0.55f;
 
-        /* 6) Filter (cutoff modulated by filter env). */
+        /* VCF: lowpass cutoff modulated by filter env. */
         const float cutoff = fClose + (fOpen - fClose) * fE;
         ladder.setCutoffFrequencyHz(cutoff);
         float mixed = vcoSum + noiseSig;
-        /* JUCE LadderFilter wants a block API, but we can call
-           processSample for a one-shot sample. */
         mixed = ladder.processSample(mixed, 0);
 
-        /* 7) VCA + soft saturation. */
-        float y = softSat(mixed * aE * 1.4f);
+        /* OTAVCA: envelope sets I_abc, audio passes through tanh. */
+        vca.setControlGain(aE);
+        const float y = vca.processSample(mixed);
 
-        /* Sum into stereo bus (mono routing). */
         outL[n] += y;
         if (outR) outR[n] += y;
     }

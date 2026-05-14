@@ -4,24 +4,28 @@
 #include "TriangleCoreVCO.h"
 #include "NoiseVoice.h"
 #include "ExpEnvelope.h"
+#include "OTAVCA.h"
+#include "LFOSchmitt.h"
 #include "Parameters.h"
 
 /* One DS-4M channel.
 
-   Signal flow:
+   Signal flow (Phase 2):
 
-       VCO1 ─┐
-       VCO2 ─┤   (multi VCO siblings, +/- 7 cents detune)
-       VCO3 ─┼─► Mix ──► LadderFilter (LPF24) ──► Saturating VCA ──► Stereo Out
-       Noise ┘
-              ▲              ▲                       ▲
-              │              │                       │
-        Pitch-Sweep      Filter EG               Amp EG
-        Envelope                                 (RC discharge)
+       VCO1 ─┐                                              (per-channel)
+       VCO2 ─┤  (multi-VCO PULL triggers neighbour
+       VCO3 ─┤   channel via the cascade router instead)
+       VCOn ─┼─► Mix ─► LadderLPF24 ─► OTAVCA ─► Stereo Out
+       Noise ┘            ▲                ▲
+                          │                │
+                      Filter EG          Amp EG
+                                         (RC discharge)
 
    The pitch sweep and amp envelope are dedicated RC-style
    ExpEnvelopes; the filter envelope is derived from the amp env
-   (cutoff opens at hit, closes as the note dies). */
+   (cutoff opens at hit, closes as the note dies). The VCA is now an
+   OTA tanh model (Phase 2.2) and the LFO is an op-amp Schmitt
+   relaxation oscillator (Phase 2.5). */
 
 class Voice {
 public:
@@ -43,15 +47,23 @@ public:
 
     bool isActive() const { return ampEnv.isActive(); }
 
+    /* For the MULTI VCO cascade router (Phase 2.6): when an upstream
+       channel's PULL is engaged, fire this channel as well. */
+    bool getMultiVCO() const { return pMultiVCO; }
+
 private:
     int     channelIdx  = 0;
     double  sampleRate  = 44100.0;
 
-    /* Up to 4 oscillators in MULTI VCO mode (primary + 3 detunes). */
-    TriangleCoreVCO vco[4];
+    /* The DS-4 has ONE VCO per channel. MULTI VCO is a cascade-
+       trigger feature handled in PluginProcessor::triggerChannel,
+       not a per-voice unison. */
+    TriangleCoreVCO vco;
     NoiseVoice noise;
 
     juce::dsp::LadderFilter<float> ladder;
+    OTAVCA   vca;
+    LFOSchmitt lfo;
 
     /* Envelopes. */
     ExpEnvelope ampEnv;
@@ -82,14 +94,6 @@ private:
     float sweepFromHz   = 220.0f;
     float sweepToHz     = 220.0f;
     float sweepSeconds  = 0.1f;
-
-    /* LFO. */
-    float lfoPhase = 0.0f;
-
-    /* Soft saturation curve (tanh approximation). */
-    static inline float softSat(float x) {
-        return std::tanh(x);
-    }
 
     /* Map ch.label to NoiseVoice character. */
     NoiseVoice::Character characterFor(int chIdx) const;

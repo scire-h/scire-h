@@ -1,27 +1,28 @@
 #pragma once
 #include <random>
-#include <juce_dsp/juce_dsp.h>
+#include "TPTSvf.h"
 
 /* Per-channel noise voice -- band-passed white noise with a resonant
    peaking emphasis that gives CYMBAL its metallic shimmer, SNARE its
-   buzz and NOISE its broadband hash. The voicing table is the
-   same one used by the HTML clone and tuned by ear to the published
-   sound clips of the real Toyo Gakki / ULT-SOUND DS-4M. */
+   buzz and NOISE its broadband hash.
+
+   Phase 2.3: now backed by TPTSvf instead of juce::dsp::IIR, which
+   removes the per-sweep heap allocation and the coefficient-update
+   cost the IIR pair was paying. The peaking emphasis is implemented
+   as a second TPT-SVF in BP mode summed back into the signal with a
+   linear gain. */
 
 class NoiseVoice {
 public:
     enum class Character { Cymbal, Snare, Noise };
 
-    void prepare(double sr);
+    void prepare(double sampleRate);
     void reset();
-    void setCharacter(Character c) { character = c; }
+    void setCharacter(Character c) { character = c; updateQs(); }
 
-    /* Sweep the centre frequency from `startHz` to `endHz`
-       across `seconds`. Subsequent processSample() calls walk the
-       ramp automatically. */
+    /* Sweep centre frequency from startHz to endHz over `seconds`. */
     void startSweep(float startHz, float endHz, float seconds);
 
-    /* One stereo-ish sample (mono in/out). */
     float processSample();
 
 private:
@@ -29,13 +30,19 @@ private:
     double sr           = 44100.0;
     std::mt19937 rng { 0xA1A1A1A1u };
 
-    juce::dsp::IIR::Filter<float> bandpass;
-    juce::dsp::IIR::Filter<float> peaking;
+    TPTSvf bp;
+    TPTSvf peakBp;
 
-    float currentFreq = 1000.0f;
-    float endFreq     = 1000.0f;
+    /* Sweep state -- exponential interpolation. */
+    float currentFreq  = 1000.0f;
+    float endFreq      = 1000.0f;
     float perSampleMul = 1.0f;
-    int   sweepRemain = 0;
+    int   sweepRemain  = 0;
 
-    void updateCoefficients();
+    /* Per-character voicing -- centre offset multiplier for the
+       peaking BP and gains. */
+    float peakOffsetMul = 1.4f;
+    float peakBoost     = 0.7f;
+
+    void updateQs();
 };

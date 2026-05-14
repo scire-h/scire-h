@@ -2,6 +2,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <array>
 #include "Voice.h"
+#include "PiezoTrigger.h"
 #include "Parameters.h"
 
 class DS4MProcessor : public juce::AudioProcessor {
@@ -42,6 +43,7 @@ public:
 
 private:
     std::array<Voice, P::kNumChannels> voices;
+    std::array<PiezoTrigger, P::kNumChannels> piezos;
     double currentSampleRate = 44100.0;
 
     /* Trigger requests come in from the editor on the message thread
@@ -49,6 +51,11 @@ private:
     struct PendingTrigger { int ch; float vel; };
     juce::AbstractFifo triggerFifo { 32 };
     std::array<PendingTrigger, 32> triggerBuffer {};
+
+    /* Phase 2.6 -- when a channel's MULTI VCO PULL is engaged its
+       trigger also fires the *next* channel. We use this internal
+       helper to avoid re-entrant FIFO writes from the audio thread. */
+    void fireChannel (int chIndex, float velocity, bool followCascade);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DS4MProcessor)
 };

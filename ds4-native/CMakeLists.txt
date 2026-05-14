@@ -53,6 +53,9 @@ target_sources(DS4M PRIVATE
     Source/TriangleCoreVCO.cpp
     Source/NoiseVoice.cpp
     Source/ExpEnvelope.cpp
+    Source/OTAVCA.cpp
+    Source/LFOSchmitt.cpp
+    Source/PiezoTrigger.cpp
     Source/PanelLookAndFeel.cpp
     Source/ChannelStripComponent.cpp
     Source/MasterStripComponent.cpp
