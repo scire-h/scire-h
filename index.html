@@ -541,21 +541,38 @@
   }
   .power-led.off { background: #3a0a0a; box-shadow: none; }
   .power-sw {
-    width: 28px; height: 36px;
-    background: linear-gradient(#1c1c1c,#000);
+    width: 30px; height: 40px;
+    background:
+      linear-gradient(180deg,#222 0%, #050505 50%, #1a1a1a 50%, #2a2a2a 100%);
     border: 1px solid #000; border-radius: 3px;
     position: relative; cursor: pointer;
-    box-shadow: inset 0 0 0 1px #2a2a2a;
+    box-shadow: inset 0 0 0 1px #2c2c2c;
+    overflow: hidden;
   }
-  .power-sw::after {
-    content: ""; position: absolute;
-    left: 4px; right: 4px;
-    height: 14px;
-    background: linear-gradient(#ddd,#777);
+  .power-sw::before, .power-sw::after {
+    position: absolute; left: 0; right: 0;
+    text-align: center;
+    color: #e0e0e0;
+    font-size: 10px; font-weight: 700;
+    font-family: "Arial Narrow", Arial, sans-serif;
+    transition: opacity 90ms;
+  }
+  .power-sw::before { content: "I"; top: 2px; }
+  .power-sw::after  { content: "O"; bottom: 2px; }
+  .power-sw.on::before  { color:#fff; text-shadow: 0 0 4px rgba(255,80,80,0.5); }
+  .power-sw.on::after   { color:#666; }
+  .power-sw.off::before { color:#666; }
+  .power-sw.off::after  { color:#fff; }
+  .power-sw .rock {
+    position: absolute;
+    left: 3px; right: 3px;
+    height: 18px;
+    background: linear-gradient(#e0e0e0,#888 60%,#555);
     border: 1px solid #000;
     border-radius: 2px;
-    top: var(--top, 4px);
-    transition: top 90ms;
+    top: var(--top, 3px);
+    transition: top 120ms ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.6);
   }
 
   /* =================  DRUM PADS (below) ================= */
@@ -1358,11 +1375,15 @@ function masterCol() {
   pw.appendChild(el("div", "lbl s", "POWER"));
   const led = el("div", "power-led");
   pw.appendChild(led);
-  const psw = el("div", "power-sw");
-  psw.style.setProperty("--top", "4px");
+  const psw = el("div", "power-sw on");
+  const rock = el("div", "rock");
+  psw.appendChild(rock);
+  psw.style.setProperty("--top", "3px");
   psw.addEventListener("click", () => {
     state.power = !state.power;
-    psw.style.setProperty("--top", state.power ? "4px" : "18px");
+    psw.style.setProperty("--top", state.power ? "3px" : "19px");
+    psw.classList.toggle("on", state.power);
+    psw.classList.toggle("off", !state.power);
     led.classList.toggle("off", !state.power);
     renderMV();
   });
