@@ -350,24 +350,39 @@
   .vsw.tall { height: 38px; }
   .vsw.tall .lever { height: 12px; top: calc(var(--p, 0) * (100% - 14px) + 1px); }
 
-  /* octave slide selector 1..5 */
-  .oct-row {
-    display: flex; align-items: center; gap: 2px;
+  /* horizontal 5-position slide switch (octave) */
+  .slide5 {
+    width: 56px; height: 14px;
+    background: #1a1a1a;
+    border: 1px solid #000;
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
     margin: 2px 0 1px;
   }
-  .oct-row .o {
-    width: 8px; height: 12px;
-    background: rgba(0,0,0,0.18);
+  .slide5 .lev {
+    position: absolute;
+    top: 1px;
+    width: 10px; height: 10px;
+    background: linear-gradient(#cfcfcf,#555);
     border: 1px solid #000;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 6px; color: rgba(0,0,0,0.6);
+    border-radius: 2px;
+    left: calc(var(--p, 0.5) * (100% - 12px) + 1px);
+    transition: left 90ms;
   }
-  .oct-row .o.on { background: #000; color: #fff; }
-  .oct-num {
-    font-size: 6.5px; letter-spacing: 0.5px;
-    text-align: center; color:#000;
-    margin-bottom: 1px;
+  .slide5 .gutter {
+    position: absolute;
+    top: 50%; left: 4px; right: 4px;
+    height: 1px;
+    background: rgba(255,255,255,0.15);
+    transform: translateY(-50%);
+  }
+  .slide5-marks {
+    width: 56px;
+    display: flex; justify-content: space-between;
+    font-size: 6.5px; color: #000;
+    padding: 0 1px;
+    margin-top: 0;
   }
 
   /* horizontal beat-sense switch */
@@ -1060,18 +1075,52 @@ function hSwitch(getter, setter) {
   return sw;
 }
 
-/* ---- Octave 1..5 selector ---- */
+/* ---- Octave 1..5 horizontal slide switch ---- */
 function octaveSelector(ch) {
-  const row = el("div", "oct-row");
-  for (let i=1; i<=5; i++) {
-    const o = el("div", "o" + (ch.octave===i?" on":""), String(i));
-    o.addEventListener("click", () => {
-      ch.octave = i;
-      [...row.children].forEach((c,j) => c.classList.toggle("on", j+1===i));
-    });
-    row.appendChild(o);
-  }
-  return row;
+  const wrap = document.createElement("div");
+  wrap.style.display = "flex";
+  wrap.style.flexDirection = "column";
+  wrap.style.alignItems = "center";
+
+  const marks = el("div", "slide5-marks");
+  for (let i=1; i<=5; i++) marks.appendChild(el("span", null, String(i)));
+  wrap.appendChild(marks);
+
+  const sw = el("div", "slide5");
+  sw.appendChild(el("div", "gutter"));
+  const lev = el("div", "lev");
+  sw.appendChild(lev);
+  const render = () => sw.style.setProperty("--p", ((ch.octave - 1) / 4).toFixed(3));
+  render();
+  sw.addEventListener("click", (e) => {
+    const rect = sw.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    ch.octave = 1 + Math.round(x * 4);
+    render();
+  });
+  /* drag */
+  installDragHorizontal(sw, () => (ch.octave - 1)/4, p => {
+    ch.octave = 1 + Math.round(p * 4);
+    render();
+  });
+  wrap.appendChild(sw);
+  return wrap;
+}
+
+function installDragHorizontal(target, get, set) {
+  let drag = false, sx = 0, sv = 0, ptr = null;
+  target.addEventListener("pointerdown", e => {
+    drag = true; sx = e.clientX; sv = get(); ptr = e.pointerId;
+    target.setPointerCapture && target.setPointerCapture(e.pointerId);
+  });
+  target.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== ptr) return;
+    const rect = target.getBoundingClientRect();
+    set(Math.max(0, Math.min(1, sv + (e.clientX - sx)/rect.width)));
+  });
+  const end = () => drag = false;
+  target.addEventListener("pointerup", end);
+  target.addEventListener("pointercancel", end);
 }
 
 /* =========================================================
@@ -1086,7 +1135,6 @@ function colVCO(ch) {
   sliders.appendChild(slider(ch, "beatTune"));
   c.appendChild(sliders);
   c.appendChild(el("div", "lbl s", "BEAT&nbsp;TUNE"));
-  c.appendChild(el("div", "oct-num", "1 2 3 4 5"));
   c.appendChild(octaveSelector(ch));
   c.appendChild(el("div", "lbl s", "OCTAVE"));
   return c;
