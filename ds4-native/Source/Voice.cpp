@@ -129,13 +129,13 @@ void Voice::trigger(float velocity) {
     std::random_device rd;
     const uint32_t baseSeed = rd();
     int idx = 0;
-    vco[idx].setWaveform((DriftedVCO::Waveform)pWaveform);
+    vco[idx].setWaveform((TriangleCoreVCO::Waveform)pWaveform);
     vco[idx].setDetuneCents(0.0f);
     vco[idx].retrigger(baseSeed);
     ++idx;
     if (pMultiVCO) {
         for (int k = 0; k < 3; ++k, ++idx) {
-            vco[idx].setWaveform((DriftedVCO::Waveform)pWaveform);
+            vco[idx].setWaveform((TriangleCoreVCO::Waveform)pWaveform);
             vco[idx].setDetuneCents(kMultiVoiceCents[k]);
             vco[idx].retrigger(baseSeed ^ (uint32_t)(0xDEADBEEFu * (k + 1)));
         }

@@ -19,7 +19,7 @@ Key DSP modules:
 
 | File              | What it does                                                                   |
 | ----------------- | ------------------------------------------------------------------------------ |
-| `DriftedVCO.cpp`  | Anti-aliased oscillator (PolyBLEP for sqr/saw, integrated PolyBLEP triangle) with per-hit detune, slow random walk, and continuous wobble. |
+| `TriangleCoreVCO.cpp` | **Phase 2.1**: ICL8038-style triangle-core VCO. One phase state + rising/falling boolean simulate the 8038's timing capacitor + current-source flip-flop. Sine output is a 3rd-order Bhaskara polynomial of the triangle (matches the 8038 sine output's odd-harmonic THD signature to within a couple of dB per harmonic). Square comes free from the comparator state; sawtooth uses a PolyBLEP accumulator at the same control current. Carries the three drift layers (per-hit, slow walk, continuous wobble). |
 | `NoiseVoice.cpp`  | Per-channel band-passed noise with resonant peaking. Switches between CYMBAL / SNARE / NOISE voicings.                                     |
 | `ExpEnvelope.cpp` | RC-discharge style envelope generator (true exponential decay, matches an analog op-amp + cap).                                            |
 | `Voice.cpp`       | Ties it all together. Reads APVTS parameters per block, handles trigger, sweeps pitch + filter, sums voices into the stereo bus.           |
@@ -78,8 +78,8 @@ codesign --deep --force --options runtime --timestamp \
 ## Development roadmap
 
 * [x] **Phase 1** — JUCE skeleton, working subtractive synth voice, parameter tree, basic UI, AU/VST3/Standalone targets.
-* [ ] **Phase 2** — Component-level analog model. Detailed design in [`docs/CIRCUIT_RESEARCH.md`](docs/CIRCUIT_RESEARCH.md) (panel-to-circuit mapping + IC inventory) and [`docs/PHASE2_DESIGN.md`](docs/PHASE2_DESIGN.md) (DSP module breakdown). Headline changes:
-  * `TriangleCoreVCO` — ICL8038-style triangle-core with PolyBLAMP-anti-aliased ramps and a piecewise-linear sine shaper that matches the 8038's ~1 % THD signature.
+* [ ] **Phase 2** — Component-level analog model. Detailed design in [`docs/CIRCUIT_RESEARCH.md`](docs/CIRCUIT_RESEARCH.md) (panel-to-circuit mapping + IC inventory) and [`docs/PHASE2_DESIGN.md`](docs/PHASE2_DESIGN.md) (DSP module breakdown). Status:
+  * [x] **2.1 `TriangleCoreVCO`** — landed. ICL8038-style triangle-core + 3rd-order Bhaskara sine shaper. Verify by ear: with WAVEFORM = ∿ the new sine should have an audibly hollow / flute-like character that a pure `std::sin` doesn't, especially at high VCO output (the 3rd harmonic sitting at -28 dBc is the "tell").
   * `PiezoTrigger` — peak-detector + Schmitt-trigger so the plug-in can be driven by an actual piezo on a side-chain audio input.
   * `OTAVCA` — CA3080 / LM13700-style tanh VCA, replacing the plain `tanh(x · 1.4)` hack.
   * `NoiseBPState` — TPT state-variable band-pass + peaking, no per-block heap allocations.

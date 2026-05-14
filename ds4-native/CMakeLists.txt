@@ -50,7 +50,7 @@ target_sources(DS4M PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/Voice.cpp
-    Source/DriftedVCO.cpp
+    Source/TriangleCoreVCO.cpp
     Source/NoiseVoice.cpp
     Source/ExpEnvelope.cpp
     Source/PanelLookAndFeel.cpp

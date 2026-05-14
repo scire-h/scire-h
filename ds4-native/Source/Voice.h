@@ -1,7 +1,7 @@
 #pragma once
 #include <juce_dsp/juce_dsp.h>
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "DriftedVCO.h"
+#include "TriangleCoreVCO.h"
 #include "NoiseVoice.h"
 #include "ExpEnvelope.h"
 #include "Parameters.h"
@@ -48,7 +48,7 @@ private:
     double  sampleRate  = 44100.0;
 
     /* Up to 4 oscillators in MULTI VCO mode (primary + 3 detunes). */
-    DriftedVCO vco[4];
+    TriangleCoreVCO vco[4];
     NoiseVoice noise;
 
     juce::dsp::LadderFilter<float> ladder;
