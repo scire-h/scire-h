@@ -133,7 +133,7 @@
     border-radius: 2px;
     overflow: hidden;
     background: var(--cyan);
-    height: 240px;
+    height: 280px;
   }
   .col {
     position: relative;
@@ -191,7 +191,7 @@
     display: flex; flex-direction: column;
     padding: 4px 4px 6px;
     color: #000;
-    height: 240px;
+    height: 280px;
   }
   .sense-col .top-tag {
     font-size: 7px; letter-spacing: 0.06em;
@@ -363,7 +363,8 @@
     height: 30px;
     font-size: 7px; color: #000; line-height: 1;
   }
-  .sw-group.tall .sw-labels { height: 38px; }
+  .sw-group.tall .sw-labels  { height: 38px; }
+  .sw-group.tall4 .sw-labels { height: 56px; }
   .vsw {
     width: 18px; height: 30px;
     background: #1a1a1a;
@@ -382,8 +383,15 @@
     top: calc(var(--p, 0) * (100% - 12px) + 1px);
     transition: top 90ms;
   }
-  .vsw.tall { height: 38px; }
-  .vsw.tall .lever { height: 12px; top: calc(var(--p, 0) * (100% - 14px) + 1px); }
+  .vsw.tall  { height: 38px; }
+  .vsw.tall  .lever { height: 12px; top: calc(var(--p, 0) * (100% - 14px) + 1px); }
+  .vsw.tall4 { height: 56px; }
+  .vsw.tall4 .lever { height: 10px; top: calc(var(--p, 0) * (100% - 12px) + 1px); }
+  .sw-group .sw-labels div { line-height: 1; }
+  .sw-group.tall4 .sw-labels {
+    font-family: "Arial", sans-serif;
+    font-size: 9px; font-weight: 700;
+  }
 
   /* horizontal 5-position slide switch (octave) */
   .slide5 {
@@ -454,7 +462,7 @@
     align-items: center;
     padding: 8px 6px 10px;
     color: #000;
-    height: 483px;
+    height: 563px;
     gap: 4px;
   }
   .master .brand {
@@ -736,11 +744,15 @@
     <b>VCO TUNING</b>（音名 C…B のノブ）／ <b>BEAT TUNE</b> 0-200cent 上方デチューン ／
     <b>OCTAVE 1-5</b> オクターブシフト ／
     <b>ATTACK</b> 1〜350ms 立ち上がり ／ <b>SUSTAIN</b> 30ms〜4.5s 減衰時間 ／
-    <b>∿/⌇</b> サイン波のみ（∿）／ サイン＋チャンネル固有ノイズ（⌇:Ch1-2=CYMBAL、Ch3=SNARE、Ch4=NOISE）／
-    <b>LFO LEVEL</b>（ノブ：振幅）／ <b>LFO FREQUENCY</b>（フェーダー：0.8〜23Hz、∿/OFF で有効化）／
+    <b>波形セレクタ ∿/△/⊓/⋀</b> サイン／三角／矩形／鋸（クリック / 右クリックで循環）／
+    <b>LFO LEVEL</b>（ノブ：振幅 20-200cent）／ <b>LFO FREQUENCY</b>（フェーダー：0.8〜23Hz、∿/OFF で有効化）／
     <b>SWEEP WIDTH 0-6 OCT</b> ピッチエンベロープ幅（<b>UP/OFF/DOWN</b> で方向）／
     <b>OUTPUT</b> 出力 ／ <b>SENSE LEVEL</b> パッド感度 ／
-    <b>MULTI VCO</b> 隣接 ch を重ねてユニゾン化。
+    <b>NOISE</b> Ch ごとのバンドパスノイズ（CYMBAL/SNARE/NOISE 特性）を ON/OFF ／
+    <b>MULTI VCO</b> 隣接 ch を 7cent デチューンで 4 オシレーター・ユニゾン化。
+    <br>
+    内部は VCO+Noise → 共鳴 LPF(VCF) → 飽和付き VCA の正統な減算合成構成。各 VCO に ±3cent のヒット毎ドリフト
+    + 0.15-0.4Hz の連続揺らぎを加え、毎回鳴り方が微妙に違うアナログ的な挙動になります。
     <br>
     左下 <b>BEAT SENSE</b> ON でパッドのクリック位置（中央寄り = 強打）が音量に反映。
     <b>DEMO PATTERN</b> は 112 BPM の 4 ch ドラムビート、
@@ -828,7 +840,8 @@ function makeChannel(idx, label) {
     octave:     3,
     attack:     0.0,
     sustain:    0.45,
-    waveform:   "sine",       // sine | mix  (mix = sine VCO + per-channel noise)
+    waveform:   "sine",       // sine | triangle | square | sawtooth
+    noiseOn:    true,         // mix per-channel noise voice in?
     lfoRate:    0.3,
     lfoDepth:   0.5,
     lfoOn:      false,
@@ -851,121 +864,170 @@ const state = {
   ],
 };
 /* sensible defaults that match each labeled voice */
-Object.assign(state.channels[0], { vco: 0.78, octave: 4, sweep: 0.30, sweepDir:"down", waveform:"mix",  sustain:0.12, attack:0.0, lfoRate:0.3 });
-Object.assign(state.channels[1], { vco: 0.70, octave: 4, sweep: 0.45, sweepDir:"down", waveform:"mix",  sustain:0.22, attack:0.0, lfoRate:0.3 });
-Object.assign(state.channels[2], { vco: 0.50, octave: 3, sweep: 0.30, sweepDir:"down", waveform:"mix",  sustain:0.18, attack:0.0, lfoRate:0.3 });
-Object.assign(state.channels[3], { vco: 0.30, octave: 2, sweep: 0.55, sweepDir:"down", waveform:"sine", sustain:0.30, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[0], { vco: 0.78, octave: 4, sweep: 0.30, sweepDir:"down", waveform:"sine",     noiseOn:true,  sustain:0.12, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[1], { vco: 0.70, octave: 4, sweep: 0.45, sweepDir:"down", waveform:"sine",     noiseOn:true,  sustain:0.22, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[2], { vco: 0.50, octave: 3, sweep: 0.30, sweepDir:"down", waveform:"triangle", noiseOn:true,  sustain:0.18, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[3], { vco: 0.30, octave: 2, sweep: 0.55, sweepDir:"down", waveform:"sine",     noiseOn:false, sustain:0.30, attack:0.0, lfoRate:0.3 });
 
 /* =========================================================
    VOICE
    ========================================================= */
+/* =========================================================
+   VOICE  --  subtractive arch:  VCO + Noise -> VCF -> VCA
+   Adds per-channel analog drift, waveform selection, resonant
+   filter with envelope, and a soft-saturation stage in the VCA.
+   ========================================================= */
+
+/* Persistent random walk per channel for "VCO drift" — analog
+   oscillators wander a few cents over time, no two hits identical. */
+const driftState = {};
+function chDriftCents(chIdx) {
+  let s = driftState[chIdx];
+  if (!s) { s = driftState[chIdx] = { v: 0 }; }
+  s.v += (Math.random() - 0.5) * 0.6;
+  if (s.v >  3) s.v =  3;
+  if (s.v < -3) s.v = -3;
+  return s.v;
+}
+
+/* One-time soft saturation curve for the VCA stage (transistor-like) */
+let SAT_CURVE = null;
+function getSatCurve() {
+  if (SAT_CURVE) return SAT_CURVE;
+  const n = 2048;
+  SAT_CURVE = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n-1)) * 2 - 1;
+    SAT_CURVE[i] = Math.tanh(x * 1.5) / Math.tanh(1.5);
+  }
+  return SAT_CURVE;
+}
+
 function playChannel(ch, velocity=1) {
   if (!state.power) return;
   ensureAudio();
   if (actx.state === "suspended") actx.resume();
 
-  const now = actx.currentTime;
-  const base = vcoFreq(ch.vco, ch.octave, ch.beatTune);
+  const now      = actx.currentTime;
+  const base     = vcoFreq(ch.vco, ch.octave, ch.beatTune);
+  const atk      = 0.001 + Math.pow(ch.attack, 1.4) * 0.35;     // 1-350 ms
+  const decay    = 0.03 + Math.pow(ch.sustain, 1.4) * 4.5;      // 30 ms-4.5 s
+  const sense    = state.beatSense ? Math.max(0.15, velocity) : 1.0;
+  const peak     = (0.05 + ch.output * 0.95) *
+                   (0.25 + ch.senseLevel * 0.75) * sense;
+  const sweepT   = 0.025 + Math.pow(ch.sweep, 0.85) * 0.25;     // 25-275 ms
 
-  /* amp envelope -- attack 1 ms .. 350 ms, decay 30 ms .. 4.5 s */
-  const atk     = 0.001 + Math.pow(ch.attack, 1.4) * 0.35;
-  const decay   = 0.03 + Math.pow(ch.sustain, 1.4) * 4.5;
-  const sense   = state.beatSense ? Math.max(0.15, velocity) : 1.0;
-  const peak    = (0.05 + ch.output * 0.95) *
-                  (0.25 + ch.senseLevel * 0.75) *
-                  sense;
+  /* ---------- VCA (with saturation) ---------- */
+  const vca = actx.createGain();
+  vca.gain.setValueAtTime(0, now);
+  vca.gain.linearRampToValueAtTime(peak, now + atk);
+  /* exponential decay -- approximate analog RC envelope */
+  vca.gain.exponentialRampToValueAtTime(0.0008, now + atk + decay);
 
-  const amp = actx.createGain();
-  amp.gain.setValueAtTime(0, now);
-  amp.gain.linearRampToValueAtTime(peak, now + atk);
-  amp.gain.exponentialRampToValueAtTime(0.0006, now + atk + decay);
-  amp.connect(master);
+  const sat = actx.createWaveShaper();
+  sat.curve = getSatCurve();
+  sat.oversample = "2x";
+  vca.connect(sat).connect(master);
 
-  /* stick-attack transient: only when ATTACK is near 0; routed THROUGH
-     the amp envelope so OUTPUT / SENSE / DECAY still shape it.   */
+  /* ---------- VCF (resonant LPF with its own envelope) ----------
+     Opens wide at hit, closes during decay. This gives the analog
+     "darkening" you hear as a drum hit dies away.                 */
+  const vcf = actx.createBiquadFilter();
+  vcf.type = "lowpass";
+  vcf.Q.value = 1.6 + ch.sweep * 4.0;    // sweep also controls resonance
+  const fOpen  = 18000;
+  const fClose = 220 + 1400 * ch.sustain; // longer sustain = brighter rest
+  vcf.frequency.setValueAtTime(fOpen, now);
+  vcf.frequency.exponentialRampToValueAtTime(
+    Math.max(120, fClose), now + Math.max(0.05, decay * 0.9));
+  vcf.connect(vca);
+
+  /* ---------- attack click (analog stick transient) ---------- */
   if (ch.attack < 0.05) {
     const click = actx.createBufferSource();
-    const cb = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.012), actx.sampleRate);
-    const d = cb.getChannelData(0);
-    for (let i = 0; i < d.length; i++) {
+    const len   = Math.floor(actx.sampleRate * 0.012);
+    const cb    = actx.createBuffer(1, len, actx.sampleRate);
+    const d     = cb.getChannelData(0);
+    for (let i = 0; i < len; i++) {
       d[i] = (Math.random()*2-1) * Math.exp(-i / (actx.sampleRate * 0.0015));
     }
     click.buffer = cb;
-    const cg = actx.createGain();
-    cg.gain.value = 0.35 * (1 - ch.attack / 0.05); // fades out as ATTACK grows
+    const cg  = actx.createGain();
+    cg.gain.value = 0.30 * (1 - ch.attack / 0.05);
     const chp = actx.createBiquadFilter();
     chp.type = "highpass";
-    chp.frequency.value = 1500;
-    click.connect(chp).connect(cg).connect(amp);
+    chp.frequency.value = 1800;
+    click.connect(chp).connect(cg).connect(vcf);
     click.start(now);
     click.stop(now + 0.02);
   }
 
-  /* gentle EQ -- noise channels need more brightness */
-  const eq = actx.createBiquadFilter();
-  eq.type = "lowpass";
-  eq.frequency.value = ch.waveform === "mix" ? 14000 : 9000;
-  eq.Q.value = 0.4;
-  eq.connect(amp);
-
-  /* Syndrum-style: sweep is largely independent of decay,
-     bigger sweeps take a touch longer (RC behaviour). */
-  const sweepTime = 0.04 + ch.sweep * 0.18;
-
-  /* sine VCO always plays. Detuned partners when MULTI VCO is pulled. */
-  spawnVCO(base, sweepTime, ch, eq, peak, decay);
+  /* ---------- VCO(s) ---------- */
+  spawnVCO(base, sweepT, ch, vcf, decay, 0);
   if (ch.multiVCO) {
-    spawnVCO(base * 1.005, sweepTime, ch, eq, peak * 0.6, decay);
-    spawnVCO(base * 0.995, sweepTime, ch, eq, peak * 0.6, decay);
+    /* analog "multi-VCO" — three slightly detuned copies + 1 from neighbour */
+    spawnVCO(base, sweepT, ch, vcf, decay, +7);  // +7 cents
+    spawnVCO(base, sweepT, ch, vcf, decay, -7);  // -7 cents
     const neighbor = state.channels[(ch.idx + 2) % 4];
     const nf = vcoFreq(neighbor.vco, neighbor.octave, neighbor.beatTune);
-    spawnVCO(nf, sweepTime, ch, eq, peak * 0.45, decay);
+    spawnVCO(nf, sweepT, ch, vcf, decay, 0);
   }
 
-  /* "mix" position adds the channel-specific noise (CYMBAL / SNARE / NOISE) */
-  if (ch.waveform === "mix") {
-    spawnNoise(base, sweepTime, ch, eq, decay);
+  /* ---------- NOISE ---------- */
+  if (ch.noiseOn) {
+    spawnNoise(base, sweepT, ch, vcf, decay);
   }
 }
 
-function spawnVCO(base, sweepTime, ch, dest, peak, decay) {
+function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
   const now = actx.currentTime;
   const osc = actx.createOscillator();
-  osc.type = "sine";
+  osc.type = ch.waveform;          // sine | triangle | square | sawtooth
 
-  /* pitch sweep -- WIDTH slider 0..6 OCT */
+  /* per-channel analog drift -- new value every hit */
+  const hitDrift  = (Math.random() - 0.5) * 6;     // ±3 cents per hit
+  const slowDrift = chDriftCents(ch.idx);          // random walk ±3 cents
+  osc.detune.value = hitDrift + slowDrift + (extraCents || 0);
+
+  /* pitch sweep (0-6 oct WIDTH) */
   const w = 6 * ch.sweep;
   let f0 = base, f1 = base;
-  if (ch.sweepDir === "down") { f0 = base * Math.pow(2, w); f1 = base; }
-  else if (ch.sweepDir === "up") { f0 = base; f1 = base * Math.pow(2, w); }
+  if (ch.sweepDir === "down")     { f0 = base * Math.pow(2, w); f1 = base; }
+  else if (ch.sweepDir === "up")  { f0 = base; f1 = base * Math.pow(2, w); }
   osc.frequency.setValueAtTime(Math.max(20, f0), now);
   osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), now + sweepTime);
 
-  /* LFO vibrato */
+  /* slow continuous drift LFO -- "analog warmth" wobble */
+  const wobble = actx.createOscillator();
+  wobble.type = "sine";
+  wobble.frequency.value = 0.15 + Math.random() * 0.25; // 0.15-0.4 Hz
+  const wobbleG = actx.createGain();
+  wobbleG.gain.value = 1.5;        // ±1.5 cents
+  wobble.connect(wobbleG).connect(osc.detune);
+  wobble.start(now);
+  wobble.stop(now + decay + 0.2);
+
+  /* LFO vibrato (panel control) */
   if (ch.lfoOn) {
     const lfo = actx.createOscillator();
-    lfo.frequency.value = 0.8 + ch.lfoRate * 22; // 0.8–23 Hz
-    const lfoGain = actx.createGain();
-    lfoGain.gain.value = base * 0.02 + base * 0.12 * ch.lfoDepth; // 2–14 %
-    lfo.connect(lfoGain).connect(osc.frequency);
+    lfo.type = "sine";
+    lfo.frequency.value = 0.8 + ch.lfoRate * 22;
+    const lfoG = actx.createGain();
+    lfoG.gain.value = 20 + ch.lfoDepth * 180;   // 20-200 cents (up to 2 semitones)
+    lfo.connect(lfoG).connect(osc.detune);
     lfo.start(now);
-    lfo.stop(now + 0.05 + decay);
+    lfo.stop(now + decay + 0.2);
   }
 
-  /* slight 2nd harmonic for "PEW" character */
-  const sat = actx.createWaveShaper();
-  sat.curve = (() => {
-    const n = 1024, c = new Float32Array(n);
-    for (let i=0;i<n;i++) {
-      const x = (i/(n-1))*2-1;
-      c[i] = Math.tanh(x * 1.6);
-    }
-    return c;
-  })();
-
-  osc.connect(sat).connect(dest);
+  /* per-waveform attenuation so square/saw don't blow out the mix */
+  const lev = actx.createGain();
+  lev.gain.value = (ch.waveform === "sine"     ? 1.0 :
+                    ch.waveform === "triangle" ? 0.85 :
+                    ch.waveform === "square"   ? 0.45 :
+                    /* sawtooth */               0.55);
+  osc.connect(lev).connect(dest);
   osc.start(now);
-  osc.stop(now + 0.05 + decay);
+  osc.stop(now + decay + 0.1);
 }
 
 /* per-channel noise voicing tables, matching the CYMBAL / SNARE / NOISE
@@ -1142,22 +1204,30 @@ function sliderGroup(ch, key, opts={}) {
 
 /* ---- Vertical 2/3-way switch ---- */
 function vSwitch(ch, key, values, opts={}) {
-  const sw = el("div", "vsw" + (opts.tall ? " tall" : ""));
+  const klass = "vsw" + (opts.tall4 ? " tall4" : opts.tall ? " tall" : "");
+  const sw = el("div", klass);
   const lev = el("div", "lever");
   sw.appendChild(lev);
   const render = () => {
-    const i = values.indexOf(ch[key]);
+    const i = Math.max(0, values.indexOf(ch[key]));
     sw.style.setProperty("--p", (i/(values.length-1)).toFixed(3));
   };
   render();
   sw._render = render;
+  /* click cycles forward, right-click cycles back */
   sw.addEventListener("click", () => {
-    const i = values.indexOf(ch[key]);
+    const i = Math.max(0, values.indexOf(ch[key]));
     ch[key] = values[(i+1) % values.length];
     render();
   });
+  sw.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    const i = Math.max(0, values.indexOf(ch[key]));
+    ch[key] = values[(i - 1 + values.length) % values.length];
+    render();
+  });
   if (opts.labels) {
-    const g = el("div", "sw-group" + (opts.tall ? " tall" : ""));
+    const g = el("div", "sw-group" + (opts.tall4 ? " tall4" : opts.tall ? " tall" : ""));
     const lbl = el("div", "sw-labels");
     opts.labels.forEach(s => lbl.appendChild(el("div", null, s)));
     g.appendChild(sw);
@@ -1254,7 +1324,9 @@ function colAttack(ch) {
   c.appendChild(el("div", "pill", "SUSTAIN"));
   c.appendChild(sliderGroup(ch, "sustain", { scale: ["LONG","","","","","","SHORT"] }));
   c.appendChild(el("div", "pill", ch.label || ""));
-  c.appendChild(vSwitch(ch, "waveform", ["sine","mix"], { labels: ["∿","⌇"] }));
+  c.appendChild(vSwitch(ch, "waveform",
+    ["sine","triangle","square","sawtooth"],
+    { tall4: true, labels: ["∿","△","⊓","⋀"] }));
   return c;
 }
 function colLFO(ch) {
@@ -1306,6 +1378,17 @@ function senseColumn(chTop, chBot, showHeader=false, showBeatSense=false) {
     // MULTI VCO horizontal switch (pull simulated)
     const m = hSwitch(() => ch.multiVCO, v => ch.multiVCO = v);
     cell.appendChild(m);
+    /* NOISE on/off toggle -- mixes the channel-specific noise voice */
+    const nrow = el("div");
+    nrow.style.display = "flex";
+    nrow.style.alignItems = "center";
+    nrow.style.gap = "3px";
+    nrow.style.marginTop = "2px";
+    const nlbl = el("div", "lbl s", "NOISE");
+    nlbl.style.fontSize = "6.5px";
+    nrow.appendChild(nlbl);
+    nrow.appendChild(hSwitch(() => ch.noiseOn, v => ch.noiseOn = v));
+    cell.appendChild(nrow);
     cell.appendChild(el("div", "lbl s", "SENSE LEVEL"));
     cell.appendChild(knob(ch, "senseLevel", { small: true }));
     cell.appendChild(el("div", "ticks", "<span>LOW</span><span>HIGH</span>"));
@@ -1529,9 +1612,9 @@ function startDemo() {
   stopDemo();
   /* dial in cymbal / tom / snare / kick so the pattern reads as drums */
   const PATCHES = [
-    /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", waveform:"mix", lfoOn:false, output:0.75 },
-    /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"mix", lfoOn:false, output:0.7  },
-    /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"mix", lfoOn:false, output:0.85 },
+    /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.75 },
+    /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.7  },
+    /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.85 },
     /* Ch4 kick                  */ { vco:0.40, octave:2, attack:0, sustain:0.32, sweep:0.65, sweepDir:"down", waveform:"sine",  lfoOn:false, output:0.95 },
   ];
   state.channels.forEach((ch,i) => applyPreset(ch, PATCHES[i]));
@@ -1595,9 +1678,9 @@ const PRESETS = {
   toms:    { vco:0.40, octave:2, attack:0, sustain:0.65, sweep:0.55, sweepDir:"down",
              waveform:"sine", lfoOn:false, output:0.85 },
   snare:   { vco:0.55, octave:3, attack:0, sustain:0.20, sweep:0.30, sweepDir:"down",
-             waveform:"mix", lfoOn:false, output:0.85 },
+             waveform:"sine", noiseOn:true, lfoOn:false, output:0.85 },
   hat:     { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.20, sweepDir:"down",
-             waveform:"mix", lfoOn:false, output:0.80 },
+             waveform:"sine", noiseOn:true, lfoOn:false, output:0.80 },
   cosmic:  { vco:0.35, octave:2, attack:0, sustain:0.70, sweep:0.95, sweepDir:"up",
              waveform:"sine", lfoOn:true, lfoRate:0.45, lfoDepth:0.6, output:0.85 },
 };
