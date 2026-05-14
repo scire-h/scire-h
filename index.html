@@ -399,22 +399,32 @@
   }
   .master .brand {
     font-family: "Arial Narrow", "Helvetica Condensed", Arial, sans-serif;
-    font-weight: 800; font-size: 13px;
-    letter-spacing: 0.06em;
-    transform: scaleY(1.05);
+    font-weight: 900; font-size: 14px;
+    letter-spacing: 0.04em;
+    transform: scaleY(1.15);
     color: #000;
+    line-height: 1;
+    padding: 2px 4px;
   }
   .master .brand i {
     font-style: normal;
-    border: 1px solid #000;
-    padding: 0 2px;
-    border-radius: 2px;
-    background: rgba(255,255,255,0.18);
+    font-size: 11px;
+    vertical-align: top;
+    color: #000;
   }
   .master .model {
-    font-size: 15px; font-weight: 800; letter-spacing: 0.04em;
+    font-size: 16px; font-weight: 900; letter-spacing: 0.04em;
+    transform: scaleY(1.05);
+    margin-top: 2px;
   }
-  .master .custom { font-size: 8px; letter-spacing: 0.22em; }
+  .master .custom {
+    font-size: 8px; letter-spacing: 0.22em;
+    border: 1px solid #000;
+    border-radius: 8px;
+    padding: 1px 5px;
+    background: rgba(255,255,255,0.18);
+    font-weight: 700;
+  }
 
   .jack {
     width: 22px; height: 22px;
@@ -736,7 +746,7 @@ const state = {
   beatSense: false,
   channels: [
     makeChannel(1, "CYMBAL"),
-    makeChannel(2, "TOM"),
+    makeChannel(2, "CYMBAL"),
     makeChannel(3, "SNARE"),
     makeChannel(4, "NOISE"),
   ],
@@ -1258,7 +1268,7 @@ grid.appendChild(master_);
    PADS
    ========================================================= */
 const padsEl = document.getElementById("pads");
-const PAD_LABELS = ["Ch1 · CYMBAL", "Ch2 · TOM", "Ch3 · SNARE", "Ch4 · NOISE"];
+const PAD_LABELS = ["Ch1 · CYMBAL", "Ch2 · CYMBAL", "Ch3 · SNARE", "Ch4 · NOISE"];
 c.forEach((ch, i) => {
   const wrap = el("div");
   const pad = el("div", "pad");
