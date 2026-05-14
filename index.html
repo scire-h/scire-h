@@ -867,9 +867,9 @@ function playChannel(ch, velocity=1) {
   const now = actx.currentTime;
   const base = vcoFreq(ch.vco, ch.octave, ch.beatTune);
 
-  /* amp envelope */
-  const atk     = 0.0005 + ch.attack * 0.05;            // 0.5–50 ms
-  const decay   = 0.04 + Math.pow(ch.sustain, 1.4) * 2.0; // up to ~2 s
+  /* amp envelope -- attack 1 ms .. 350 ms, decay 30 ms .. 4.5 s */
+  const atk     = 0.001 + Math.pow(ch.attack, 1.4) * 0.35;
+  const decay   = 0.03 + Math.pow(ch.sustain, 1.4) * 4.5;
   const sense   = state.beatSense ? Math.max(0.15, velocity) : 1.0;
   const peak    = (0.05 + ch.output * 0.95) *
                   (0.25 + ch.senseLevel * 0.75) *
@@ -881,8 +881,9 @@ function playChannel(ch, velocity=1) {
   amp.gain.exponentialRampToValueAtTime(0.0006, now + atk + decay);
   amp.connect(master);
 
-  /* short transient click for the "thwack" at the start of each hit */
-  if (atk < 0.01) {
+  /* stick-attack transient: only when ATTACK is near 0; routed THROUGH
+     the amp envelope so OUTPUT / SENSE / DECAY still shape it.   */
+  if (ch.attack < 0.05) {
     const click = actx.createBufferSource();
     const cb = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.012), actx.sampleRate);
     const d = cb.getChannelData(0);
@@ -891,11 +892,11 @@ function playChannel(ch, velocity=1) {
     }
     click.buffer = cb;
     const cg = actx.createGain();
-    cg.gain.value = peak * 0.35;
+    cg.gain.value = 0.35 * (1 - ch.attack / 0.05); // fades out as ATTACK grows
     const chp = actx.createBiquadFilter();
     chp.type = "highpass";
     chp.frequency.value = 1500;
-    click.connect(chp).connect(cg).connect(master);
+    click.connect(chp).connect(cg).connect(amp);
     click.start(now);
     click.stop(now + 0.02);
   }
@@ -926,7 +927,7 @@ function playChannel(ch, velocity=1) {
 
   /* ---------- NOISE ---------- */
   if (ch.noiseType === "noise") {
-    spawnNoise(base, sweepTime, ch, eq);
+    spawnNoise(base, sweepTime, ch, eq, decay);
   }
 }
 
@@ -970,8 +971,9 @@ function spawnVCO(base, sweepTime, ch, dest, peak, decay) {
   osc.stop(now + 0.05 + decay);
 }
 
-function spawnNoise(base, sweepTime, ch, dest) {
+function spawnNoise(base, sweepTime, ch, dest, decay) {
   const now = actx.currentTime;
+  const tail = (decay ?? 0.4) + 0.1;   // honour SUSTAIN slider
   const n = actx.createBufferSource();
   n.buffer = getNoiseBuf();
   n.loop = true;
@@ -1006,11 +1008,11 @@ function spawnNoise(base, sweepTime, ch, dest) {
   ng.gain.value = 0.22;
   osc.connect(ng).connect(dest);
   osc.start(now);
-  osc.stop(now + 0.05 + sweepTime + 0.3);
+  osc.stop(now + tail);
 
   n.connect(bp).connect(peak).connect(dest);
   n.start(now);
-  n.stop(now + 0.05 + 0.05 + sweepTime + 0.6);
+  n.stop(now + tail);
 }
 
 /* =========================================================
