@@ -810,12 +810,12 @@ function getNoiseBuf() {
    STATE
    ========================================================= */
 function vcoFreq(knob01, octaveStep, beatTune01) {
-  // knob01 = TUNING (C..B around the ring -> we treat as -12..+12 semitones)
-  // octave: 1..5  -> shift in 12-semitone steps centered on 3
-  // beatTune: 0..1 -> +/- 25 cents
+  // knob01 = TUNING (C..B around the ring) -> -12..+12 semitones
+  // octaveStep 1..5 -> octave shift centred on 3
+  // beatTune 0..1 -> 0..+200 cents (chorus/beat detune)
   const semis = (knob01 - 0.5) * 24;
   const oct = (octaveStep - 3) * 12;
-  const cents = (beatTune01 - 0.5) * 50;
+  const cents = beatTune01 * 200;
   return 220 * Math.pow(2, (semis + oct + cents / 100) / 12);
 }
 function makeChannel(idx, label) {
@@ -828,7 +828,7 @@ function makeChannel(idx, label) {
     octave:     3,
     attack:     0.0,
     sustain:    0.45,
-    noiseType:  "tone",       // tone | noise
+    waveform:   "sine",       // sine | mix  (mix = sine VCO + per-channel noise)
     lfoRate:    0.3,
     lfoDepth:   0.5,
     lfoOn:      false,
@@ -851,10 +851,10 @@ const state = {
   ],
 };
 /* sensible defaults that match each labeled voice */
-Object.assign(state.channels[0], { vco: 0.68, octave: 4, sweep: 0.55, sweepDir:"down", noiseType:"tone",  sustain:0.30, attack:0.0 });
-Object.assign(state.channels[1], { vco: 0.55, octave: 3, sweep: 0.75, sweepDir:"down", noiseType:"tone",  sustain:0.55, attack:0.0 });
-Object.assign(state.channels[2], { vco: 0.45, octave: 3, sweep: 0.40, sweepDir:"down", noiseType:"noise", sustain:0.25, attack:0.0 });
-Object.assign(state.channels[3], { vco: 0.40, octave: 2, sweep: 0.50, sweepDir:"up",   noiseType:"noise", sustain:0.40, attack:0.0 });
+Object.assign(state.channels[0], { vco: 0.78, octave: 4, sweep: 0.30, sweepDir:"down", waveform:"mix",  sustain:0.12, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[1], { vco: 0.70, octave: 4, sweep: 0.45, sweepDir:"down", waveform:"mix",  sustain:0.22, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[2], { vco: 0.50, octave: 3, sweep: 0.30, sweepDir:"down", waveform:"mix",  sustain:0.18, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[3], { vco: 0.30, octave: 2, sweep: 0.55, sweepDir:"down", waveform:"sine", sustain:0.30, attack:0.0, lfoRate:0.3 });
 
 /* =========================================================
    VOICE
@@ -901,10 +901,10 @@ function playChannel(ch, velocity=1) {
     click.stop(now + 0.02);
   }
 
-  /* gentle EQ for body */
+  /* gentle EQ -- noise channels need more brightness */
   const eq = actx.createBiquadFilter();
   eq.type = "lowpass";
-  eq.frequency.value = ch.noiseType === "noise" ? 14000 : 9000;
+  eq.frequency.value = ch.waveform === "mix" ? 14000 : 9000;
   eq.Q.value = 0.4;
   eq.connect(amp);
 
@@ -912,21 +912,18 @@ function playChannel(ch, velocity=1) {
      bigger sweeps take a touch longer (RC behaviour). */
   const sweepTime = 0.04 + ch.sweep * 0.18;
 
-  /* ---------- TONE ---------- */
-  if (ch.noiseType === "tone") {
-    spawnVCO(base, sweepTime, ch, eq, peak, decay);
-    if (ch.multiVCO) {
-      // multi-VCO: layer detuned osc + the neighbor channel's tuning
-      spawnVCO(base * 1.005, sweepTime, ch, eq, peak * 0.6, decay);
-      spawnVCO(base * 0.995, sweepTime, ch, eq, peak * 0.6, decay);
-      const neighbor = state.channels[(ch.idx + 2) % 4]; // ch1<-ch4, ch2<-ch1, ...
-      const nf = vcoFreq(neighbor.vco, neighbor.octave, neighbor.beatTune);
-      spawnVCO(nf, sweepTime, ch, eq, peak * 0.45, decay);
-    }
+  /* sine VCO always plays. Detuned partners when MULTI VCO is pulled. */
+  spawnVCO(base, sweepTime, ch, eq, peak, decay);
+  if (ch.multiVCO) {
+    spawnVCO(base * 1.005, sweepTime, ch, eq, peak * 0.6, decay);
+    spawnVCO(base * 0.995, sweepTime, ch, eq, peak * 0.6, decay);
+    const neighbor = state.channels[(ch.idx + 2) % 4];
+    const nf = vcoFreq(neighbor.vco, neighbor.octave, neighbor.beatTune);
+    spawnVCO(nf, sweepTime, ch, eq, peak * 0.45, decay);
   }
 
-  /* ---------- NOISE ---------- */
-  if (ch.noiseType === "noise") {
+  /* "mix" position adds the channel-specific noise (CYMBAL / SNARE / NOISE) */
+  if (ch.waveform === "mix") {
     spawnNoise(base, sweepTime, ch, eq, decay);
   }
 }
@@ -936,8 +933,8 @@ function spawnVCO(base, sweepTime, ch, dest, peak, decay) {
   const osc = actx.createOscillator();
   osc.type = "sine";
 
-  /* pitch sweep */
-  const w = 4 * ch.sweep; // up to 4 oct
+  /* pitch sweep -- WIDTH slider 0..6 OCT */
+  const w = 6 * ch.sweep;
   let f0 = base, f1 = base;
   if (ch.sweepDir === "down") { f0 = base * Math.pow(2, w); f1 = base; }
   else if (ch.sweepDir === "up") { f0 = base; f1 = base * Math.pow(2, w); }
@@ -971,26 +968,35 @@ function spawnVCO(base, sweepTime, ch, dest, peak, decay) {
   osc.stop(now + 0.05 + decay);
 }
 
+/* per-channel noise voicing tables, matching the CYMBAL / SNARE / NOISE
+   silk-screen pills on the real DS-4M ATTACK column.                  */
+const NOISE_VOICE = {
+  CYMBAL: { centerLo: 2500, centerHi: 9000, q: 6.0, peakGain: 14, peakQ: 6, bodyGain: 0.05, bodyFollow: 0.5 },
+  SNARE:  { centerLo:  600, centerHi: 4200, q: 2.4, peakGain:  9, peakQ: 3, bodyGain: 0.35, bodyFollow: 1.0 },
+  NOISE:  { centerLo:  140, centerHi: 2200, q: 0.9, peakGain:  4, peakQ: 1.5, bodyGain: 0.12, bodyFollow: 0.0 },
+};
+
 function spawnNoise(base, sweepTime, ch, dest, decay) {
+  const v = NOISE_VOICE[ch.label] || NOISE_VOICE.NOISE;
   const now = actx.currentTime;
-  const tail = (decay ?? 0.4) + 0.1;   // honour SUSTAIN slider
+  const tail = (decay ?? 0.4) + 0.1;
   const n = actx.createBufferSource();
   n.buffer = getNoiseBuf();
   n.loop = true;
 
-  /* band-pass tracks VCO + sweep direction */
+  /* band-pass + resonant peak make the noise character */
   const bp = actx.createBiquadFilter();
   bp.type = "bandpass";
-  bp.Q.value = 1.6 + ch.vco * 5;
+  bp.Q.value = v.q;
 
-  /* extra resonant peak for "metallic" bite when VCO is high */
   const peak = actx.createBiquadFilter();
   peak.type = "peaking";
-  peak.gain.value = 6 + ch.vco * 10;
-  peak.Q.value = 2.0 + ch.vco * 4;
+  peak.gain.value = v.peakGain;
+  peak.Q.value = v.peakQ;
 
-  const center = 220 + ch.vco * 7200;
-  const w = Math.pow(2, 2 * ch.sweep);
+  /* sweep the filter centre with the WIDTH slider (also 0..6 OCT) */
+  const w = Math.pow(2, 6 * ch.sweep * 0.5); // half the VCO width feels right
+  const center = v.centerLo + (v.centerHi - v.centerLo) * ch.vco;
   let c0 = center, c1 = center;
   if (ch.sweepDir === "down") { c0 = center * w; c1 = center; }
   else if (ch.sweepDir === "up") { c0 = center; c1 = center * w; }
@@ -999,13 +1005,13 @@ function spawnNoise(base, sweepTime, ch, dest, decay) {
   peak.frequency.setValueAtTime(Math.max(60, c0 * 1.3), now);
   peak.frequency.exponentialRampToValueAtTime(Math.max(60, c1 * 1.3), now + sweepTime);
 
-  /* a little VCO body underneath for tom-like snares */
+  /* body tone underneath -- prominent for SNARE, almost absent for CYMBAL */
   const osc = actx.createOscillator();
   osc.type = "triangle";
-  osc.frequency.setValueAtTime(base * 1.6, now);
+  osc.frequency.setValueAtTime(base * (1 + v.bodyFollow * 0.6), now);
   osc.frequency.exponentialRampToValueAtTime(base, now + sweepTime);
   const ng = actx.createGain();
-  ng.gain.value = 0.22;
+  ng.gain.value = v.bodyGain;
   osc.connect(ng).connect(dest);
   osc.start(now);
   osc.stop(now + tail);
@@ -1227,7 +1233,7 @@ function installDragHorizontal(target, get, set) {
    COLUMNS
    ========================================================= */
 const SCALE_6 = ["6","5","4","3","2","1","0"];
-const SCALE_5 = ["5","4","3","2","1"];
+const SCALE_5 = ["5","4","3","2","1","0"];
 
 function colVCO(ch) {
   const c = el("div", "col vco");
@@ -1245,21 +1251,20 @@ function colAttack(ch) {
   c.appendChild(el("div", "pill", "ATTACK"));
   c.appendChild(knob(ch, "attack"));
   c.appendChild(el("div", "ticks", "<span>MIN</span><span>MAX</span>"));
-  c.appendChild(sliderGroup(ch, "sustain", { scaleR: SCALE_6 }));
-  c.appendChild(el("div", "lbl s", "SUSTAIN"));
-  c.appendChild(el("div", "lbl s", "SHORT&nbsp;&nbsp;LONG"));
-  c.appendChild(vSwitch(ch, "noiseType", ["tone","noise"], { labels: ["∿","N"] }));
-  c.appendChild(el("div", "lbl s", ch.label || ""));
+  c.appendChild(el("div", "pill", "SUSTAIN"));
+  c.appendChild(sliderGroup(ch, "sustain", { scale: ["LONG","","","","","","SHORT"] }));
+  c.appendChild(el("div", "pill", ch.label || ""));
+  c.appendChild(vSwitch(ch, "waveform", ["sine","mix"], { labels: ["∿","⌇"] }));
   return c;
 }
 function colLFO(ch) {
   const c = el("div", "col lfo");
   c.appendChild(el("div", "pill", "LFO"));
-  c.appendChild(knob(ch, "lfoRate"));
-  c.appendChild(el("div", "lbl s", "FREQUENCY"));
-  c.appendChild(sliderGroup(ch, "lfoDepth", { scaleR: SCALE_6 }));
+  c.appendChild(knob(ch, "lfoDepth"));
+  c.appendChild(el("div", "ticks", "<span>MIN</span><span>MAX</span>"));
   c.appendChild(el("div", "lbl s", "LEVEL"));
-  c.appendChild(el("div", "lbl s", "HIGH&nbsp;&nbsp;LOW"));
+  c.appendChild(sliderGroup(ch, "lfoRate", { scale: ["HIGH","","","","","","LOW"] }));
+  c.appendChild(el("div", "lbl s", "FREQUENCY"));
   c.appendChild(vSwitch(ch, "lfoOn", [true, false], { labels: ["∿","OFF"] }));
   return c;
 }
@@ -1268,9 +1273,9 @@ function colOutput(ch) {
   c.appendChild(el("div", "pill", "OUTPUT"));
   c.appendChild(knob(ch, "output"));
   c.appendChild(el("div", "ticks", "<span>MIN</span><span>MAX</span>"));
+  c.appendChild(el("div", "pill", "SWEEP"));
   c.appendChild(sliderGroup(ch, "sweep", { scaleR: SCALE_6 }));
-  c.appendChild(el("div", "lbl s", "SWEEP&nbsp;WIDTH"));
-  c.appendChild(el("div", "lbl s", "HIGH&nbsp;&nbsp;LOW"));
+  c.appendChild(el("div", "lbl s", "WIDTH&nbsp;&nbsp;OCT"));
   c.appendChild(vSwitch(ch, "sweepDir", ["up","off","down"], { tall:true, labels:["UP","OFF","DOWN"] }));
   return c;
 }
@@ -1524,10 +1529,10 @@ function startDemo() {
   stopDemo();
   /* dial in cymbal / tom / snare / kick so the pattern reads as drums */
   const PATCHES = [
-    /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", noiseType:"noise", lfoOn:false, output:0.75 },
-    /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", noiseType:"noise", lfoOn:false, output:0.7  },
-    /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", noiseType:"noise", lfoOn:false, output:0.85 },
-    /* Ch4 kick                  */ { vco:0.40, octave:2, attack:0, sustain:0.32, sweep:0.65, sweepDir:"down", noiseType:"tone",  lfoOn:false, output:0.95 },
+    /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", waveform:"mix", lfoOn:false, output:0.75 },
+    /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"mix", lfoOn:false, output:0.7  },
+    /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"mix", lfoOn:false, output:0.85 },
+    /* Ch4 kick                  */ { vco:0.40, octave:2, attack:0, sustain:0.32, sweep:0.65, sweepDir:"down", waveform:"sine",  lfoOn:false, output:0.95 },
   ];
   state.channels.forEach((ch,i) => applyPreset(ch, PATCHES[i]));
 
@@ -1586,15 +1591,15 @@ function refreshChannel(ch) {
 }
 const PRESETS = {
   syndrum: { vco:0.55, octave:3, attack:0, sustain:0.40, sweep:0.85, sweepDir:"down",
-             noiseType:"tone", lfoOn:false, lfoRate:0.3, lfoDepth:0.4, output:0.85 },
+             waveform:"sine", lfoOn:false, lfoRate:0.3, lfoDepth:0.4, output:0.85 },
   toms:    { vco:0.40, octave:2, attack:0, sustain:0.65, sweep:0.55, sweepDir:"down",
-             noiseType:"tone", lfoOn:false, output:0.85 },
+             waveform:"sine", lfoOn:false, output:0.85 },
   snare:   { vco:0.55, octave:3, attack:0, sustain:0.20, sweep:0.30, sweepDir:"down",
-             noiseType:"noise", lfoOn:false, output:0.85 },
+             waveform:"mix", lfoOn:false, output:0.85 },
   hat:     { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.20, sweepDir:"down",
-             noiseType:"noise", lfoOn:false, output:0.80 },
+             waveform:"mix", lfoOn:false, output:0.80 },
   cosmic:  { vco:0.35, octave:2, attack:0, sustain:0.70, sweep:0.95, sweepDir:"up",
-             noiseType:"tone", lfoOn:true, lfoRate:0.45, lfoDepth:0.6, output:0.85 },
+             waveform:"sine", lfoOn:true, lfoRate:0.45, lfoDepth:0.6, output:0.85 },
 };
 document.getElementById("preset").addEventListener("change", e => {
   const p = PRESETS[e.target.value];
