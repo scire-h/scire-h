@@ -559,6 +559,35 @@
   }
   .pad-label b { color:#fff; }
 
+  /* =================  UTILITY (demo + scope) ================= */
+  .utility {
+    width: 1100px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 16px;
+    padding: 4px 24px 0;
+  }
+  .demo-btn {
+    background: linear-gradient(#3a3a3a, #1a1a1a);
+    color: #eee;
+    border: 1px solid #000;
+    border-radius: 4px;
+    padding: 7px 16px;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5),
+                inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .demo-btn:hover { background: linear-gradient(#4a4a4a, #222); }
+  .demo-btn.ghost { color: #aaa; }
+  #scope {
+    border: 1px solid #000;
+    border-radius: 3px;
+    background: #050a05;
+    box-shadow: inset 0 0 12px rgba(0,255,160,0.08);
+  }
+
   /* =================  HELP  ================= */
   .help {
     max-width: 1100px; margin: 0 auto 24px;
@@ -585,6 +614,12 @@
     </div>
 
     <div class="pads" id="pads"></div>
+
+    <div class="utility">
+      <button id="demo" class="demo-btn">▶ DEMO PATTERN</button>
+      <button id="stop" class="demo-btn ghost">■ STOP</button>
+      <canvas id="scope" width="540" height="60"></canvas>
+    </div>
   </div>
 
   <div class="help">
@@ -610,6 +645,7 @@
 
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
 let actx = null, master = null, masterComp = null;
+let analyser = null;
 function ensureAudio() {
   if (actx) return;
   actx = new AudioCtx();
@@ -621,7 +657,35 @@ function ensureAudio() {
   masterComp.release.value = 0.15;
   master = actx.createGain();
   master.gain.value = state.masterVolume;
-  master.connect(masterComp).connect(actx.destination);
+  analyser = actx.createAnalyser();
+  analyser.fftSize = 1024;
+  master.connect(masterComp).connect(analyser).connect(actx.destination);
+  startScope();
+}
+
+function startScope() {
+  const cv = document.getElementById("scope");
+  if (!cv || !analyser) return;
+  const ctx = cv.getContext("2d");
+  const data = new Uint8Array(analyser.fftSize);
+  const w = cv.width, h = cv.height;
+  function tick() {
+    requestAnimationFrame(tick);
+    analyser.getByteTimeDomainData(data);
+    ctx.fillStyle = "rgba(5,12,8,0.55)";
+    ctx.fillRect(0,0,w,h);
+    ctx.strokeStyle = "#3df48a";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    const step = data.length / w;
+    for (let x=0; x<w; x++) {
+      const v = data[Math.floor(x*step)] / 128 - 1;
+      const y = h/2 + v * (h/2 - 4);
+      if (x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  tick();
 }
 let noiseBuf = null;
 function getNoiseBuf() {
@@ -730,7 +794,7 @@ function playChannel(ch, velocity=1) {
   /* gentle EQ for body */
   const eq = actx.createBiquadFilter();
   eq.type = "lowpass";
-  eq.frequency.value = 9000;
+  eq.frequency.value = ch.noiseType === "noise" ? 14000 : 9000;
   eq.Q.value = 0.4;
   eq.connect(amp);
 
@@ -806,27 +870,36 @@ function spawnNoise(base, sweepTime, ch, dest) {
   /* band-pass tracks VCO + sweep direction */
   const bp = actx.createBiquadFilter();
   bp.type = "bandpass";
-  bp.Q.value = 1.3 + ch.vco * 4;
+  bp.Q.value = 1.6 + ch.vco * 5;
 
-  const center = 250 + ch.vco * 6500;
+  /* extra resonant peak for "metallic" bite when VCO is high */
+  const peak = actx.createBiquadFilter();
+  peak.type = "peaking";
+  peak.gain.value = 6 + ch.vco * 10;
+  peak.Q.value = 2.0 + ch.vco * 4;
+
+  const center = 220 + ch.vco * 7200;
   const w = Math.pow(2, 2 * ch.sweep);
   let c0 = center, c1 = center;
   if (ch.sweepDir === "down") { c0 = center * w; c1 = center; }
   else if (ch.sweepDir === "up") { c0 = center; c1 = center * w; }
   bp.frequency.setValueAtTime(Math.max(60, c0), now);
   bp.frequency.exponentialRampToValueAtTime(Math.max(60, c1), now + sweepTime);
+  peak.frequency.setValueAtTime(Math.max(60, c0 * 1.3), now);
+  peak.frequency.exponentialRampToValueAtTime(Math.max(60, c1 * 1.3), now + sweepTime);
 
-  /* small VCO tone underneath for body */
+  /* a little VCO body underneath for tom-like snares */
   const osc = actx.createOscillator();
   osc.type = "triangle";
-  osc.frequency.setValueAtTime(base, now);
+  osc.frequency.setValueAtTime(base * 1.6, now);
+  osc.frequency.exponentialRampToValueAtTime(base, now + sweepTime);
   const ng = actx.createGain();
-  ng.gain.value = 0.18;
+  ng.gain.value = 0.22;
   osc.connect(ng).connect(dest);
   osc.start(now);
   osc.stop(now + 0.05 + sweepTime + 0.3);
 
-  n.connect(bp).connect(dest);
+  n.connect(bp).connect(peak).connect(dest);
   n.start(now);
   n.stop(now + 0.05 + 0.05 + sweepTime + 0.6);
 }
@@ -1237,6 +1310,51 @@ window.addEventListener("mousedown", () => {
   ensureAudio();
   if (actx && actx.state === "suspended") actx.resume();
 }, { once: true });
+
+/* =========================================================
+   DEMO PATTERN
+   ========================================================= */
+let demoTimer = null;
+function startDemo() {
+  ensureAudio();
+  if (actx.state === "suspended") actx.resume();
+  stopDemo();
+  /* 16-step pattern, columns = 16th notes, rows = ch1..ch4 */
+  const pat = [
+    /* CYM */ [1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0],
+    /* TOM */ [0,0,0,0,0,0,1,0, 0,0,0,0,0,0,0,0],
+    /* SNR */ [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,1],
+    /* KICK*/ [1,0,0,0,0,0,0,0, 1,0,0,1,0,0,0,0],
+  ];
+  const bpm = 112;
+  const stepMs = 60000 / bpm / 4; // 16th notes
+  let step = 0;
+  const tick = () => {
+    for (let i=0;i<4;i++) {
+      if (pat[i][step]) {
+        playChannel(state.channels[i], 0.9);
+        flashPad(state.channels[i]);
+      }
+    }
+    step = (step + 1) % 16;
+  };
+  tick();
+  demoTimer = setInterval(tick, stepMs);
+}
+function stopDemo() {
+  if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+}
+function flashPad(ch) {
+  if (!ch._pad) return;
+  ch._pad.classList.add("hit");
+  ch._led.classList.add("on");
+  setTimeout(() => {
+    ch._pad.classList.remove("hit");
+    ch._led.classList.remove("on");
+  }, 100);
+}
+document.getElementById("demo").addEventListener("click", startDemo);
+document.getElementById("stop").addEventListener("click", stopDemo);
 </script>
 </body>
 </html>
