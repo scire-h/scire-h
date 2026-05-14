@@ -287,9 +287,17 @@
   /* =================  SLIDERS  ================= */
   .slider-wrap {
     display: flex; align-items: stretch; justify-content: center;
-    gap: 2px;
+    gap: 1px;
     margin-top: 2px;
   }
+  .slider-scale {
+    display: flex; flex-direction: column; justify-content: space-between;
+    height: 86px; font-size: 6.5px; color: #000;
+    line-height: 1; padding: 1px 1px;
+    text-align: right;
+  }
+  .slider-scale.left  { text-align: right;  padding-right: 2px; }
+  .slider-scale.right { text-align: left;   padding-left: 2px; }
   .slider {
     width: 20px; height: 86px;
     background:
@@ -1045,6 +1053,24 @@ function slider(ch, key, opts = {}) {
   return s;
 }
 
+function sliderGroup(ch, key, opts={}) {
+  /* slider with optional numeric scales on one or both sides */
+  const wrap = el("div", "slider-wrap");
+  if (opts.scale) {
+    const s = el("div", "slider-scale left");
+    const vals = opts.scale; // array of strings (top to bottom)
+    vals.forEach(v => s.appendChild(el("div", null, v)));
+    wrap.appendChild(s);
+  }
+  wrap.appendChild(slider(ch, key, opts));
+  if (opts.scaleR) {
+    const s = el("div", "slider-scale right");
+    opts.scaleR.forEach(v => s.appendChild(el("div", null, v)));
+    wrap.appendChild(s);
+  }
+  return wrap;
+}
+
 /* ---- Vertical 2/3-way switch ---- */
 function vSwitch(ch, key, values, opts={}) {
   const sw = el("div", "vsw" + (opts.tall ? " tall" : ""));
@@ -1126,14 +1152,15 @@ function installDragHorizontal(target, get, set) {
 /* =========================================================
    COLUMNS
    ========================================================= */
+const SCALE_6 = ["6","5","4","3","2","1","0"];
+const SCALE_5 = ["5","4","3","2","1"];
+
 function colVCO(ch) {
   const c = el("div", "col vco");
   c.appendChild(el("div", "pill", "VCO"));
   c.appendChild(vcoKnob(ch));
   c.appendChild(el("div", "lbl s", "TUNING"));
-  const sliders = el("div", "slider-wrap");
-  sliders.appendChild(slider(ch, "beatTune"));
-  c.appendChild(sliders);
+  c.appendChild(sliderGroup(ch, "beatTune", { scaleR: SCALE_5 }));
   c.appendChild(el("div", "lbl s", "BEAT&nbsp;TUNE"));
   c.appendChild(octaveSelector(ch));
   c.appendChild(el("div", "lbl s", "OCTAVE"));
@@ -1144,9 +1171,7 @@ function colAttack(ch) {
   c.appendChild(el("div", "pill", "ATTACK"));
   c.appendChild(knob(ch, "attack"));
   c.appendChild(el("div", "ticks", "<span>MIN</span><span>MAX</span>"));
-  const sw = el("div", "slider-wrap");
-  sw.appendChild(slider(ch, "sustain"));
-  c.appendChild(sw);
+  c.appendChild(sliderGroup(ch, "sustain", { scaleR: SCALE_6 }));
   c.appendChild(el("div", "lbl s", "SUSTAIN"));
   c.appendChild(el("div", "lbl s", "SHORT&nbsp;&nbsp;LONG"));
   c.appendChild(vSwitch(ch, "noiseType", ["tone","noise"]));
@@ -1158,9 +1183,7 @@ function colLFO(ch) {
   c.appendChild(el("div", "pill", "LFO"));
   c.appendChild(knob(ch, "lfoRate"));
   c.appendChild(el("div", "lbl s", "FREQUENCY"));
-  const sw = el("div", "slider-wrap");
-  sw.appendChild(slider(ch, "lfoDepth"));
-  c.appendChild(sw);
+  c.appendChild(sliderGroup(ch, "lfoDepth", { scaleR: SCALE_6 }));
   c.appendChild(el("div", "lbl s", "LEVEL"));
   c.appendChild(el("div", "lbl s", "HIGH&nbsp;&nbsp;LOW"));
   c.appendChild(vSwitch(ch, "lfoOn", [false, true]));
@@ -1172,9 +1195,7 @@ function colOutput(ch) {
   c.appendChild(el("div", "pill", "OUTPUT"));
   c.appendChild(knob(ch, "output"));
   c.appendChild(el("div", "ticks", "<span>MIN</span><span>MAX</span>"));
-  const sw = el("div", "slider-wrap");
-  sw.appendChild(slider(ch, "sweep"));
-  c.appendChild(sw);
+  c.appendChild(sliderGroup(ch, "sweep", { scaleR: SCALE_6 }));
   c.appendChild(el("div", "lbl s", "SWEEP&nbsp;WIDTH"));
   c.appendChild(el("div", "lbl s", "HIGH&nbsp;&nbsp;LOW"));
   c.appendChild(vSwitch(ch, "sweepDir", ["up","off","down"], { tall:true }));
