@@ -534,21 +534,26 @@
     color: #fff;
   }
   .pad::before {
-    /* ULT-SOUND ring text */
-    content: "ULT-SOUND";
+    /* dark inner ring */
+    content: "";
     position: absolute;
     inset: 14px;
     border-radius: 50%;
     border: 2px solid rgba(0,0,0,0.35);
-    color: #ff3030;
-    font-weight: 800;
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding-top: 4px;
+    pointer-events: none;
+  }
+  .pad svg.ring {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .pad svg.ring text {
+    fill: #ff3030;
     font-family: "Arial Narrow", Arial, sans-serif;
+    font-weight: 900;
+    font-size: 16px;
+    letter-spacing: 4px;
   }
   .pad .felt {
     width: 48%; height: 48%; border-radius: 50%;
@@ -1277,9 +1282,33 @@ grid.appendChild(master_);
    ========================================================= */
 const padsEl = document.getElementById("pads");
 const PAD_LABELS = ["Ch1 · CYMBAL", "Ch2 · CYMBAL", "Ch3 · SNARE", "Ch4 · NOISE"];
+function makeRingSvg() {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "ring");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  const defs = document.createElementNS(NS, "defs");
+  const path = document.createElementNS(NS, "path");
+  /* a circle going clockwise from top */
+  path.setAttribute("id", "ring-path-" + Math.random().toString(36).slice(2,8));
+  path.setAttribute("d", "M 50 12 A 38 38 0 1 1 49.999 12");
+  path.setAttribute("fill", "none");
+  defs.appendChild(path);
+  svg.appendChild(defs);
+  const t = document.createElementNS(NS, "text");
+  const tp = document.createElementNS(NS, "textPath");
+  tp.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", "#" + path.getAttribute("id"));
+  tp.setAttribute("href", "#" + path.getAttribute("id"));
+  tp.setAttribute("startOffset", "0%");
+  tp.textContent = "ULT-SOUND · ULT-SOUND ·";
+  t.appendChild(tp);
+  svg.appendChild(t);
+  return svg;
+}
 c.forEach((ch, i) => {
   const wrap = el("div");
   const pad = el("div", "pad");
+  pad.appendChild(makeRingSvg());
   pad.appendChild(el("div", "felt"));
   pad.appendChild(el("div", "num", String(i+1)));
   const triggerFromPad = (e) => {
