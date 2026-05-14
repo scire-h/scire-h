@@ -629,6 +629,8 @@
   }
   .demo-btn:hover { background: linear-gradient(#4a4a4a, #222); }
   .demo-btn.ghost { color: #aaa; }
+  select.demo-btn { appearance: none; padding-right: 24px; min-width: 150px; }
+  select.demo-btn option { background: #1a1a1a; color: #eee; }
   #scope {
     border: 1px solid #000;
     border-radius: 3px;
@@ -664,9 +666,18 @@
     <div class="pads" id="pads"></div>
 
     <div class="utility">
-      <button id="demo" class="demo-btn">▶ DEMO PATTERN</button>
-      <button id="stop" class="demo-btn ghost">■ STOP</button>
-      <canvas id="scope" width="540" height="60"></canvas>
+      <button id="demo"  class="demo-btn">▶ DEMO PATTERN</button>
+      <button id="stop"  class="demo-btn ghost">■ STOP</button>
+      <button id="reset" class="demo-btn ghost">↻ INIT</button>
+      <select id="preset" class="demo-btn">
+        <option value="">— PRESET —</option>
+        <option value="syndrum">Syndrum Pew</option>
+        <option value="toms">Big Toms</option>
+        <option value="snare">Tight Snare</option>
+        <option value="hat">Closed Hat</option>
+        <option value="cosmic">Cosmic Up-Sweep</option>
+      </select>
+      <canvas id="scope" width="380" height="60"></canvas>
     </div>
   </div>
 
@@ -1097,6 +1108,7 @@ function hSwitch(getter, setter) {
   sw.appendChild(lev);
   const render = () => sw.style.setProperty("--p", getter() ? 1 : 0);
   render();
+  sw._render = render;
   sw.addEventListener("click", () => { setter(!getter()); render(); });
   return sw;
 }
@@ -1118,13 +1130,14 @@ function octaveSelector(ch) {
   sw.appendChild(lev);
   const render = () => sw.style.setProperty("--p", ((ch.octave - 1) / 4).toFixed(3));
   render();
+  sw._render = render;
+  ch._octRender = render;
   sw.addEventListener("click", (e) => {
     const rect = sw.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     ch.octave = 1 + Math.round(x * 4);
     render();
   });
-  /* drag */
   installDragHorizontal(sw, () => (ch.octave - 1)/4, p => {
     ch.octave = 1 + Math.round(p * 4);
     render();
@@ -1265,6 +1278,7 @@ function strip(ch) {
   s.appendChild(colLFO(ch));
   s.appendChild(colOutput(ch));
   s.style.gridTemplateColumns = "1.18fr 1fr 1fr 1fr";
+  ch._strip = s;
   return s;
 }
 
@@ -1473,6 +1487,51 @@ function flashPad(ch) {
 }
 document.getElementById("demo").addEventListener("click", startDemo);
 document.getElementById("stop").addEventListener("click", stopDemo);
+
+/* =========================================================
+   PRESETS
+   ========================================================= */
+function applyPreset(ch, p) {
+  Object.assign(ch, p);
+  refreshChannel(ch);
+}
+function refreshChannel(ch) {
+  /* find all controls bound to this channel and re-render */
+  if (ch._strip) {
+    ch._strip.querySelectorAll(".knob,.slider,.vsw,.slide5,.hsw")
+      .forEach(n => n._render && n._render());
+  }
+  /* octave needs re-render of slide5 lever */
+  if (ch._octRender) ch._octRender();
+}
+const PRESETS = {
+  syndrum: { vco:0.55, octave:3, attack:0, sustain:0.40, sweep:0.85, sweepDir:"down",
+             noiseType:"tone", lfoOn:false, lfoRate:0.3, lfoDepth:0.4, output:0.85 },
+  toms:    { vco:0.40, octave:2, attack:0, sustain:0.65, sweep:0.55, sweepDir:"down",
+             noiseType:"tone", lfoOn:false, output:0.85 },
+  snare:   { vco:0.55, octave:3, attack:0, sustain:0.20, sweep:0.30, sweepDir:"down",
+             noiseType:"noise", lfoOn:false, output:0.85 },
+  hat:     { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.20, sweepDir:"down",
+             noiseType:"noise", lfoOn:false, output:0.80 },
+  cosmic:  { vco:0.35, octave:2, attack:0, sustain:0.70, sweep:0.95, sweepDir:"up",
+             noiseType:"tone", lfoOn:true, lfoRate:0.45, lfoDepth:0.6, output:0.85 },
+};
+document.getElementById("preset").addEventListener("change", e => {
+  const p = PRESETS[e.target.value];
+  if (!p) return;
+  state.channels.forEach(ch => applyPreset(ch, p));
+  e.target.value = "";
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  state.channels.forEach((ch,i) => {
+    const def = makeChannel(ch.idx, ch.label);
+    /* keep references */
+    def._pad = ch._pad; def._led = ch._led; def._strip = ch._strip; def._octRender = ch._octRender;
+    Object.keys(def).forEach(k => { if (!k.startsWith("_")) ch[k] = def[k]; });
+    refreshChannel(ch);
+  });
+});
 </script>
 </body>
 </html>
