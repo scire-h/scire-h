@@ -1514,12 +1514,21 @@ function startDemo() {
   ensureAudio();
   if (actx.state === "suspended") actx.resume();
   stopDemo();
-  /* 16-step pattern, columns = 16th notes, rows = ch1..ch4 */
+  /* dial in cymbal / tom / snare / kick so the pattern reads as drums */
+  const PATCHES = [
+    /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", noiseType:"noise", lfoOn:false, output:0.75 },
+    /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", noiseType:"noise", lfoOn:false, output:0.7  },
+    /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", noiseType:"noise", lfoOn:false, output:0.85 },
+    /* Ch4 kick                  */ { vco:0.40, octave:2, attack:0, sustain:0.32, sweep:0.65, sweepDir:"down", noiseType:"tone",  lfoOn:false, output:0.95 },
+  ];
+  state.channels.forEach((ch,i) => applyPreset(ch, PATCHES[i]));
+
+  /* 16-step pattern */
   const pat = [
-    /* CYM */ [1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0],
-    /* TOM */ [0,0,0,0,0,0,1,0, 0,0,0,0,0,0,0,0],
-    /* SNR */ [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,1],
-    /* KICK*/ [1,0,0,0,0,0,0,0, 1,0,0,1,0,0,0,0],
+    /* HAT  */ [1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0],
+    /* OPEN */ [0,0,0,0,0,0,0,0, 0,0,0,0,0,0,1,0],
+    /* SNR  */ [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,1],
+    /* KICK */ [1,0,0,0,0,0,0,0, 1,0,0,1,0,0,0,0],
   ];
   const bpm = 112;
   const stepMs = 60000 / bpm / 4; // 16th notes
