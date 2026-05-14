@@ -127,10 +127,16 @@
     border-right: 1px solid rgba(0,0,0,0.35);
   }
   .col:last-child { border-right: none; }
-  .col.vco    { background: var(--cyan); }
-  .col.attack { background: var(--yellow); }
-  .col.lfo    { background: var(--yellow); }
-  .col.output { background: var(--yellow); }
+  .col.vco {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.06)),
+      var(--cyan);
+  }
+  .col.attack, .col.lfo, .col.output {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.06)),
+      var(--yellow);
+  }
   .col.sense  { background: var(--cyan); padding: 4px; }
 
   .pill {
@@ -161,7 +167,9 @@
   .row-wrap.top    { grid-column: 1 / span 2; }
   .row-wrap.bottom { grid-column: 1 / span 2; }
   .sense-col {
-    background: var(--cyan);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.06)),
+      var(--cyan);
     border: 1.5px solid #000;
     border-radius: 2px;
     display: flex; flex-direction: column;
@@ -387,7 +395,9 @@
 
   /* =================  MASTER STRIP  ================= */
   .master {
-    background: var(--cyan);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.06)),
+      var(--cyan);
     border: 1.5px solid #000;
     border-radius: 2px;
     display: flex; flex-direction: column;
@@ -937,18 +947,28 @@ function knob(ch, key, { small=false, range=[0,1], renderRot } = {}) {
   };
   render();
   k._render = render;
-  let drag=false, sy=0, sv=0;
-  k.addEventListener("mousedown", e => { drag=true; sy=e.clientY; sv=ch[key]; e.preventDefault(); });
-  window.addEventListener("mousemove", e => {
-    if (!drag) return;
-    const dy = sy - e.clientY;
-    const r = max - min;
-    ch[key] = Math.max(min, Math.min(max, sv + (dy/140) * r));
-    render();
-  });
-  window.addEventListener("mouseup", () => drag=false);
+  installDragValue(k, () => ch[key], v => { ch[key] = v; render(); }, min, max, 140);
   k.addEventListener("dblclick", () => { ch[key] = (min+max)/2; render(); });
   return wrap;
+}
+
+/* shared pointer-event drag helper for knobs and sliders */
+function installDragValue(target, get, set, min, max, sensitivity) {
+  let drag = false, sy = 0, sv = 0, ptr = null;
+  target.addEventListener("pointerdown", e => {
+    drag = true; sy = e.clientY; sv = get(); ptr = e.pointerId;
+    target.setPointerCapture && target.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  target.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== ptr) return;
+    const dy = sy - e.clientY;
+    const r = max - min;
+    set(Math.max(min, Math.min(max, sv + (dy/sensitivity) * r)));
+  });
+  const end = () => { drag = false; };
+  target.addEventListener("pointerup", end);
+  target.addEventListener("pointercancel", end);
 }
 
 /* ---- VCO knob with note ring (C..B) ---- */
@@ -1000,15 +1020,7 @@ function slider(ch, key, opts = {}) {
   };
   render();
   s._render = render;
-  let drag=false, sy=0, sv=0;
-  s.addEventListener("mousedown", e => { drag=true; sy=e.clientY; sv=ch[key]; e.preventDefault(); });
-  window.addEventListener("mousemove", e => {
-    if (!drag) return;
-    const dy = sy - e.clientY;
-    ch[key] = Math.max(min, Math.min(max, sv + (dy/100)*(max-min)));
-    render();
-  });
-  window.addEventListener("mouseup", () => drag=false);
+  installDragValue(s, () => ch[key], v => { ch[key] = v; render(); }, min, max, 100);
   s.addEventListener("dblclick", () => { ch[key] = (min+max)/2; render(); });
   return s;
 }
@@ -1205,14 +1217,8 @@ function masterCol() {
     if (master) master.gain.value = state.masterVolume * (state.power ? 1 : 0);
   };
   renderMV();
-  let drag=false, sy=0, sv=0;
-  mv.addEventListener("mousedown", e => { drag=true; sy=e.clientY; sv=state.masterVolume; e.preventDefault(); });
-  window.addEventListener("mousemove", e => {
-    if (!drag) return;
-    state.masterVolume = Math.max(0, Math.min(1, sv + (sy - e.clientY)/160));
-    renderMV();
-  });
-  window.addEventListener("mouseup", () => drag=false);
+  installDragValue(mv, () => state.masterVolume,
+    v => { state.masterVolume = v; renderMV(); }, 0, 1, 160);
   m.appendChild(mv);
   m.appendChild(el("div", "min-max", "<span>MIN</span><span>MAX</span>"));
   m.appendChild(el("div", "lbl s", "MASTER VOLUME"));
@@ -1247,6 +1253,7 @@ const topRow = el("div", "row-wrap top");
 topRow.appendChild(senseColumn(c[0], c[1], /*header*/true, /*beatSense*/false));
 topRow.appendChild(strip(c[0]));
 topRow.appendChild(strip(c[1]));
+topRow.style.gridRow = "1";
 topRow.style.gridColumn = "1 / span 2";
 grid.appendChild(topRow);
 
@@ -1255,6 +1262,7 @@ const botRow = el("div", "row-wrap bottom");
 botRow.appendChild(senseColumn(c[2], c[3], /*header*/false, /*beatSense*/true));
 botRow.appendChild(strip(c[2]));
 botRow.appendChild(strip(c[3]));
+botRow.style.gridRow = "2";
 botRow.style.gridColumn = "1 / span 2";
 grid.appendChild(botRow);
 
@@ -1289,7 +1297,7 @@ c.forEach((ch, i) => {
     pad.classList.add("hit"); ch._led.classList.add("on");
     setTimeout(() => { pad.classList.remove("hit"); ch._led.classList.remove("on"); }, 110);
   };
-  pad.addEventListener("mousedown", triggerFromPad);
+  pad.addEventListener("pointerdown", triggerFromPad);
   wrap.appendChild(pad);
   const lbl = el("div", "pad-label", `<b>${i+1}</b> &nbsp;${PAD_LABELS[i].split("· ")[1]}`);
   wrap.appendChild(lbl);
@@ -1316,10 +1324,12 @@ window.addEventListener("keydown", e => {
 });
 
 /* autoplay unlock */
-window.addEventListener("mousedown", () => {
+function unlock() {
   ensureAudio();
   if (actx && actx.state === "suspended") actx.resume();
-}, { once: true });
+}
+window.addEventListener("pointerdown", unlock, { once: true });
+window.addEventListener("keydown",     unlock, { once: true });
 
 /* =========================================================
    DEMO PATTERN
