@@ -1,0 +1,11 @@
+build/
+build-*/
+*.xcodeproj/
+*.xcworkspace/
+.DS_Store
+DerivedData/
+xcuserdata/
+*.user
+CMakeUserPresets.json
+JuceLibraryCode/
+_deps/
