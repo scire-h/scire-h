@@ -45,6 +45,22 @@
     padding: 14px 14px 30px;
     gap: 18px;
   }
+  /* Scale down on smaller viewports so the 1100 px panel still fits. */
+  @media (max-width: 1180px) {
+    .stage { transform: scale(0.92); transform-origin: top center; }
+  }
+  @media (max-width: 1050px) {
+    .stage { transform: scale(0.80); }
+  }
+  @media (max-width: 900px) {
+    .stage { transform: scale(0.66); }
+  }
+  @media (max-width: 720px) {
+    .stage { transform: scale(0.50); }
+  }
+  @media (max-width: 560px) {
+    .stage { transform: scale(0.40); }
+  }
 
   /* =================  CASE  ================= */
   .case {
