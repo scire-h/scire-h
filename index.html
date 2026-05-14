@@ -89,6 +89,13 @@
   }
   .panel::before { left: 4px; }
   .panel::after  { right: 4px; }
+  .maker {
+    position: absolute;
+    right: 14px; bottom: 4px;
+    font-size: 8px; letter-spacing: 0.12em;
+    color: #555;
+    font-family: "Arial Narrow", Arial, sans-serif;
+  }
 
   /* =================  GRID  ================= */
   .grid {
@@ -573,6 +580,7 @@
     <div class="case">
       <div class="panel">
         <div class="grid" id="grid"></div>
+        <div class="maker">TOYO GAKKI CO.,LTD.</div>
       </div>
     </div>
 
@@ -649,6 +657,7 @@ function makeChannel(idx, label) {
     sustain:    0.45,
     noiseType:  "tone",       // tone | noise
     lfoRate:    0.3,
+    lfoDepth:   0.5,
     lfoOn:      false,
     sweep:      0.65,
     sweepDir:   "down",       // up | off | down
@@ -699,6 +708,25 @@ function playChannel(ch, velocity=1) {
   amp.gain.exponentialRampToValueAtTime(0.0006, now + atk + decay);
   amp.connect(master);
 
+  /* short transient click for the "thwack" at the start of each hit */
+  if (atk < 0.01) {
+    const click = actx.createBufferSource();
+    const cb = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.012), actx.sampleRate);
+    const d = cb.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      d[i] = (Math.random()*2-1) * Math.exp(-i / (actx.sampleRate * 0.0015));
+    }
+    click.buffer = cb;
+    const cg = actx.createGain();
+    cg.gain.value = peak * 0.35;
+    const chp = actx.createBiquadFilter();
+    chp.type = "highpass";
+    chp.frequency.value = 1500;
+    click.connect(chp).connect(cg).connect(master);
+    click.start(now);
+    click.stop(now + 0.02);
+  }
+
   /* gentle EQ for body */
   const eq = actx.createBiquadFilter();
   eq.type = "lowpass";
@@ -706,7 +734,9 @@ function playChannel(ch, velocity=1) {
   eq.Q.value = 0.4;
   eq.connect(amp);
 
-  const sweepTime = 0.015 + Math.pow(ch.sustain, 1.2) * 0.55;
+  /* Syndrum-style: sweep is largely independent of decay,
+     bigger sweeps take a touch longer (RC behaviour). */
+  const sweepTime = 0.04 + ch.sweep * 0.18;
 
   /* ---------- TONE ---------- */
   if (ch.noiseType === "tone") {
@@ -745,7 +775,7 @@ function spawnVCO(base, sweepTime, ch, dest, peak, decay) {
     const lfo = actx.createOscillator();
     lfo.frequency.value = 0.8 + ch.lfoRate * 22; // 0.8–23 Hz
     const lfoGain = actx.createGain();
-    lfoGain.gain.value = base * 0.06;
+    lfoGain.gain.value = base * 0.02 + base * 0.12 * ch.lfoDepth; // 2–14 %
     lfo.connect(lfoGain).connect(osc.frequency);
     lfo.start(now);
     lfo.stop(now + 0.05 + decay);
@@ -981,14 +1011,12 @@ function colLFO(ch) {
   c.appendChild(knob(ch, "lfoRate"));
   c.appendChild(el("div", "lbl s", "FREQUENCY"));
   const sw = el("div", "slider-wrap");
-  sw.appendChild(slider(ch, "sweep"));
+  sw.appendChild(slider(ch, "lfoDepth"));
   c.appendChild(sw);
-  c.appendChild(el("div", "lbl s", "SWEEP&nbsp;WIDTH"));
+  c.appendChild(el("div", "lbl s", "LEVEL"));
   c.appendChild(el("div", "lbl s", "HIGH&nbsp;&nbsp;LOW"));
-  // LFO on/off (2-way)
-  const sw2 = vSwitch(ch, "lfoOn", [false, true]);
-  c.appendChild(sw2);
-  c.appendChild(el("div", "lbl s", "&#xa0;∿&#xa0;&nbsp;OFF"));
+  c.appendChild(vSwitch(ch, "lfoOn", [false, true]));
+  c.appendChild(el("div", "lbl s", "∿&nbsp;&nbsp;OFF"));
   return c;
 }
 function colOutput(ch) {
@@ -996,12 +1024,13 @@ function colOutput(ch) {
   c.appendChild(el("div", "pill", "OUTPUT"));
   c.appendChild(knob(ch, "output"));
   c.appendChild(el("div", "ticks", "<span>MIN</span><span>MAX</span>"));
-  // SWEEP direction 3-way: up / off / down
-  c.appendChild(el("div", "lbl s", "&nbsp;"));
+  const sw = el("div", "slider-wrap");
+  sw.appendChild(slider(ch, "sweep"));
+  c.appendChild(sw);
+  c.appendChild(el("div", "lbl s", "SWEEP&nbsp;WIDTH"));
+  c.appendChild(el("div", "lbl s", "HIGH&nbsp;&nbsp;LOW"));
   c.appendChild(vSwitch(ch, "sweepDir", ["up","off","down"], { tall:true }));
-  c.appendChild(el("div", "lbl s", "UP"));
-  c.appendChild(el("div", "lbl s", "OFF"));
-  c.appendChild(el("div", "lbl s", "DOWN"));
+  c.appendChild(el("div", "lbl s", "UP&nbsp;·&nbsp;OFF&nbsp;·&nbsp;DOWN"));
   return c;
 }
 
@@ -1066,8 +1095,7 @@ function strip(ch) {
   s.appendChild(colAttack(ch));
   s.appendChild(colLFO(ch));
   s.appendChild(colOutput(ch));
-  // remove the unused first column (sense placeholder)
-  s.style.gridTemplateColumns = "1fr 1fr 1fr 1fr";
+  s.style.gridTemplateColumns = "1.18fr 1fr 1fr 1fr";
   return s;
 }
 
