@@ -338,6 +338,16 @@
 
   /* =================  SWITCHES  ================= */
   /* vertical mini-switch (1, 2 or 3 positions) */
+  .sw-group {
+    display: flex; align-items: center; gap: 3px;
+    margin: 2px 0 1px;
+  }
+  .sw-group .sw-labels {
+    display: flex; flex-direction: column; justify-content: space-between;
+    height: 30px;
+    font-size: 7px; color: #000; line-height: 1;
+  }
+  .sw-group.tall .sw-labels { height: 38px; }
   .vsw {
     width: 18px; height: 30px;
     background: #1a1a1a;
@@ -345,7 +355,6 @@
     border-radius: 2px;
     position: relative;
     cursor: pointer;
-    margin: 2px 0;
   }
   .vsw .lever {
     position: absolute;
@@ -1100,6 +1109,15 @@ function vSwitch(ch, key, values, opts={}) {
     ch[key] = values[(i+1) % values.length];
     render();
   });
+  if (opts.labels) {
+    const g = el("div", "sw-group" + (opts.tall ? " tall" : ""));
+    const lbl = el("div", "sw-labels");
+    opts.labels.forEach(s => lbl.appendChild(el("div", null, s)));
+    g.appendChild(sw);
+    g.appendChild(lbl);
+    g._render = render;
+    return g;
+  }
   return sw;
 }
 
@@ -1189,7 +1207,7 @@ function colAttack(ch) {
   c.appendChild(sliderGroup(ch, "sustain", { scaleR: SCALE_6 }));
   c.appendChild(el("div", "lbl s", "SUSTAIN"));
   c.appendChild(el("div", "lbl s", "SHORT&nbsp;&nbsp;LONG"));
-  c.appendChild(vSwitch(ch, "noiseType", ["tone","noise"]));
+  c.appendChild(vSwitch(ch, "noiseType", ["tone","noise"], { labels: ["∿","N"] }));
   c.appendChild(el("div", "lbl s", ch.label || ""));
   return c;
 }
@@ -1201,8 +1219,7 @@ function colLFO(ch) {
   c.appendChild(sliderGroup(ch, "lfoDepth", { scaleR: SCALE_6 }));
   c.appendChild(el("div", "lbl s", "LEVEL"));
   c.appendChild(el("div", "lbl s", "HIGH&nbsp;&nbsp;LOW"));
-  c.appendChild(vSwitch(ch, "lfoOn", [false, true]));
-  c.appendChild(el("div", "lbl s", "∿&nbsp;&nbsp;OFF"));
+  c.appendChild(vSwitch(ch, "lfoOn", [true, false], { labels: ["∿","OFF"] }));
   return c;
 }
 function colOutput(ch) {
@@ -1213,8 +1230,7 @@ function colOutput(ch) {
   c.appendChild(sliderGroup(ch, "sweep", { scaleR: SCALE_6 }));
   c.appendChild(el("div", "lbl s", "SWEEP&nbsp;WIDTH"));
   c.appendChild(el("div", "lbl s", "HIGH&nbsp;&nbsp;LOW"));
-  c.appendChild(vSwitch(ch, "sweepDir", ["up","off","down"], { tall:true }));
-  c.appendChild(el("div", "lbl s", "UP&nbsp;·&nbsp;OFF&nbsp;·&nbsp;DOWN"));
+  c.appendChild(vSwitch(ch, "sweepDir", ["up","off","down"], { tall:true, labels:["UP","OFF","DOWN"] }));
   return c;
 }
 
