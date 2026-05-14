@@ -78,11 +78,15 @@ codesign --deep --force --options runtime --timestamp \
 ## Development roadmap
 
 * [x] **Phase 1** — JUCE skeleton, working subtractive synth voice, parameter tree, basic UI, AU/VST3/Standalone targets.
-* [ ] **Phase 2** — Replace the JUCE Ladder Filter with a hand-rolled zero-delay-feedback Moog ladder using the Newton iteration described in *Stilson & Smith 1996*.
-* [ ] **Phase 3** — Component-level VCO: model the Pollard Syndrum's triangle-core oscillator (current-mode integrator + comparator) using TPT integrators, then derive sine via a polynomial waveshaper of the triangle output (the same trick the Curtis CEM3340 chips use).
-* [ ] **Phase 4** — Voltage-controlled-amplifier non-linearity (OTA-style); 2nd-order temperature drift on the exponential converter.
-* [ ] **Phase 5** — Trigger-input conditioning circuit (peak detector → Schmitt trigger), allowing real piezo input from an audio input bus.
-* [ ] **Phase 6** — Skinned panel UI rendered from SVG, matching the silk-screen of the original case down to the screws.
+* [ ] **Phase 2** — Component-level analog model. Detailed design in [`docs/CIRCUIT_RESEARCH.md`](docs/CIRCUIT_RESEARCH.md) (panel-to-circuit mapping + IC inventory) and [`docs/PHASE2_DESIGN.md`](docs/PHASE2_DESIGN.md) (DSP module breakdown). Headline changes:
+  * `TriangleCoreVCO` — ICL8038-style triangle-core with PolyBLAMP-anti-aliased ramps and a piecewise-linear sine shaper that matches the 8038's ~1 % THD signature.
+  * `PiezoTrigger` — peak-detector + Schmitt-trigger so the plug-in can be driven by an actual piezo on a side-chain audio input.
+  * `OTAVCA` — CA3080 / LM13700-style tanh VCA, replacing the plain `tanh(x · 1.4)` hack.
+  * `NoiseBPState` — TPT state-variable band-pass + peaking, no per-block heap allocations.
+  * `LFOSchmitt` — relaxation-oscillator LFO matching the panel topology.
+  * `MultiVCOPullRouter` — the cascade-trigger feature (PULL switches → fire neighbour channel's pitch envelope without its amp envelope).
+* [ ] **Phase 3** — Validation against a real DS-4M / DS-1 (record A/B clips, fit `sineShaper` and `NoiseBPState` Q values to ±2 dB spectral match across 0-10 kHz).
+* [ ] **Phase 4** — Skinned panel UI rendered from SVG, matching the silk-screen of the original case down to the screws.
 
 ## Licence
 
