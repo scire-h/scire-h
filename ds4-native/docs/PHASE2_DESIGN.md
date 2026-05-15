@@ -1,5 +1,14 @@
 # Phase 2 — Component-level DSP design
 
+**Status: complete.** Every sub-phase below landed on the development
+branch; see `CHANGELOG.md` for the per-phase summary. The remaining
+items in the "Open follow-ups" section at the bottom are external
+research tasks (acquiring the original service manual, recording a
+real DS-4M for spectral-fitting validation), not code work.
+
+---
+
+
 This document maps the analog circuit blocks identified in
 [`CIRCUIT_RESEARCH.md`](./CIRCUIT_RESEARCH.md) onto concrete C++ /
 JUCE modules. Each section pins one *circuit* block to one *DSP*
