@@ -1,0 +1,101 @@
+name: Build macOS AU / VST3 / Standalone
+
+on:
+  push:
+    branches: ["**"]
+    tags:     ["v*"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: Build & package
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          cmake --version
+
+      - name: Cache JUCE FetchContent
+        uses: actions/cache@v4
+        with:
+          path: |
+            ds4-native/build/_deps
+          key: juce-8.0.4-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Configure (CMake)
+        run: |
+          cmake -B ds4-native/build -S ds4-native \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+                -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+
+      - name: Build (Release)
+        run: |
+          cmake --build ds4-native/build --config Release --parallel
+
+      - name: Locate artefacts
+        id: locate
+        run: |
+          set -eux
+          AU=$(find ds4-native/build -path '*Release/AU/*.component' -type d \
+                 -maxdepth 8 -print -quit)
+          VST=$(find ds4-native/build -path '*Release/VST3/*.vst3' -type d \
+                  -maxdepth 8 -print -quit)
+          APP=$(find ds4-native/build -path '*Release/Standalone/*.app' -type d \
+                  -maxdepth 8 -print -quit)
+          echo "AU=$AU"   >> "$GITHUB_OUTPUT"
+          echo "VST=$VST" >> "$GITHUB_OUTPUT"
+          echo "APP=$APP" >> "$GITHUB_OUTPUT"
+
+      - name: Ad-hoc codesign (so Logic accepts the bundle)
+        run: |
+          set -eux
+          for bundle in \
+              "${{ steps.locate.outputs.AU }}" \
+              "${{ steps.locate.outputs.VST }}" \
+              "${{ steps.locate.outputs.APP }}"; do
+            if [ -d "$bundle" ]; then
+              codesign --force --deep --sign - "$bundle"
+            fi
+          done
+
+      - name: Package bundles
+        run: |
+          set -eux
+          mkdir -p dist
+          if [ -d "${{ steps.locate.outputs.AU }}" ]; then
+            DIR="$(dirname "${{ steps.locate.outputs.AU }}")"
+            BASE="$(basename "${{ steps.locate.outputs.AU }}")"
+            (cd "$DIR" && zip -qr "$GITHUB_WORKSPACE/dist/ULT-SOUND-DS-4M-AU.zip"  "$BASE")
+          fi
+          if [ -d "${{ steps.locate.outputs.VST }}" ]; then
+            DIR="$(dirname "${{ steps.locate.outputs.VST }}")"
+            BASE="$(basename "${{ steps.locate.outputs.VST }}")"
+            (cd "$DIR" && zip -qr "$GITHUB_WORKSPACE/dist/ULT-SOUND-DS-4M-VST3.zip" "$BASE")
+          fi
+          if [ -d "${{ steps.locate.outputs.APP }}" ]; then
+            DIR="$(dirname "${{ steps.locate.outputs.APP }}")"
+            BASE="$(basename "${{ steps.locate.outputs.APP }}")"
+            (cd "$DIR" && zip -qr "$GITHUB_WORKSPACE/dist/ULT-SOUND-DS-4M-Standalone.zip" "$BASE")
+          fi
+          ls -la dist
+
+      - name: Upload Actions artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ULT-SOUND-DS-4M-macOS
+          path: dist/
+          retention-days: 30
+
+      - name: Create GitHub Release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

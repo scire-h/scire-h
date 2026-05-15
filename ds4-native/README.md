@@ -26,7 +26,47 @@ Key DSP modules:
 | `PluginProcessor` | `juce::AudioProcessor` with the full APVTS parameter tree, MIDI input (C1..D#1 → Ch1..Ch4), and an editor-to-DSP lock-free trigger FIFO.   |
 | `PluginEditor`    | Resizable panel UI matching the DS-4M silk-screen.                                                                                          |
 
-## Build (macOS)
+## Pre-built AU / VST3 / Standalone (no Xcode required)
+
+Every push to the branch kicks off a macOS GitHub Actions build that
+produces an ad-hoc-signed Universal binary (arm64 + x86_64) of all
+three plug-in formats. Grab the artefact instead of building locally:
+
+1. Open the **Actions** tab in the GitHub repo.
+2. Pick the most recent successful `Build macOS AU / VST3 / Standalone`
+   run on this branch.
+3. Scroll to **Artifacts** → download `ULT-SOUND-DS-4M-macOS.zip`.
+4. The zip contains three sub-zips:
+   - `ULT-SOUND-DS-4M-AU.zip`         → AudioUnit (`.component`)
+   - `ULT-SOUND-DS-4M-VST3.zip`       → VST3 (`.vst3`)
+   - `ULT-SOUND-DS-4M-Standalone.zip` → Standalone (`.app`)
+
+### Install the AU into Logic Pro
+
+```bash
+# from where you downloaded ULT-SOUND-DS-4M-AU.zip:
+curl -fsSL -o install-au.sh \
+  https://raw.githubusercontent.com/scire-h/scire-h/claude/html-synthesizer-mouse-IPbDX/ds4-native/scripts/install-au.sh
+chmod +x install-au.sh
+./install-au.sh ULT-SOUND-DS-4M-AU.zip
+```
+
+The script:
+
+1. Unzips the bundle into `~/Library/Audio/Plug-Ins/Components/`.
+2. Strips `com.apple.quarantine` (Gatekeeper marks anything downloaded
+   from a browser as quarantined; Logic refuses to scan such AUs).
+
+Restart Logic Pro and load **AU Instruments → ULT-SOUND Clone →
+ULT-SOUND DS-4M** on an instrument track. The first launch validates
+the AU; macOS may take 10–30 s.
+
+> If Logic still won't load it, run
+> `auval -v aumu Ds4m Ults` in Terminal to see what validation
+> says. `auval -v` is verbose enough to point at any signing /
+> entitlement issue.
+
+## Build (macOS, from source)
 
 Requires **CMake 3.22+** and **Xcode** (or just the Command Line Tools).
 JUCE itself is fetched automatically by CMake (no submodules required).
