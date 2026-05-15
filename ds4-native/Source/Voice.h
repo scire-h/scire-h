@@ -6,6 +6,7 @@
 #include "ExpEnvelope.h"
 #include "OTAVCA.h"
 #include "LFOSchmitt.h"
+#include "MoogLadder.h"
 #include "Parameters.h"
 
 /* One DS-4M channel.
@@ -61,8 +62,8 @@ private:
     TriangleCoreVCO vco;
     NoiseVoice noise;
 
-    juce::dsp::LadderFilter<float> ladder;
-    OTAVCA   vca;
+    MoogLadder ladder;
+    OTAVCA     vca;
     LFOSchmitt lfo;
 
     /* Envelopes. */

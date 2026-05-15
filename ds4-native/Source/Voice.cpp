@@ -17,10 +17,10 @@ void Voice::prepare(double sr, int blockSize) {
     noise.prepare(sr);
     noise.setCharacter(characterFor(channelIdx));
 
-    juce::dsp::ProcessSpec spec { sr, (juce::uint32)blockSize, 1 };
-    ladder.prepare(spec);
-    ladder.setMode(juce::dsp::LadderFilterMode::LPF24);
-    ladder.setCutoffFrequencyHz(18000.0f);
+    /* MoogLadder doesn't need a JUCE ProcessSpec -- just sample rate. */
+    (void)blockSize;
+    ladder.prepare(sr);
+    ladder.setCutoff(18000.0f);
     ladder.setResonance(0.3f);
     ladder.setDrive(1.0f);
 
@@ -178,9 +178,9 @@ void Voice::processBlock(float* outL, float* outR, int numSamples) {
 
         /* VCF: lowpass cutoff modulated by filter env. */
         const float cutoff = fClose + (fOpen - fClose) * fE;
-        ladder.setCutoffFrequencyHz(cutoff);
+        ladder.setCutoff(cutoff);
         float mixed = vcoSum + noiseSig;
-        mixed = ladder.processSample(mixed, 0);
+        mixed = ladder.processSample(mixed);
 
         /* OTAVCA: envelope sets I_abc, audio passes through tanh. */
         vca.setControlGain(aE);
