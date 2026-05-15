@@ -52,11 +52,27 @@ NoiseVoice::Character Voice::characterFor(int chIdx) const {
 }
 
 float Voice::computeBaseFreq(float tuning01, int octave, float beatTune01) {
-    const float semis   = (tuning01 - 0.5f) * 24.0f;
-    const float octShft = (float)(octave - 3) * 12.0f;
-    const float cents   = beatTune01 * 200.0f;
-    const float exp     = (semis + octShft + cents * 0.01f) * kSemitone;
-    return kRefA3 * std::pow(2.0f, exp);
+    /* The panel knob's silk-screen ring runs C, C#, D, D#, E, F, F#,
+       G, G#, A, A#, B around its rotation -- one full octave end to
+       end. So TUNING is _not_ a +/-12 semitone selector; it just
+       picks the note within an octave. The OCTAVE 1..5 selector
+       below it picks WHICH octave. */
+    const float noteSemis = juce::jlimit (0.0f, 12.0f, tuning01 * 12.0f);
+
+    /* OCTAVE 1..5 where 3 sits at middle C (MIDI 48 = 130.81 Hz). */
+    const float midiC3 = 48.0f;
+    const float octShift = (float) (octave - 3) * 12.0f;
+
+    /* BEAT TUNE silk-screen says 0..5 with an OCT unit label. We
+       respect the panel literally: 0 = no detune, 5 = +5 octaves.
+       Five octaves is a lot but it's what the original device's
+       fader markings claim, and the MULTI VCO PULL feature lets
+       you blend the detuned neighbour back in as a chord rather
+       than a beat. */
+    const float beatSemis = beatTune01 * 60.0f;
+
+    const float midi = midiC3 + noteSemis + octShift + beatSemis;
+    return 440.0f * std::pow (2.0f, (midi - 69.0f) / 12.0f);
 }
 
 void Voice::updateParameters(const juce::AudioProcessorValueTreeState& apvts,
@@ -96,7 +112,13 @@ void Voice::trigger(float velocity) {
     if (pSweepDir == 0)         { sweepFromHz = baseFreq;            sweepToHz = baseFreq * widthMul; }
     else if (pSweepDir == 2)    { sweepFromHz = baseFreq * widthMul; sweepToHz = baseFreq;            }
     else                        { sweepFromHz = sweepToHz = baseFreq; }
-    sweepSeconds = 0.025f + std::pow(pSweep, 0.85f) * 0.25f;
+    /* Sweep time on a real analog drum synth is set by an RC time
+       constant on the pitch-envelope generator (tau = R*C). It is
+       FIXED -- the SWEEP WIDTH slider only changes the starting
+       voltage / starting frequency, not the duration. Picking
+       ~45 ms gives the classic 'PEW!' you hear on Pollard records;
+       anything longer starts to sound like a synth glide. */
+    sweepSeconds = 0.045f;
 
     /* Envelope time constants. */
     const float attackSec = 0.001f + std::pow(pAttack, 1.4f) * 0.35f;
@@ -144,16 +166,11 @@ void Voice::processBlock(float* outL, float* outR, int numSamples) {
     /* per-sample LFO output (Hz already set in updateParameters). */
     const float lfoCents = pLfoOn ? 20.0f + pLfoDepth * 180.0f : 0.0f;
 
-    const float fClose = 220.0f + 1400.0f * pSustain;
-    const float fOpen  = 18000.0f;
-    const float reso   = 0.05f + pSweep * 0.55f;
-    ladder.setResonance(reso);
-
     /* per-sample loop */
     for (int n = 0; n < numSamples; ++n) {
         const float aE = ampEnv.processSample();
         const float pE = pitchEnv.processSample();
-        const float fE = filterEnv.processSample();
+        (void) filterEnv.processSample();   // env still ticks for state hygiene
 
         /* Pitch -- exponential sweep from sweepFromHz to sweepToHz. */
         const float currHz = sweepToHz *
@@ -176,11 +193,12 @@ void Voice::processBlock(float* outL, float* outR, int numSamples) {
         float noiseSig = 0.0f;
         if (pNoiseOn) noiseSig = noise.processSample() * 0.55f;
 
-        /* VCF: lowpass cutoff modulated by filter env. */
-        const float cutoff = fClose + (fOpen - fClose) * fE;
-        ladder.setCutoff(cutoff);
-        float mixed = vcoSum + noiseSig;
-        mixed = ladder.processSample(mixed);
+        /* The real DS-4 has no VCF on the VCO path -- the only
+           filtering is the fixed band-pass inside the noise voice
+           per CYMBAL / SNARE / NOISE character. Mixing straight
+           into the VCA matches the panel (no FILTER pill exists)
+           and keeps the raw, percussive brightness of the original. */
+        const float mixed = vcoSum + noiseSig;
 
         /* OTAVCA: envelope sets I_abc, audio passes through tanh. */
         vca.setControlGain(aE);

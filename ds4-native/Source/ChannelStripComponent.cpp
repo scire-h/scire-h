@@ -26,17 +26,22 @@ namespace {
     /* ------- Human-readable value formatters for each control ------- */
 
     juce::String fmtNoteName (double v) {
-        /* 0..1 maps to -12..+12 semitones from A3 (= MIDI 57). */
-        const int totalSemis = (int) std::round ((v - 0.5) * 24.0);
-        const int midi = 57 + totalSemis;
-        static const char* names[] = { "C","C#","D","D#","E","F","F#",
-                                       "G","G#","A","A#","B" };
-        const int idx = ((midi % 12) + 12) % 12;
-        const int oct = midi / 12 - 1;
-        return juce::String (names[idx]) + juce::String (oct);
+        /* The panel knob's silk-screen ring is one octave of note
+           names: C, C#, D, D#, E, F, F#, G, G#, A, A#, B. The OCTAVE
+           selector below picks which octave; the knob is purely the
+           note-within-octave. So the bubble just shows the note name
+           without an octave suffix -- matches what the user reads on
+           the ring. */
+        static const char* names[] = { "C", "C#", "D", "D#", "E", "F",
+                                       "F#", "G", "G#", "A", "A#", "B" };
+        const int idx = juce::jlimit (0, 11, (int) std::round (v * 11.0));
+        return juce::String (names[idx]);
     }
     juce::String fmtBeatTune (double v) {
-        return juce::String ((int) std::round (v * 200.0)) + " ct";
+        /* Panel silk-screen says 0..5 with an OCT unit label.
+           Match it literally so the bubble reads the same as the
+           scale on the fader. */
+        return juce::String (v * 5.0, 2) + " OCT";
     }
     juce::String fmtAttack (double v) {
         const double ms = 1.0 + std::pow (v, 1.4) * 349.0;
