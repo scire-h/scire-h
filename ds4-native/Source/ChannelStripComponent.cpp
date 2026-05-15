@@ -1,17 +1,71 @@
 #include "ChannelStripComponent.h"
 #include "PanelLookAndFeel.h"
 #include "PluginProcessor.h"
+#include <cmath>
 
 namespace {
-    void styleRotary (juce::Slider& s) {
+    /* Show a little value bubble while the user drags any control.
+       Makes the otherwise-mute knobs and faders readable. */
+    void enableValueBubble (juce::Slider& s, juce::Component* parent) {
+        s.setPopupDisplayEnabled (true, true, parent);
+    }
+
+    void styleRotary (juce::Slider& s, juce::Component* parent) {
         s.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
         s.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
         s.setRange (0.0, 1.0, 0.0);
+        enableValueBubble (s, parent);
     }
-    void styleVertical (juce::Slider& s) {
+    void styleVertical (juce::Slider& s, juce::Component* parent) {
         s.setSliderStyle (juce::Slider::LinearVertical);
         s.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
         s.setRange (0.0, 1.0, 0.0);
+        enableValueBubble (s, parent);
+    }
+
+    /* ------- Human-readable value formatters for each control ------- */
+
+    juce::String fmtNoteName (double v) {
+        /* 0..1 maps to -12..+12 semitones from A3 (= MIDI 57). */
+        const int totalSemis = (int) std::round ((v - 0.5) * 24.0);
+        const int midi = 57 + totalSemis;
+        static const char* names[] = { "C","C#","D","D#","E","F","F#",
+                                       "G","G#","A","A#","B" };
+        const int idx = ((midi % 12) + 12) % 12;
+        const int oct = midi / 12 - 1;
+        return juce::String (names[idx]) + juce::String (oct);
+    }
+    juce::String fmtBeatTune (double v) {
+        return juce::String ((int) std::round (v * 200.0)) + " ct";
+    }
+    juce::String fmtAttack (double v) {
+        const double ms = 1.0 + std::pow (v, 1.4) * 349.0;
+        if (ms < 10.0)  return juce::String (ms, 2) + " ms";
+        if (ms < 100.0) return juce::String (ms, 1) + " ms";
+        return juce::String ((int) std::round (ms)) + " ms";
+    }
+    juce::String fmtSustain (double v) {
+        const double sec = 0.03 + std::pow (v, 1.4) * 4.47;
+        if (sec < 1.0) return juce::String ((int) std::round (sec * 1000.0)) + " ms";
+        return juce::String (sec, 2) + " s";
+    }
+    juce::String fmtLfoRate (double v) {
+        const double hz = 0.8 * std::pow (22.0 / 0.8, v);
+        if (hz < 1.0)  return juce::String (hz, 2) + " Hz";
+        if (hz < 10.0) return juce::String (hz, 1) + " Hz";
+        return juce::String ((int) std::round (hz)) + " Hz";
+    }
+    juce::String fmtPercent (double v) {
+        return juce::String ((int) std::round (v * 100.0)) + " %";
+    }
+    juce::String fmtSweep (double v) {
+        return juce::String (v * 6.0, 1) + " oct";
+    }
+
+    void installFormatter (juce::Slider& s,
+                           juce::String (*fn)(double)) {
+        s.textFromValueFunction = fn;
+        /* default valueFromTextFunction strips the suffix and parses, which is fine */
     }
 }
 
@@ -23,17 +77,31 @@ ChannelStripComponent::ChannelStripComponent (DS4MProcessor& proc, int chIdx,
     const auto p = P::chPrefix (chIdx);
 
     /* Knobs. */
-    styleRotary (vcoKnob);       addAndMakeVisible (vcoKnob);
-    styleRotary (attackKnob);    addAndMakeVisible (attackKnob);
-    styleRotary (lfoLevelKnob);  addAndMakeVisible (lfoLevelKnob);
-    styleRotary (outputKnob);    addAndMakeVisible (outputKnob);
-    styleRotary (senseKnob);     addAndMakeVisible (senseKnob);
+    styleRotary (vcoKnob,       this); addAndMakeVisible (vcoKnob);
+    styleRotary (attackKnob,    this); addAndMakeVisible (attackKnob);
+    styleRotary (lfoLevelKnob,  this); addAndMakeVisible (lfoLevelKnob);
+    styleRotary (outputKnob,    this); addAndMakeVisible (outputKnob);
+    styleRotary (senseKnob,     this); addAndMakeVisible (senseKnob);
 
     /* Sliders. */
-    styleVertical (beatTuneSlider); addAndMakeVisible (beatTuneSlider);
-    styleVertical (sustainSlider);  addAndMakeVisible (sustainSlider);
-    styleVertical (lfoRateSlider);  addAndMakeVisible (lfoRateSlider);
-    styleVertical (sweepSlider);    addAndMakeVisible (sweepSlider);
+    styleVertical (beatTuneSlider, this); addAndMakeVisible (beatTuneSlider);
+    styleVertical (sustainSlider,  this); addAndMakeVisible (sustainSlider);
+    styleVertical (lfoRateSlider,  this); addAndMakeVisible (lfoRateSlider);
+    styleVertical (sweepSlider,    this); addAndMakeVisible (sweepSlider);
+
+    /* Human-readable value bubbles. The first three are the ones the
+       user singled out as confusing -- VCO TUNING shows note names
+       (C2..A5), BEAT TUNE shows cents, SWEEP WIDTH shows octaves.
+       The rest follow the same pattern for consistency. */
+    installFormatter (vcoKnob,        fmtNoteName);
+    installFormatter (beatTuneSlider, fmtBeatTune);
+    installFormatter (attackKnob,     fmtAttack);
+    installFormatter (sustainSlider,  fmtSustain);
+    installFormatter (lfoLevelKnob,   fmtPercent);
+    installFormatter (lfoRateSlider,  fmtLfoRate);
+    installFormatter (outputKnob,     fmtPercent);
+    installFormatter (sweepSlider,    fmtSweep);
+    installFormatter (senseKnob,      fmtPercent);
 
     /* Combo boxes. */
     waveformBox.addItem ("∿  sine",     1);
@@ -178,4 +246,11 @@ void ChannelStripComponent::resized() {
         col.removeFromTop (4);
         sweepDirBox.setBounds   (col.removeFromTop (22));
     }
+}
+
+void ChannelStripComponent::triggerPadButton() {
+    /* Used by the editor when the user presses 1..4 on the keyboard.
+       triggerClick() runs onClick (which fires the channel) and also
+       does the JUCE built-in button-press visual flash. */
+    padButton.triggerClick();
 }

@@ -33,9 +33,25 @@ DS4MEditor::DS4MEditor (DS4MProcessor& p)
         "piezo or any percussive audio drive the synth.");
     addAndMakeVisible (helpButton);
 
+    /* Pull keyboard focus so 1..4 keys trigger the drums. */
+    setWantsKeyboardFocus (true);
+
     setResizable (true, true);
     setSize (1100, 640);
     setResizeLimits (820, 480, 1800, 1100);
+}
+
+bool DS4MEditor::keyPressed (const juce::KeyPress& key) {
+    /* digit keys 1..4 fire the four channels at ~90% velocity */
+    const auto ch = key.getTextCharacter() - '1';
+    if (ch >= 0 && ch < P::kNumChannels) {
+        processor.triggerChannel (ch, 0.9f);
+        /* visual feedback: flash the pad button so user sees the hit */
+        if (auto* strip = strips[(size_t)ch].get())
+            strip->triggerPadButton();
+        return true;
+    }
+    return false;
 }
 
 DS4MEditor::~DS4MEditor() {

@@ -15,6 +15,9 @@ public:
     void paint   (juce::Graphics&) override;
     void resized () override;
 
+    /* Keyboard 1..4 trigger the four channels (matches the HTML clone). */
+    bool keyPressed (const juce::KeyPress& key) override;
+
 private:
     DS4MProcessor& processor;
     PanelLookAndFeel laf;

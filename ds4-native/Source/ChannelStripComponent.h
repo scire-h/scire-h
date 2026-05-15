@@ -17,6 +17,10 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    /* Fired by the editor when 1..4 keys are pressed -- runs the
+       pad button's onClick action and the button's visual flash. */
+    void triggerPadButton();
+
 private:
     DS4MProcessor& processor;
     int            channelIndex;
