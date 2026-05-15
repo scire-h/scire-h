@@ -53,10 +53,15 @@ public:
         oneMinusG = 1.0f - G;
     }
 
-    /* resonance 0..1, where 1 is self-oscillation. Values slightly
-       above 1 (up to ~1.05) give a clean, sustained self-oscillator. */
+    /* resonance 0..1, where 1 is the critical self-oscillation point.
+       We clamp just below the critical k = 4 because the closed-form
+       linear ZDF solver has no saturation in the loop -- pushing past
+       it gives unbounded growth, which the per-channel OTAVCA would
+       eventually suppress in real use but the filter itself can't.
+       Use a tanh in the feedback path if you want a true singing
+       self-oscillator. */
     void setResonance (float r) {
-        const float clamped = std::max (0.0f, std::min (1.05f, r));
+        const float clamped = std::max (0.0f, std::min (0.999f, r));
         k = 4.0f * clamped;
     }
 
