@@ -4,7 +4,11 @@
 DS4MProcessor::DS4MProcessor()
     : AudioProcessor (BusesProperties()
                        .withInput  ("Trigger In", juce::AudioChannelSet::stereo(), false)
-                       .withOutput ("Output",     juce::AudioChannelSet::stereo(), true))
+                       .withOutput ("Main Out",   juce::AudioChannelSet::stereo(), true)
+                       .withOutput ("Ch1 Out",    juce::AudioChannelSet::stereo(), false)
+                       .withOutput ("Ch2 Out",    juce::AudioChannelSet::stereo(), false)
+                       .withOutput ("Ch3 Out",    juce::AudioChannelSet::stereo(), false)
+                       .withOutput ("Ch4 Out",    juce::AudioChannelSet::stereo(), false))
     , apvts (*this, nullptr, "Parameters", createParameterLayout())
 {
     for (int i = 0; i < P::kNumChannels; ++i)
@@ -29,12 +33,24 @@ void DS4MProcessor::releaseResources() {}
 
 #ifndef JucePlugin_PreferredChannelConfigurations
 bool DS4MProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const {
+    /* Main output must be mono or stereo. */
     const auto out = layouts.getMainOutputChannelSet();
     if (out != juce::AudioChannelSet::stereo()
      && out != juce::AudioChannelSet::mono())
         return false;
-    /* The trigger input bus is optional -- mono or stereo. */
-    const auto in  = layouts.getMainInputChannelSet();
+
+    /* Each of the four optional per-channel aux outputs must be
+       either disabled or stereo. */
+    for (int i = 1; i <= P::kNumChannels; ++i) {
+        if (layouts.outputBuses.size() > i) {
+            const auto a = layouts.outputBuses.getReference(i);
+            if (! a.isDisabled() && a != juce::AudioChannelSet::stereo())
+                return false;
+        }
+    }
+
+    /* Optional trigger input. */
+    const auto in = layouts.getMainInputChannelSet();
     return in.isDisabled()
         || in == juce::AudioChannelSet::mono()
         || in == juce::AudioChannelSet::stereo();
@@ -45,11 +61,7 @@ void DS4MProcessor::fireChannel (int ch, float vel, bool followCascade) {
     if (ch < 0 || ch >= P::kNumChannels) return;
     voices[(size_t)ch].trigger (vel);
     if (followCascade && voices[(size_t)ch].getMultiVCO()) {
-        /* MULTI VCO PULL routes the trigger to the next channel. */
         const int next = (ch + 1) % P::kNumChannels;
-        /* Pass followCascade=false so we never get an infinite loop
-           even if multiple channels chain together: a hit cascades
-           one hop, not endlessly. */
         voices[(size_t)next].trigger (vel * 0.8f);
     }
 }
@@ -58,12 +70,10 @@ void DS4MProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                   juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    const int numSamples = buffer.getNumSamples();
 
-    /* Capture the trigger input BEFORE we clear the output buffer
-       (in some hosts the input and output buses share storage). */
+    /* Snapshot the trigger input before we clear the buffer. */
     juce::AudioBuffer<float> trigBuf;
-    if (auto inLayout = getBusesLayout().getMainInputChannelSet();
-        ! inLayout.isDisabled())
     {
         auto inBus = getBus (true, 0);
         if (inBus != nullptr && inBus->isEnabled()) {
@@ -72,52 +82,42 @@ void DS4MProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
-    buffer.clear();
+    /* Clear ALL output buses (main + every aux). */
+    for (int b = 0; b < getBusCount (false); ++b) {
+        auto out = getBusBuffer (buffer, false, b);
+        out.clear();
+    }
 
-    /* Pull parameter snapshots for the block. */
+    /* Parameter snapshot per block. */
     const bool beatSense =
         apvts.getRawParameterValue (P::gid::beatSense)->load() > 0.5f;
     for (auto& v : voices) v.updateParameters (apvts, beatSense);
 
-    /* Drain pending pad / external triggers from the GUI. */
+    /* Drain pending GUI triggers. */
     int s1, sz1, s2, sz2;
     triggerFifo.prepareToRead (triggerFifo.getNumReady(), s1, sz1, s2, sz2);
-    for (int i = 0; i < sz1; ++i) {
-        auto& t = triggerBuffer[(size_t)(s1 + i)];
-        fireChannel (t.ch, t.vel, true);
-    }
-    for (int i = 0; i < sz2; ++i) {
-        auto& t = triggerBuffer[(size_t)(s2 + i)];
-        fireChannel (t.ch, t.vel, true);
-    }
+    for (int i = 0; i < sz1; ++i) fireChannel (triggerBuffer[(size_t)(s1 + i)].ch,
+                                               triggerBuffer[(size_t)(s1 + i)].vel, true);
+    for (int i = 0; i < sz2; ++i) fireChannel (triggerBuffer[(size_t)(s2 + i)].ch,
+                                               triggerBuffer[(size_t)(s2 + i)].vel, true);
     triggerFifo.finishedRead (sz1 + sz2);
 
-    /* MIDI: notes 36..39 (C1..D#1) trigger Ch1..Ch4 respectively;
-       higher notes are forwarded to the same four channels via modulo
-       so any MIDI source on any octave still drives the drums. */
+    /* MIDI triggers (any octave routes to Ch1..Ch4 via modulo). */
     for (const auto md : midi) {
         const auto m = md.getMessage();
         if (m.isNoteOn()) {
-            const int note = m.getNoteNumber();
-            int ch = (note - 36) % P::kNumChannels;
+            int ch = (m.getNoteNumber() - 36) % P::kNumChannels;
             if (ch < 0) ch += P::kNumChannels;
-            if (ch >= 0 && ch < P::kNumChannels)
-                fireChannel (ch, m.getFloatVelocity(), true);
+            fireChannel (ch, m.getFloatVelocity(), true);
         }
     }
 
-    /* Audio-rate trigger detection from the side-chain bus.
-       Channel layout:
-         - mono input  -> Ch1 only
-         - stereo input -> L = Ch1, R = Ch2
-       (Channels 3 and 4 stay MIDI/GUI only since a single side-chain
-       in JUCE only exposes one bus.) */
+    /* Audio-rate piezo trigger detection on the side-chain bus. */
     if (trigBuf.getNumChannels() > 0 && trigBuf.getNumSamples() > 0) {
         const int numInChans = trigBuf.getNumChannels();
-        const int numSamples = trigBuf.getNumSamples();
         for (int c = 0; c < juce::jmin (numInChans, P::kNumChannels); ++c) {
             const float* in = trigBuf.getReadPointer (c);
-            auto& detector = piezos[(size_t)c];
+            auto& detector  = piezos[(size_t)c];
             for (int n = 0; n < numSamples; ++n) {
                 const float v = detector.processSample (in[n]);
                 if (v > 0.0f) fireChannel (c, v, true);
@@ -125,15 +125,44 @@ void DS4MProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
-    /* Render. */
-    const int numSamples = buffer.getNumSamples();
-    float* outL = buffer.getWritePointer (0);
-    float* outR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : nullptr;
-    for (auto& v : voices) v.processBlock (outL, outR, numSamples);
+    /* Render each voice into a small per-channel scratch buffer
+       (stereo). We then route it both to its dedicated aux output
+       bus (if the host enabled it) and to the main mix. */
+    juce::AudioBuffer<float> scratch (2, numSamples);
+    for (int ch = 0; ch < P::kNumChannels; ++ch) {
+        scratch.clear();
+        float* sL = scratch.getWritePointer (0);
+        float* sR = scratch.getWritePointer (1);
+        voices[(size_t)ch].processBlock (sL, sR, numSamples);
 
-    /* Master volume. */
+        /* Aux bus output (bus index = ch + 1, since bus 0 is main). */
+        if (auto* auxBus = getBus (false, ch + 1);
+            auxBus != nullptr && auxBus->isEnabled())
+        {
+            auto auxBlock = auxBus->getBusBuffer (buffer);
+            for (int outC = 0; outC < juce::jmin (auxBlock.getNumChannels(), 2); ++outC)
+                auxBlock.copyFrom (outC, 0, scratch, outC, 0, numSamples);
+        }
+
+        /* Sum into main mix bus. */
+        auto mainBlock = getBus (false, 0)->getBusBuffer (buffer);
+        const int mainChans = mainBlock.getNumChannels();
+        if (mainChans >= 2) {
+            mainBlock.addFrom (0, 0, scratch, 0, 0, numSamples);
+            mainBlock.addFrom (1, 0, scratch, 1, 0, numSamples);
+        } else if (mainChans == 1) {
+            /* Mono main: sum L+R into channel 0 at -3 dB. */
+            mainBlock.addFrom (0, 0, scratch, 0, 0, numSamples, 0.707f);
+            mainBlock.addFrom (0, 0, scratch, 1, 0, numSamples, 0.707f);
+        }
+    }
+
+    /* Master volume applied to ALL output buses. */
     const float master = apvts.getRawParameterValue (P::gid::masterVolume)->load();
-    buffer.applyGain (master);
+    for (int b = 0; b < getBusCount (false); ++b) {
+        if (auto* bus = getBus (false, b); bus != nullptr && bus->isEnabled())
+            bus->getBusBuffer (buffer).applyGain (master);
+    }
 }
 
 juce::AudioProcessorEditor* DS4MProcessor::createEditor() {
@@ -153,12 +182,11 @@ void DS4MProcessor::setStateInformation (const void* data, int sizeInBytes) {
 }
 
 void DS4MProcessor::triggerChannel (int chIndex, float velocity) {
-    /* Editor thread -> audio thread via lock-free FIFO. */
     int s1, sz1, s2, sz2;
     triggerFifo.prepareToWrite (1, s1, sz1, s2, sz2);
     if      (sz1 > 0) triggerBuffer[(size_t)s1] = { chIndex, velocity };
     else if (sz2 > 0) triggerBuffer[(size_t)s2] = { chIndex, velocity };
-    else              return;          /* FIFO full -- drop the hit */
+    else              return;
     triggerFifo.finishedWrite (1);
 }
 

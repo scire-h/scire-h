@@ -64,6 +64,37 @@ plug-ins for you:
    Clone → ULT-SOUND DS-4M**. Send MIDI notes C1..D#1 to trigger the
    four channels.
 
+### Multi-output routing (one DAW track per drum)
+
+The plug-in exposes **five output buses**: the main stereo mix and
+four optional stereo aux buses (`Ch1 Out`...`Ch4 Out`, each disabled
+by default). To route each drum to its own Logic track:
+
+1. In Logic, create the instrument track as **Multi-Output**
+   (`+ → Software Instrument → Multi-Output → AU Instruments →
+   ULT-SOUND Clone → ULT-SOUND DS-4M`).
+2. Each enabled aux bus shows up under the track header. Click the
+   small `+` icon underneath the track to add an aux track for each
+   channel; choose `Ch1 Out`...`Ch4 Out` from the dropdown.
+3. CYMBAL / CYMBAL / SNARE / NOISE now have their own faders, sends,
+   inserts and routing destinations in the mixer.
+4. The main stereo bus still carries the full mix, so leave it
+   armed if you want a pre-mixed stem -- otherwise mute it.
+
+### Side-chain piezo triggering
+
+Route any percussive audio source (a contact mic, a drum-loop track,
+a sampled hit) into the plug-in's `Trigger In` side-chain bus. The
+internal `PiezoTrigger` (peak detector + Schmitt trigger with
+configurable hysteresis and re-trigger hold) converts the audio into
+discrete trigger events:
+
+* mono input  -> Ch1 only
+* stereo input -> L = Ch1, R = Ch2
+
+Channels 3 and 4 stay MIDI / GUI-only since JUCE only exposes one
+side-chain bus per plug-in.
+
 ### Code-signing for distribution
 
 By default the build is ad-hoc signed which is fine for personal use.
