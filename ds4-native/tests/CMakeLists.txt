@@ -37,3 +37,5 @@ add_dsp_test(test_ExpEnvelope     "test_ExpEnvelope.cpp;${SRC}/ExpEnvelope.cpp")
 add_dsp_test(test_OTAVCA          "test_OTAVCA.cpp;${SRC}/OTAVCA.cpp")
 add_dsp_test(test_LFOSchmitt      "test_LFOSchmitt.cpp;${SRC}/LFOSchmitt.cpp")
 add_dsp_test(test_PiezoTrigger    "test_PiezoTrigger.cpp;${SRC}/PiezoTrigger.cpp")
+add_dsp_test(test_stress
+    "test_stress.cpp;${SRC}/TriangleCoreVCO.cpp;${SRC}/NoiseVoice.cpp;${SRC}/ExpEnvelope.cpp;${SRC}/OTAVCA.cpp;${SRC}/LFOSchmitt.cpp;${SRC}/PiezoTrigger.cpp")

@@ -14,6 +14,7 @@ TESTS=(
     "OTAVCA:test_OTAVCA.cpp ../Source/OTAVCA.cpp"
     "LFOSchmitt:test_LFOSchmitt.cpp ../Source/LFOSchmitt.cpp"
     "PiezoTrigger:test_PiezoTrigger.cpp ../Source/PiezoTrigger.cpp"
+    "stress:test_stress.cpp ../Source/TriangleCoreVCO.cpp ../Source/NoiseVoice.cpp ../Source/ExpEnvelope.cpp ../Source/OTAVCA.cpp ../Source/LFOSchmitt.cpp ../Source/PiezoTrigger.cpp"
 )
 
 mkdir -p bin
