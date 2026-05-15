@@ -157,11 +157,30 @@ void DS4MProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
-    /* Master volume applied to ALL output buses. */
+    /* Master volume + soft-clip limiter applied to ALL output buses.
+
+       The OTAVCA on each channel already does signal-level dependent
+       saturation, but four channels summing into the main bus can
+       still push above unity. We apply a final tanh-based soft
+       clipper that's transparent below |x| < 0.7 and rolls off
+       smoothly past that, so the output is bounded in (-1, +1) but
+       never hits a hard digital clip. */
     const float master = apvts.getRawParameterValue (P::gid::masterVolume)->load();
     for (int b = 0; b < getBusCount (false); ++b) {
-        if (auto* bus = getBus (false, b); bus != nullptr && bus->isEnabled())
-            bus->getBusBuffer (buffer).applyGain (master);
+        auto* bus = getBus (false, b);
+        if (bus == nullptr || ! bus->isEnabled()) continue;
+        auto block = bus->getBusBuffer (buffer);
+        const int chans = block.getNumChannels();
+        const int n     = block.getNumSamples();
+        for (int c = 0; c < chans; ++c) {
+            float* out = block.getWritePointer (c);
+            for (int i = 0; i < n; ++i) {
+                const float v = out[i] * master;
+                /* tanh soft-clip with a 1.2 drive: transparent up to
+                   ~0.6, smoothly limits beyond, asymptote at 1. */
+                out[i] = std::tanh (v * 1.2f) * 0.833f;
+            }
+        }
     }
 }
 
