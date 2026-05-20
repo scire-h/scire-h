@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CONOSCOPE.RESONANCE / V5.1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0b0d;
+    --bg2:#0f1115;
+    --ink:#cdd2d8;
+    --ink-dim:#6b7178;
+    --ink-faint:#3a3e44;
+    --line:#1c1f24;
+    --line2:#262a31;
+    --accent:#e8eaed;
+    --hot:#ff5b3a;
+    --cool:#7ec8ff;
+    --rec:#ff3b30;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+  html,body{height:100%;background:#000;color:var(--ink);font-family:'IBM Plex Mono',ui-monospace,monospace;overflow:hidden}
+  body{
+    display:flex;align-items:center;justify-content:center;
+    background:
+      radial-gradient(ellipse at 20% 20%, #14161c 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, #0c0e12 0%, transparent 50%),
+      #000;
+  }
+
+  .device{
+    width:min(1480px,98vw);
+    aspect-ratio:16/10;
+    max-height:96vh;
+    background:linear-gradient(180deg,#0c0e12 0%,#08090b 100%);
+    border:1px solid var(--line2);
+    border-radius:14px;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.02) inset,
+      0 1px 0 rgba(255,255,255,0.04) inset;
+    display:flex;flex-direction:column;
+    overflow:hidden;
+    position:relative;
+  }
+  .device::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,0.006) 3px 4px);
+    mix-blend-mode:overlay;
+    z-index:50;
+  }
+
+  /* ── header ─────────────────────────────────────── */
+  header{
+    height:36px;flex:none;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 18px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#11141a,#0b0d11);
+    font-size:10.5px;letter-spacing:0.18em;color:var(--ink-dim);
+  }
+  .h-l, .h-r{display:flex;align-items:center;gap:14px}
+  .dots{display:inline-flex;gap:5px}
+  .dots i{width:5px;height:5px;border-radius:50%;background:var(--ink-faint);display:inline-block}
+  .dots i:nth-child(1){background:#5a5e64}
+  .title{color:var(--ink);font-weight:500;letter-spacing:0.22em}
+  .title em{color:var(--ink-dim);font-style:normal;margin-left:8px;font-weight:400}
+  .led{
+    width:6px;height:6px;border-radius:50%;background:#5dffa6;
+    box-shadow:0 0 6px #5dffa6, 0 0 12px rgba(93,255,166,0.4);
+    animation:pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse{50%{opacity:0.5}}
+  .h-r span{color:var(--ink-dim)}
+  .h-r .ch{color:var(--ink)}
+  .rec-led{
+    width:7px;height:7px;border-radius:50%;background:#2a2c30;
+    box-shadow:none;transition:all 0.15s;
+  }
+  .rec-led.on{
+    background:var(--rec);
+    box-shadow:0 0 8px var(--rec), 0 0 16px rgba(255,59,48,0.5);
+    animation:recpulse 1s ease-in-out infinite;
+  }
+  @keyframes recpulse{50%{opacity:0.4}}
+
+  /* ── body ───────────────────────────────────────── */
+  .body{flex:1;display:grid;grid-template-columns:240px 1fr;min-height:0}
+
+  /* left panel */
+  aside{
+    border-right:1px solid var(--line);
+    padding:14px 14px 12px;
+    display:flex;flex-direction:column;gap:14px;
+    font-size:10px;letter-spacing:0.12em;color:var(--ink-dim);
+    background:linear-gradient(180deg,#0a0c10 0%,#08090c 100%);
+  }
+  .ink-box{
+    aspect-ratio:1/1;
+    border:1px solid var(--line2);
+    position:relative;cursor:crosshair;
+    background:radial-gradient(circle at 50% 50%, #0d1014 0%, #07080a 100%);
+    overflow:hidden;
+    touch-action:none;
+  }
+  .ink-box .label{position:absolute;top:6px;left:8px;font-size:9px;letter-spacing:0.2em;color:var(--ink-dim);z-index:2;}
+  .ink-box .meta{position:absolute;top:6px;right:8px;font-size:9px;letter-spacing:0.16em;color:var(--ink-faint);z-index:2;}
+  .ink-box .hint{position:absolute;bottom:8px;left:8px;font-size:8.5px;letter-spacing:0.22em;color:var(--ink-faint);z-index:2;line-height:1.3;}
+  .ink-box .corner{position:absolute;width:8px;height:8px;border-color:var(--ink-faint);z-index:2}
+  .ink-box .corner.tl{top:0;left:0;border-top:1px solid;border-left:1px solid}
+  .ink-box .corner.tr{top:0;right:0;border-top:1px solid;border-right:1px solid}
+  .ink-box .corner.bl{bottom:0;left:0;border-bottom:1px solid;border-left:1px solid}
+  .ink-box .corner.br{bottom:0;right:0;border-bottom:1px solid;border-right:1px solid}
+  #ink{position:absolute;inset:0;width:100%;height:100%}
+
+  .tlm{display:flex;flex-direction:column;gap:6px;font-size:10px}
+  .tlm .h{color:var(--ink-faint);letter-spacing:0.24em;font-size:9px;margin-bottom:2px}
+  .tlm .row{display:flex;justify-content:space-between;align-items:center;border-bottom:1px dashed var(--line);padding:3px 0}
+  .tlm .row:last-child{border-bottom:none}
+  .tlm .k{color:var(--ink-dim)}
+  .tlm .v{color:var(--ink);font-weight:500;letter-spacing:0.1em}
+
+  .clear-btn{
+    margin-top:auto;border:1px solid var(--line2);background:transparent;color:var(--ink-dim);
+    font-family:inherit;font-size:10px;letter-spacing:0.22em;padding:8px;cursor:pointer;
+    transition:all 0.15s ease;
+  }
+  .clear-btn:hover{border-color:var(--ink-dim);color:var(--ink)}
+
+  /* grid main */
+  main{position:relative;overflow:hidden;background:#06070a}
+  #gl{display:block;width:100%;height:100%;}
+  .labels{position:absolute;inset:0;pointer-events:none;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;z-index:3}
+  .slot{position:relative}
+  .slot .sl-id{position:absolute;top:10px;left:14px;font-size:10px;letter-spacing:0.18em;color:var(--ink-dim)}
+  .slot .sl-id b{color:var(--ink);font-weight:500;margin-right:10px}
+  .slot .sl-meta{position:absolute;top:10px;right:14px;font-size:9.5px;letter-spacing:0.18em;color:var(--ink-faint)}
+  .slot .c{position:absolute;width:10px;height:10px;border-color:var(--ink-faint);opacity:0.5}
+  .slot .c.tl{top:6px;left:6px;border-top:1px solid;border-left:1px solid}
+  .slot .c.tr{top:6px;right:6px;border-top:1px solid;border-right:1px solid}
+  .slot .c.bl{bottom:6px;left:6px;border-bottom:1px solid;border-left:1px solid}
+  .slot .c.br{bottom:6px;right:6px;border-bottom:1px solid;border-right:1px solid}
+
+  .grid-overlay{
+    position:absolute;inset:0;pointer-events:none;z-index:2;
+    background:
+      linear-gradient(90deg,transparent calc(33.333% - 0.5px),var(--line) calc(33.333% - 0.5px),var(--line) calc(33.333% + 0.5px),transparent calc(33.333% + 0.5px)),
+      linear-gradient(90deg,transparent calc(66.666% - 0.5px),var(--line) calc(66.666% - 0.5px),var(--line) calc(66.666% + 0.5px),transparent calc(66.666% + 0.5px)),
+      linear-gradient(0deg,transparent calc(50% - 0.5px),var(--line) calc(50% - 0.5px),var(--line) calc(50% + 0.5px),transparent calc(50% + 0.5px));
+  }
+
+  /* ── footer / controls ──────────────────────────── */
+  footer{
+    height:48px;flex:none;
+    border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:14px;
+    padding:0 18px;
+    font-size:9.5px;letter-spacing:0.18em;color:var(--ink-dim);
+    background:linear-gradient(180deg,#0a0c10,#070809);
+  }
+  .mode-group{display:flex;align-items:center;gap:6px;flex:none}
+  .mode-group .label{color:var(--ink-faint);margin-right:4px;font-size:9px}
+  .mode-btn{
+    border:1px solid var(--line2);background:transparent;color:var(--ink-dim);
+    font-family:inherit;font-size:10px;letter-spacing:0.22em;padding:6px 10px;cursor:pointer;
+    transition:all 0.15s ease;
+  }
+  .mode-btn.active{background:#1a1e25;color:var(--ink);border-color:#2e3440;box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset}
+  .mode-btn:hover:not(.active){color:var(--ink)}
+  .mode-btn.rec.active{
+    background:rgba(255,59,48,0.18);border-color:var(--rec);color:#ffd0cb;
+    box-shadow:0 0 12px rgba(255,59,48,0.25) inset;
+  }
+
+  .slider{display:flex;align-items:center;gap:8px;min-width:0;flex:1;max-width:230px}
+  .slider .name{color:var(--ink-faint);min-width:24px;font-size:9.5px}
+  .slider .track{
+    flex:1;height:22px;position:relative;border:1px solid var(--line);
+    background:linear-gradient(180deg,#0a0c10,#08090b);
+    display:flex;align-items:center;padding:0 6px;
+    cursor:pointer;user-select:none;touch-action:none;
+  }
+  .slider .track::before{
+    content:"";position:absolute;left:6px;right:6px;height:1px;background:var(--line2);top:50%;
+  }
+  .slider .knob{
+    position:absolute;width:10px;height:14px;background:#1d2128;border:1px solid #2e3440;
+    box-shadow:0 0 0 1px rgba(255,255,255,0.04) inset, 0 2px 4px rgba(0,0,0,0.6);
+    z-index:2;top:50%;transform:translateY(-50%);
+  }
+  .slider .val{color:var(--ink);min-width:38px;text-align:right;font-weight:500;letter-spacing:0.05em;font-size:10px}
+
+  .grain-toggle{
+    width:24px;height:22px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;color:var(--ink-dim);flex:none;
+  }
+  .grain-toggle.on{color:var(--ink);border-color:#2e3440;background:#15181d}
+
+  .signoff{
+    position:absolute;bottom:8px;right:14px;font-size:8px;letter-spacing:0.22em;color:var(--ink-faint);opacity:0.5;z-index:60;
+  }
+
+  /* slot labels */
+  .slot.s1{grid-column:1;grid-row:1}
+  .slot.s2{grid-column:2;grid-row:1}
+  .slot.s3{grid-column:3;grid-row:1}
+  .slot.s4{grid-column:1;grid-row:2}
+  .slot.s5{grid-column:2;grid-row:2}
+  .slot.s6{grid-column:3;grid-row:2}
+
+  /* download link styling */
+  .download-toast{
+    position:absolute;top:50px;right:20px;
+    background:#15181d;border:1px solid #2e3440;
+    padding:10px 14px;font-size:10px;letter-spacing:0.12em;color:var(--ink);
+    z-index:100;display:none;cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,0.6);
+  }
+  .download-toast.show{display:block}
+  .download-toast a{color:#7ec8ff;text-decoration:underline;margin-left:6px}
+
+  @media (max-width:900px){
+    .device{aspect-ratio:auto;height:96vh;width:96vw}
+    .body{grid-template-columns:200px 1fr}
+    footer{flex-wrap:wrap;height:auto;padding:10px 12px;gap:10px}
+    .slider{max-width:none;min-width:140px}
+  }
+</style>
+</head>
+<body>
+
+<div class="device">
+  <!-- header -->
+  <header>
+    <div class="h-l">
+      <span class="dots"><i></i><i></i><i></i></span>
+      <span class="title">CONOSCOPE.RESONANCE <em>/ V5.1</em></span>
+    </div>
+    <div class="h-r">
+      <span class="rec-led" id="rec-led"></span>
+      <span class="led"></span>
+      <span>ONLINE</span>
+      <span class="ch">// CH·25B</span>
+      <span>INTERFERENCE</span>
+    </div>
+  </header>
+
+  <!-- body -->
+  <div class="body">
+    <!-- left panel -->
+    <aside>
+      <div class="ink-box" id="inkbox">
+        <span class="label">INK</span>
+        <span class="meta" id="ink-meta">01 · 10° · A24</span>
+        <span class="corner tl"></span><span class="corner tr"></span>
+        <span class="corner bl"></span><span class="corner br"></span>
+        <span class="hint">DRAG TO<br>MODULATE</span>
+        <canvas id="ink"></canvas>
+      </div>
+
+      <div class="tlm">
+        <div class="h">// TLM</div>
+        <div class="row"><span class="k">STAGE</span><span class="v" id="v-stage">ON · LIVE</span></div>
+        <div class="row"><span class="k">TYPE</span><span class="v" id="v-type">2V · 10° A · 24°</span></div>
+        <div class="row"><span class="k">MODE</span><span class="v" id="v-mode">SOLO</span></div>
+        <div class="row"><span class="k">ORDER</span><span class="v" id="v-order">1.75</span></div>
+        <div class="row"><span class="k">CELL</span><span class="v" id="v-cell">8.61</span></div>
+        <div class="row"><span class="k">PITCH</span><span class="v" id="v-pitch">4</span></div>
+        <div class="row"><span class="k">SPRD</span><span class="v" id="v-sprd">72</span></div>
+        <div class="row"><span class="k">ANIS</span><span class="v" id="v-anis">21</span></div>
+        <div class="row"><span class="k">PTS</span><span class="v" id="v-pts">0142</span></div>
+        <div class="row"><span class="k">FX</span><span class="v" id="v-fx">GRAIN+BLOOM</span></div>
+      </div>
+
+      <button class="clear-btn" id="clear">CLEAR</button>
+    </aside>
+
+    <!-- main grid (WebGL canvas + labels) -->
+    <main>
+      <canvas id="gl"></canvas>
+      <div class="grid-overlay"></div>
+      <div class="labels">
+        <div class="slot s1"><span class="sl-id"><b>R1</b></span><span class="sl-meta">10° · A24</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s2"><span class="sl-id"><b>R2</b></span><span class="sl-meta">20° · A24</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s3"><span class="sl-id"><b>R3</b></span><span class="sl-meta">30° · A24</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s4"><span class="sl-id"><b>R4</b></span><span class="sl-meta">10° · A49</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s5"><span class="sl-id"><b>R5</b></span><span class="sl-meta">20° · A49</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s6"><span class="sl-id"><b>R6</b></span><span class="sl-meta">30° · A49</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+      </div>
+      <div class="download-toast" id="dl-toast">RECORDING SAVED <a id="dl-link" href="#" download="conoscope.webm">DOWNLOAD</a></div>
+    </main>
+  </div>
+
+  <!-- footer / controls -->
+  <footer>
+    <div class="mode-group">
+      <span class="label">MODE</span>
+      <button class="mode-btn active" data-mode="SOLO">SOLO</button>
+      <button class="mode-btn" data-mode="SYM">SYM</button>
+      <button class="mode-btn" data-mode="AUTO">AUTO</button>
+    </div>
+
+    <div class="slider" data-key="V2"><span class="name">2V</span><div class="track"><span class="knob"></span></div><span class="val">39°</span></div>
+    <div class="slider" data-key="A1"><span class="name">A</span><div class="track"><span class="knob"></span></div><span class="val">49°</span></div>
+    <div class="slider" data-key="AZ"><span class="name">AZ</span><div class="track"><span class="knob"></span></div><span class="val">00°</span></div>
+    <div class="slider" data-key="GAIN"><span class="name">GAIN</span><div class="track"><span class="knob"></span></div><span class="val">030</span></div>
+
+    <div class="grain-toggle on" id="grain-toggle" title="GRAIN">
+      <svg width="12" height="12" viewBox="0 0 12 12"><circle cx="2" cy="2" r="0.7" fill="currentColor"/><circle cx="7" cy="3" r="0.6" fill="currentColor"/><circle cx="10" cy="6" r="0.7" fill="currentColor"/><circle cx="4" cy="6" r="0.5" fill="currentColor"/><circle cx="8" cy="9" r="0.7" fill="currentColor"/><circle cx="3" cy="10" r="0.6" fill="currentColor"/></svg>
+    </div>
+
+    <button class="mode-btn rec" id="rec-btn" title="Record WebM (R)">REC</button>
+  </footer>
+
+  <div class="signoff">conoscope.engine // mallard·approx // 60Hz</div>
+</div>
+
+<script id="vs" type="x-shader/x-vertex">#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main(){
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+</script>
+
+<script id="fs" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 outColor;
+
+uniform vec2 u_res;
+uniform float u_time;
+uniform float u_2V;
+uniform float u_A;
+uniform float u_az;
+uniform float u_gain;
+uniform float u_order;
+uniform float u_pitch;
+uniform float u_sprd;
+uniform float u_anis;
+uniform float u_sym;
+uniform float u_grain;
+uniform float u_auto;
+uniform vec2  u_ink;
+uniform float u_inkAmp;
+
+const float PI = 3.14159265359;
+
+vec3 slotInfo(vec2 uv){
+  float col = floor(uv.x * 3.0);
+  float row = floor(uv.y * 2.0);
+  float idx = row * 3.0 + col;
+
+  vec2 cellUV = fract(vec2(uv.x*3.0, uv.y*2.0));
+  vec2 cellPx = vec2(u_res.x/3.0, u_res.y/2.0);
+  float side = min(cellPx.x, cellPx.y) * 0.86;
+  vec2 px = (cellUV - 0.5) * cellPx;
+  vec2 p = px / (side * 0.5);
+  return vec3(p, idx);
+}
+
+// ── core conoscope figure ─────────────────────────────────
+// Returns un-extincted color (isochromatic rings only)
+vec3 isochromatic(vec2 pr, vec2 oa1, vec2 oa2, float order){
+  float d1 = length(pr - oa1);
+  float d2 = length(pr - oa2);
+  float r  = length(pr);
+
+  // Mallard: Γ ∝ d1 * d2 (angular distances to optic axes)
+  // Thickness modulation rises gently with radius (curved cell)
+  float gamma = d1 * d2 * order * (1.0 + 0.30 * r * r);
+
+  // Path difference scaled to nanometres for Michel-Lévy lookup
+  float retard = gamma * 2200.0;
+
+  // Three-band sin² interference (cheap Michel-Lévy proxy)
+  vec3 lam = vec3(615.0, 540.0, 465.0);
+  vec3 I = sin(PI * retard / lam);
+  I = I * I;
+
+  // High-order desaturation toward warm cream
+  float ordFade = clamp(retard / 5500.0, 0.0, 1.0);
+  vec3 gray = vec3(dot(I, vec3(0.299, 0.587, 0.114)));
+  vec3 col = mix(I, gray * vec3(1.05, 1.0, 0.92), ordFade * 0.45);
+
+  // Warm tint baseline (eyepiece glass)
+  col *= vec3(1.10, 1.02, 0.92);
+
+  return col;
+}
+
+// ── isogyres (extinction brushes) ─────────────────────────
+// Returns 0 along brushes, 1 elsewhere; smoothed slightly.
+float isogyre(vec2 pr, vec2 oa1, vec2 oa2){
+  float a1 = atan(pr.y - oa1.y, pr.x - oa1.x);
+  float a2 = atan(pr.y - oa2.y, pr.x - oa2.x);
+  // vibration azimuth = bisector of (a1, a2)
+  float vib = 0.5 * (a1 + a2);
+  // crossed polars aligned to the disc x/y axes (our frame is pre-rotated)
+  float ext = sin(2.0 * vib);
+  ext = ext * ext;
+  // soften so brushes are visible bands, not razor-thin lines
+  ext = mix(ext, 1.0, 0.18);
+  return ext;
+}
+
+vec3 conoscopeColor(vec2 p, float V_half, float azim, float order){
+  // rotate the disc by azim → optic-axis plane along x
+  float ca = cos(azim), sa = sin(azim);
+  vec2 pr = vec2(ca*p.x - sa*p.y, sa*p.x + ca*p.y);
+
+  // optic-axis positions on the disc (centred bisectrix figure)
+  float oaR = clamp(sin(V_half) * 1.55, 0.0, 0.92);
+  vec2 oa1 = vec2( oaR, 0.0);
+  vec2 oa2 = vec2(-oaR, 0.0);
+
+  // colour + extinction
+  vec3  iso  = isochromatic(pr, oa1, oa2, order);
+  float ext  = isogyre(pr, oa1, oa2);
+
+  // melatope dark dots
+  float d1 = length(pr - oa1);
+  float d2 = length(pr - oa2);
+  float melatope = smoothstep(0.0, 0.045, min(d1, d2));
+
+  vec3 col = iso * ext * melatope;
+
+  // mild central sheen
+  float r = length(pr);
+  col += exp(-r * r * 1.6) * 0.045;
+
+  // chromatic rim
+  float rim = smoothstep(0.55, 0.98, r);
+  col.r *= 1.0 + rim * 0.18;
+  col.b *= 1.0 + rim * 0.10;
+  col.g *= 1.0 - rim * 0.04;
+
+  return col;
+}
+
+vec2 applySym(vec2 p){
+  float r = length(p);
+  float th = atan(p.y, p.x);
+  th = mod(th + PI, PI*0.5);
+  th = abs(th - PI*0.25);
+  return vec2(cos(th), sin(th)) * r;
+}
+
+float hash21(vec2 p){
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+void main(){
+  vec3 si = slotInfo(v_uv);
+  vec2 p = si.xy;
+  float idx = si.z;
+  float r0 = length(p);
+
+  // outside disc → frame background
+  if (r0 > 1.0){
+    vec3 bg = vec3(0.018, 0.020, 0.024);
+    float scan = 0.5 + 0.5 * sin(v_uv.y * u_res.y * 1.5);
+    bg += scan * 0.003;
+    outColor = vec4(bg, 1.0);
+    return;
+  }
+
+  // slot-specific defaults (deg)
+  float col_i = mod(idx, 3.0);
+  float row_i = floor(idx / 3.0);
+  float V2_local = (10.0 + col_i * 10.0) * (PI/180.0);
+  float A_local  = (row_i > 0.5 ? 49.0 : 24.0) * (PI/180.0);
+
+  // global sliders bias each slot
+  float V_half = 0.5 * V2_local + (u_2V * PI/180.0) * 0.22;
+  float azim   = A_local + u_A * PI/180.0 * 0.30 + u_az * PI/180.0;
+
+  // INK modulation: lateral shift + tilt
+  if (u_inkAmp > 0.001){
+    p += u_ink * 0.20 * u_inkAmp;
+    azim += u_ink.x * 0.70 * u_inkAmp;
+    V_half += u_ink.y * 0.30 * u_inkAmp;
+  }
+
+  // SYM kaleidoscopic fold
+  if (u_sym > 0.5){
+    p = applySym(p);
+  }
+
+  // breathing animation (AUTO multiplies amplitude × 4)
+  float autoG = 1.0 + u_auto * 3.0;
+  float t = u_time;
+  V_half += 0.045 * sin(t * 0.27 + idx * 0.9) * autoG;
+  azim   += 0.090 * sin(t * 0.19 + idx * 1.7) * autoG;
+  float orderShift = 0.06 * sin(t * 0.41 + idx * 2.3) * autoG;
+
+  // order varies per column slightly + auto wobble
+  float order = u_order * (0.78 + 0.34 * (col_i / 2.0)) + orderShift;
+  order = max(order, 0.4);
+
+  vec3 baseCol = conoscopeColor(p, V_half, azim, order);
+
+  // proper-ish bloom: 4 nearby samples (still cheap, all inside disc)
+  vec3 glow = vec3(0.0);
+  for (int i = 0; i < 4; i++){
+    float a = float(i) * PI * 0.5 + PI * 0.25;
+    vec2 off = vec2(cos(a), sin(a)) * 0.035;
+    vec2 sp = p + off;
+    if (length(sp) < 0.99){
+      vec3 sg = conoscopeColor(sp, V_half, azim, order);
+      glow += max(sg - 0.5, vec3(0.0));
+    }
+  }
+  baseCol += glow * 0.35;
+
+  // gain
+  baseCol *= (0.85 + u_gain * 1.5);
+
+  // disc edge mask (soft)
+  float discMask = 1.0 - smoothstep(0.95, 1.0, r0);
+  baseCol *= discMask;
+
+  // grain
+  if (u_grain > 0.5){
+    float g = hash21(gl_FragCoord.xy + vec2(u_time * 60.0, u_time * 31.7));
+    baseCol += (g - 0.5) * 0.055;
+  }
+
+  // soft disc rim
+  float ring = smoothstep(0.985, 1.0, r0) - smoothstep(1.0, 1.012, r0);
+  baseCol += ring * vec3(0.05, 0.06, 0.08);
+
+  // gentle gamma lift
+  baseCol = pow(max(baseCol, vec3(0.0)), vec3(0.92));
+
+  outColor = vec4(baseCol, 1.0);
+}
+</script>
+
+<script>
+(() => {
+'use strict';
+
+// ───────────── WebGL bootstrap ─────────────
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', {antialias:true, alpha:false, premultipliedAlpha:false, preserveDrawingBuffer:true});
+if (!gl){
+  document.body.innerHTML = '<p style="color:#fff;font-family:monospace;padding:20px">WebGL2 not available in this browser.</p>';
+  return;
+}
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src.trim());
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+    console.error(gl.getShaderInfoLog(s));
+    throw new Error('shader compile fail');
+  }
+  return s;
+}
+const vs = compile(gl.VERTEX_SHADER, document.getElementById('vs').textContent);
+const fs = compile(gl.FRAGMENT_SHADER, document.getElementById('fs').textContent);
+const prog = gl.createProgram();
+gl.attachShader(prog, vs);
+gl.attachShader(prog, fs);
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)){
+  console.error(gl.getProgramInfoLog(prog));
+  throw new Error('link fail');
+}
+gl.useProgram(prog);
+
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'a_pos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const U = {};
+['u_res','u_time','u_2V','u_A','u_az','u_gain','u_order','u_pitch','u_sprd','u_anis','u_sym','u_grain','u_auto','u_ink','u_inkAmp']
+  .forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+// ───────────── state ─────────────
+const state = {
+  mode: 'SOLO',
+  V2: 39, A1: 49, AZ: 0, GAIN: 30,
+  order: 1.75, pitch: 4, sprd: 72, anis: 21,
+  grain: 1, auto: 0,
+  ink: {x:0, y:0, amp:0},
+  inkTarget: {x:0, y:0},
+};
+
+// ───────────── resize ─────────────
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  canvas.width = Math.max(2, Math.floor(w * dpr));
+  canvas.height = Math.max(2, Math.floor(h * dpr));
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+new ResizeObserver(resize).observe(canvas);
+resize();
+
+// ───────────── INK pad ─────────────
+const inkCanvas = document.getElementById('ink');
+const inkCtx = inkCanvas.getContext('2d');
+const inkBox = document.getElementById('inkbox');
+let inkDragging = false;
+
+function sizeInk(){
+  const r = inkBox.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  inkCanvas.width = Math.floor(r.width * dpr);
+  inkCanvas.height = Math.floor(r.height * dpr);
+  inkCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+new ResizeObserver(sizeInk).observe(inkBox);
+sizeInk();
+
+function drawInk(){
+  const w = inkBox.clientWidth, h = inkBox.clientHeight;
+  inkCtx.clearRect(0,0,w,h);
+  inkCtx.save();
+  inkCtx.translate(w/2, h/2);
+  inkCtx.strokeStyle = 'rgba(180,190,205,0.55)';
+  inkCtx.lineWidth = 0.7;
+  const R = Math.min(w,h) * 0.32;
+  for (let i = 0; i < 3; i++){
+    const a = (i/3) * Math.PI;
+    inkCtx.save();
+    inkCtx.rotate(a);
+    inkCtx.beginPath();
+    inkCtx.ellipse(0, 0, R, R*0.55, 0, 0, Math.PI*2);
+    inkCtx.stroke();
+    inkCtx.restore();
+  }
+  inkCtx.strokeStyle = 'rgba(180,190,205,0.35)';
+  inkCtx.beginPath();
+  inkCtx.moveTo(-R*1.2, 0); inkCtx.lineTo(R*1.2, 0);
+  inkCtx.moveTo(0, -R*1.2); inkCtx.lineTo(0, R*1.2);
+  inkCtx.stroke();
+  const mx = state.ink.x * (w*0.42);
+  const my = -state.ink.y * (h*0.42);
+  inkCtx.fillStyle = '#e8eaed';
+  inkCtx.beginPath(); inkCtx.arc(mx, my, 2.4, 0, Math.PI*2); inkCtx.fill();
+  inkCtx.strokeStyle = 'rgba(232,234,237,0.4)';
+  inkCtx.lineWidth = 0.6;
+  inkCtx.beginPath(); inkCtx.arc(mx, my, 7, 0, Math.PI*2); inkCtx.stroke();
+  inkCtx.restore();
+}
+
+function inkPos(e){
+  const r = inkBox.getBoundingClientRect();
+  const x = ((e.clientX - r.left) / r.width  - 0.5) * 2;
+  const y = -((e.clientY - r.top)  / r.height - 0.5) * 2;
+  return {x:Math.max(-1,Math.min(1,x)), y:Math.max(-1,Math.min(1,y))};
+}
+inkBox.addEventListener('pointerdown', e => {
+  inkDragging = true; inkBox.setPointerCapture(e.pointerId);
+  state.inkTarget = inkPos(e); state.ink.amp = 1;
+});
+inkBox.addEventListener('pointermove', e => {
+  if (!inkDragging) return;
+  state.inkTarget = inkPos(e);
+});
+inkBox.addEventListener('pointerup', () => { inkDragging = false; });
+inkBox.addEventListener('pointercancel', () => { inkDragging = false; });
+
+// ───────────── sliders ─────────────
+const ranges = {
+  V2:   {min:0,  max:90,  fmt:v=>Math.round(v)+'°'},
+  A1:   {min:0,  max:90,  fmt:v=>Math.round(v)+'°'},
+  AZ:   {min:0,  max:359, fmt:v=>String(Math.round(v)).padStart(2,'0')+'°'},
+  GAIN: {min:0,  max:100, fmt:v=>String(Math.round(v)).padStart(3,'0')},
+};
+
+document.querySelectorAll('.slider').forEach(sl => {
+  const key = sl.dataset.key;
+  const track = sl.querySelector('.track');
+  const knob  = sl.querySelector('.knob');
+  const val   = sl.querySelector('.val');
+  const range = ranges[key];
+
+  function place(){
+    const tr = track.getBoundingClientRect();
+    const tw = tr.width - 24;
+    const pct = (state[key] - range.min) / (range.max - range.min);
+    knob.style.left = (6 + tw * pct) + 'px';
+    val.textContent = range.fmt(state[key]);
+  }
+  new ResizeObserver(place).observe(track);
+  sl._refresh = place;
+  setTimeout(place, 0);
+
+  let dragging = false;
+  function moveTo(clientX){
+    const tr = track.getBoundingClientRect();
+    const x = clientX - tr.left - 6;
+    const tw = tr.width - 12;
+    const pct = Math.max(0, Math.min(1, x / tw));
+    state[key] = range.min + pct * (range.max - range.min);
+    place();
+  }
+  track.addEventListener('pointerdown', e => {
+    dragging = true; track.setPointerCapture(e.pointerId); moveTo(e.clientX);
+  });
+  track.addEventListener('pointermove', e => { if (dragging) moveTo(e.clientX); });
+  track.addEventListener('pointerup',   () => { dragging = false; });
+  track.addEventListener('pointercancel', () => { dragging = false; });
+});
+
+function refreshAllSliders(){
+  document.querySelectorAll('.slider').forEach(sl => sl._refresh && sl._refresh());
+}
+
+// ───────────── mode buttons ─────────────
+document.querySelectorAll('.mode-btn[data-mode]').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn[data-mode]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    state.mode = b.dataset.mode;
+    state.auto = (state.mode === 'AUTO') ? 1 : 0;
+    document.getElementById('v-mode').textContent = state.mode;
+  });
+});
+
+// ───────────── grain toggle ─────────────
+const grainT = document.getElementById('grain-toggle');
+grainT.addEventListener('click', () => {
+  state.grain = state.grain ? 0 : 1;
+  grainT.classList.toggle('on', !!state.grain);
+  document.getElementById('v-fx').textContent = state.grain ? 'GRAIN+BLOOM' : 'BLOOM';
+});
+
+// ───────────── clear ─────────────
+document.getElementById('clear').addEventListener('click', () => {
+  state.inkTarget = {x:0, y:0};
+  state.ink.amp = 0;
+});
+
+// ───────────── RECORD ─────────────
+const recBtn   = document.getElementById('rec-btn');
+const recLed   = document.getElementById('rec-led');
+const dlToast  = document.getElementById('dl-toast');
+const dlLink   = document.getElementById('dl-link');
+let recorder = null;
+let recChunks = [];
+let recording = false;
+
+function startRecord(){
+  if (recording) return;
+  if (!('MediaRecorder' in window) || typeof canvas.captureStream !== 'function'){
+    alert('MediaRecorder / captureStream not supported in this browser.');
+    return;
+  }
+  const stream = canvas.captureStream(60);
+  // pick the best supported mime
+  const candidates = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ];
+  let mime = '';
+  for (const c of candidates){
+    if (MediaRecorder.isTypeSupported(c)){ mime = c; break; }
+  }
+  if (!mime){
+    alert('No supported WebM codec found.');
+    return;
+  }
+  recChunks = [];
+  recorder = new MediaRecorder(stream, {mimeType: mime, videoBitsPerSecond: 8_000_000});
+  recorder.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+  recorder.onstop = () => {
+    const blob = new Blob(recChunks, {type: 'video/webm'});
+    const url  = URL.createObjectURL(blob);
+    if (dlLink._url) URL.revokeObjectURL(dlLink._url);
+    dlLink._url = url;
+    dlLink.href = url;
+    const ts = new Date().toISOString().replace(/[:.]/g,'-');
+    dlLink.download = `conoscope-${ts}.webm`;
+    dlToast.classList.add('show');
+    dlLink.click();
+    setTimeout(() => dlToast.classList.remove('show'), 8000);
+  };
+  recorder.start(1000);
+  recording = true;
+  recBtn.classList.add('active');
+  recBtn.textContent = 'STOP';
+  recLed.classList.add('on');
+  document.getElementById('v-stage').textContent = 'REC · ' + mime.split(';')[1] || 'WEBM';
+}
+
+function stopRecord(){
+  if (!recording || !recorder) return;
+  recorder.stop();
+  recording = false;
+  recBtn.classList.remove('active');
+  recBtn.textContent = 'REC';
+  recLed.classList.remove('on');
+  document.getElementById('v-stage').textContent = 'ON · LIVE';
+}
+
+recBtn.addEventListener('click', () => {
+  if (recording) stopRecord(); else startRecord();
+});
+
+// keyboard: R = toggle record, A = AUTO, S = SYM, G = grain
+window.addEventListener('keydown', e => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  const k = e.key.toLowerCase();
+  if (k === 'r'){ recBtn.click(); }
+  else if (k === 'a'){ document.querySelector('.mode-btn[data-mode="AUTO"]').click(); }
+  else if (k === 's'){ document.querySelector('.mode-btn[data-mode="SYM"]').click(); }
+  else if (k === ' '){ e.preventDefault(); document.querySelector('.mode-btn[data-mode="SOLO"]').click(); }
+  else if (k === 'g'){ grainT.click(); }
+});
+
+// ───────────── readouts ─────────────
+const vOrder = document.getElementById('v-order');
+const vPitch = document.getElementById('v-pitch');
+const vSprd  = document.getElementById('v-sprd');
+const vAnis  = document.getElementById('v-anis');
+const vPts   = document.getElementById('v-pts');
+const vCell  = document.getElementById('v-cell');
+const vType  = document.getElementById('v-type');
+const inkMeta= document.getElementById('ink-meta');
+
+// ───────────── AUTO drive ─────────────
+function autoDrive(t){
+  // slow, large arcs across the full slider range
+  state.V2   = 45 + 30 * Math.sin(t * 0.13);
+  state.A1   = 45 + 30 * Math.sin(t * 0.09 + 1.3);
+  state.AZ   = (t * 12) % 360;
+  state.GAIN = 35 + 20 * Math.sin(t * 0.21 + 2.1);
+  refreshAllSliders();
+}
+
+// ───────────── render loop ─────────────
+let t0 = performance.now();
+function frame(now){
+  const dt = (now - t0) / 1000;
+
+  // AUTO mode rewrites sliders
+  if (state.mode === 'AUTO') autoDrive(dt);
+
+  // smooth ink follow
+  state.ink.x += (state.inkTarget.x - state.ink.x) * 0.12;
+  state.ink.y += (state.inkTarget.y - state.ink.y) * 0.12;
+  if (!inkDragging){
+    state.ink.amp += (0 - state.ink.amp) * 0.005;
+  } else {
+    state.ink.amp += (1 - state.ink.amp) * 0.15;
+  }
+
+  // breathing readouts
+  vOrder.textContent = (1.75 + 0.05 * Math.sin(dt*0.31)).toFixed(2);
+  vPitch.textContent = String(state.pitch + Math.round(Math.sin(dt*0.7)*1));
+  vSprd.textContent  = String(72 + Math.round(Math.sin(dt*0.9 + 1)*3));
+  vAnis.textContent  = String(21 + Math.round(Math.sin(dt*0.6 + 2)*2));
+  vPts.textContent   = String(140 + Math.round(Math.sin(dt*1.3)*8)).padStart(4,'0');
+  vCell.textContent  = (8.61 + 0.08*Math.sin(dt*0.5)).toFixed(2);
+  vType.textContent  = `2V · ${Math.round(state.V2/4 + 10)}° A · ${Math.round(state.A1/2 + 12)}°`;
+  inkMeta.textContent = `01 · ${Math.round(state.V2/4 + 10)}° · A${Math.round(state.A1/2 + 12)}`;
+
+  drawInk();
+
+  gl.uniform2f(U.u_res, canvas.width, canvas.height);
+  gl.uniform1f(U.u_time, dt);
+  gl.uniform1f(U.u_2V, state.V2);
+  gl.uniform1f(U.u_A, state.A1);
+  gl.uniform1f(U.u_az, state.AZ);
+  gl.uniform1f(U.u_gain, state.GAIN/100);
+  gl.uniform1f(U.u_order, 1.75 + 0.05 * Math.sin(dt*0.31));
+  gl.uniform1f(U.u_pitch, state.pitch);
+  gl.uniform1f(U.u_sprd, state.sprd);
+  gl.uniform1f(U.u_anis, state.anis);
+  gl.uniform1f(U.u_sym,   state.mode === 'SYM'  ? 1 : 0);
+  gl.uniform1f(U.u_grain, state.grain);
+  gl.uniform1f(U.u_auto,  state.auto);
+  gl.uniform2f(U.u_ink, state.ink.x, state.ink.y);
+  gl.uniform1f(U.u_inkAmp, state.ink.amp);
+
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(now => { t0 = now; requestAnimationFrame(frame); });
+
+})();
+</script>
+</body>
+</html>
