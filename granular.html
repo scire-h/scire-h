@@ -703,6 +703,7 @@
             <button data-steps="8">8</button>
             <button class="on" data-steps="16">16</button>
             <button data-steps="32">32</button>
+            <button data-steps="64">64</button>
           </div>
         </div>
         <div class="group">
@@ -719,8 +720,11 @@
           <div class="seg" id="seqRateSeg">
             <button data-rate="4">1/4</button>
             <button data-rate="8">1/8</button>
+            <button data-rate="12">1/8T</button>
             <button class="on" data-rate="16">1/16</button>
+            <button data-rate="24">1/16T</button>
             <button data-rate="32">1/32</button>
+            <button data-rate="64">1/64</button>
           </div>
         </div>
         <div style="display:flex; gap:4px; margin-left:auto; flex-wrap: wrap;">
@@ -749,7 +753,7 @@
     </div>
 
     <div class="hint" id="hint">
-      space play · t tap · r re-gen · g freeze · 1–9 src · s shuffle · q seq · h mode · F1–F4 track · drag wave = scrub
+      space play · t tap · r re-gen · g freeze · 1–4 track · s shuffle · q seq · h mode · drag wave = scrub
     </div>
   </div>
 
@@ -904,8 +908,8 @@ function makeTrack(idx){
     seq: {
       enabled: true,      // default ON — 808 style: silent until a step is lit
       mode: "hit",        // "hit" = TR-808 (fire grain at current Position); "slice" = chop sliceMap
-      active: new Array(32).fill(false),
-      sliceMap: new Array(32).fill(0).map((_,i)=> i % 16),
+      active: new Array(64).fill(false),
+      sliceMap: new Array(64).fill(0).map((_,i)=> i % 16),
       currentStep: -1, euclidIdx: 0,
     },
 
@@ -2386,10 +2390,10 @@ function applyState(s){
       if(ts.seq){
         t.seq.enabled = !!ts.seq.enabled;
         t.seq.mode    = ts.seq.mode || "hit";
-        t.seq.active  = (ts.seq.active||[]).slice(0,32);
-        while(t.seq.active.length<32) t.seq.active.push(false);
-        t.seq.sliceMap = (ts.seq.sliceMap||[]).slice(0,32);
-        while(t.seq.sliceMap.length<32) t.seq.sliceMap.push(0);
+        t.seq.active  = (ts.seq.active||[]).slice(0,64);
+        while(t.seq.active.length<64) t.seq.active.push(false);
+        t.seq.sliceMap = (ts.seq.sliceMap||[]).slice(0,64);
+        while(t.seq.sliceMap.length<64) t.seq.sliceMap.push(0);
       }
       if(t.srcType !== "file") generateBuffer(t);
       applyTrackMix(t);
@@ -2528,11 +2532,10 @@ document.addEventListener("keydown", e=>{
     t.seq.mode = t.seq.mode === "slice" ? "hit" : "slice";
     buildPatternGrid();
   }
-  const idx = "123456789".indexOf(e.key);
-  if(idx>=0){
-    const chips = document.querySelectorAll("#srcTypeChips .chip");
-    if(chips[idx]) chips[idx].click();
-  }
+  // 1-4 = select track (most frequent live action)
+  const tIdx = "1234".indexOf(e.key);
+  if(tIdx >= 0){ selectTrack(tIdx); return; }
+  // F1-F4 keep working as an alias
   if(e.key === "F1") { e.preventDefault(); selectTrack(0); }
   if(e.key === "F2") { e.preventDefault(); selectTrack(1); }
   if(e.key === "F3") { e.preventDefault(); selectTrack(2); }
