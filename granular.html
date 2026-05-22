@@ -655,7 +655,7 @@
 
         <div class="bpm-display">
           <span id="bpmNum">120</span>
-          <small>BPM · <span id="ppqLabel">1/16</span></small>
+          <small>BPM</small>
         </div>
 
         <div class="grow"></div>
@@ -667,26 +667,18 @@
       </div>
 
       <div class="row" style="margin-top: 18px; display:flex; gap: 24px;">
-        <div style="flex:1; min-width:160px;">
+        <div style="flex:1; min-width:200px;">
           <div class="row"><label>Tempo</label><span class="val" id="bpmVal">120 BPM</span></div>
           <input type="range" id="bpm" min="30" max="240" step="0.5" value="120" />
         </div>
-        <div style="flex:1; min-width:160px;">
-          <div class="row"><label>Subdivision</label></div>
-          <div class="seg" id="subSeg">
-            <button data-sub="1">1/1</button>
-            <button data-sub="2">1/2</button>
-            <button data-sub="4">1/4</button>
-            <button data-sub="8">1/8</button>
-            <button class="on" data-sub="16">1/16</button>
-            <button data-sub="32">1/32</button>
-          </div>
-        </div>
-        <div style="flex:1; min-width:160px;">
-          <div class="row"><label>Sync</label></div>
+        <div style="flex:1; min-width:200px;">
+          <div class="row"><label>Free-Mode Sync</label></div>
           <div class="seg" id="syncSeg">
             <button class="on" data-sync="1">BPM-Sync</button>
             <button data-sync="0">Free-Rate</button>
+          </div>
+          <div class="meta" style="margin-top: 6px;">
+            applies only when a track's pattern is OFF (drone mode)
           </div>
         </div>
       </div>
@@ -851,7 +843,7 @@ const G = {
   ana: null, ana2: null,
 
   running: false,
-  bpm: 120, sub: 16, sync: true,
+  bpm: 120, sync: true,
   master_db: -6, lpfHz: 8000, revMix: 25, revTail: 3,
 
   curTrack: 0,
@@ -910,7 +902,7 @@ function makeTrack(idx){
     env: "hann", grainGain: 0,
 
     seq: {
-      enabled: false,
+      enabled: true,      // default ON — 808 style: silent until a step is lit
       mode: "hit",        // "hit" = TR-808 (fire grain at current Position); "slice" = chop sliceMap
       active: new Array(32).fill(false),
       sliceMap: new Array(32).fill(0).map((_,i)=> i % 16),
@@ -1193,15 +1185,6 @@ document.querySelectorAll("#srcTypeChips .chip").forEach(el=>{
   });
 });
 
-// subdivision (global)
-document.querySelectorAll("#subSeg button").forEach(b=>{
-  b.addEventListener("click", ()=>{
-    document.querySelectorAll("#subSeg button").forEach(x=>x.classList.remove("on"));
-    b.classList.add("on");
-    G.sub = parseInt(b.dataset.sub);
-    $("ppqLabel").textContent = "1/"+G.sub;
-  });
-});
 // sync (global)
 document.querySelectorAll("#syncSeg button").forEach(b=>{
   b.addEventListener("click", ()=>{
@@ -2338,7 +2321,7 @@ function encodeWavFloat32(LChunks, RChunks, sr){
 function snapshotState(){
   return {
     G: {
-      bpm: G.bpm, sub: G.sub, sync: G.sync,
+      bpm: G.bpm, sync: G.sync,
       master_db: G.master_db, lpfHz: G.lpfHz, revMix: G.revMix, revTail: G.revTail,
       curTrack: G.curTrack,
       seq: { steps: G.seq.steps, slices: G.seq.slices, rate: G.seq.rate },
@@ -2366,7 +2349,7 @@ function snapshotState(){
 function applyState(s){
   if(!s) return;
   if(s.G){
-    G.bpm = s.G.bpm; G.sub = s.G.sub; G.sync = !!s.G.sync;
+    G.bpm = s.G.bpm; G.sync = !!s.G.sync;
     G.master_db = s.G.master_db; G.lpfHz = s.G.lpfHz;
     G.revMix = s.G.revMix; G.revTail = s.G.revTail;
     if(s.G.seq){
@@ -2383,13 +2366,9 @@ function applyState(s){
     setSliderUI("lpf", G.lpfHz, fmtHz);
     setSliderUI("rev", G.revMix, fmtPct);
     setSliderUI("revTail", G.revTail, fmtSec);
-    document.querySelectorAll("#subSeg button").forEach(b=>{
-      b.classList.toggle("on", +b.dataset.sub === G.sub);
-    });
     document.querySelectorAll("#syncSeg button").forEach(b=>{
       b.classList.toggle("on", (b.dataset.sync==="1") === G.sync);
     });
-    $("ppqLabel").textContent = "1/"+G.sub;
   }
   if(s.tracks){
     s.tracks.forEach((ts, i)=>{
