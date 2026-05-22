@@ -466,6 +466,34 @@
   .mem-btn.full{ color: var(--acc); border-color: var(--acc-d); }
   .mem-btn.cur{ background: var(--acc); color: #07181a; border-color: var(--acc); }
 
+  /* fx slot */
+  .fx-slot select.fx-type{
+    width: 100%; margin-bottom: 8px;
+    padding: 7px 8px;
+    font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line2);
+  }
+  .fx-slot.has-fx select.fx-type{ background: var(--panel2); color: var(--acc); border-color: var(--acc-d); }
+  .fx-params{ display: block; }
+  .fx-param{
+    display: grid;
+    grid-template-columns: 64px 1fr 56px;
+    gap: 8px;
+    align-items: center;
+    margin: 4px 0;
+  }
+  .fx-param .lbl{
+    font-size: 10px; color: var(--ink-d);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+  .fx-param input[type=range]{ margin: 0; }
+  .fx-param .val{
+    font-family: "JetBrains Mono","SF Mono",monospace;
+    font-size: 10px; color: var(--ink);
+    text-align: right;
+  }
+
   /* recording */
   .rec-status{
     font-family: "JetBrains Mono","SF Mono",monospace;
@@ -562,84 +590,80 @@
     </div>
 
     <div class="block">
-      <h2>Master</h2>
-      <div class="row"><label>Output</label><span class="val" id="masterVal">-6 dB</span></div>
-      <input type="range" id="master" min="-60" max="6" step="0.5" value="-6" />
+      <h2>Grain</h2>
+      <div class="row"><label>Size</label><span class="val" id="sizeVal">80 ms</span></div>
+      <input type="range" id="size" min="2" max="500" step="1" value="80" />
 
-      <div class="row"><label>LPF Cutoff</label><span class="val" id="lpfVal">8000 Hz</span></div>
-      <input type="range" id="lpf" min="80" max="18000" step="1" value="8000" />
+      <div class="row"><label>Free Rate</label><span class="val" id="rateVal">20 g/s</span></div>
+      <input type="range" id="rate" min="0.5" max="200" step="0.1" value="20" />
 
-      <div class="row"><label>Reverb Mix</label><span class="val" id="revVal">25 %</span></div>
-      <input type="range" id="rev" min="0" max="100" step="1" value="25" />
+      <div class="row"><label>Per-Beat</label><span class="val" id="perbeatVal">4 g/beat</span></div>
+      <input type="range" id="perbeat" min="1" max="32" step="1" value="4" />
 
-      <div class="row"><label>Reverb Tail</label><span class="val" id="revTailVal">3.0 s</span></div>
-      <input type="range" id="revTail" min="0.2" max="8" step="0.1" value="3" />
+      <div class="row"><label>Density Jitter</label><span class="val" id="rJitVal">15 %</span></div>
+      <input type="range" id="rJit" min="0" max="100" step="1" value="15" />
     </div>
 
     <div class="block">
-      <h2>FX · Stereo Delay</h2>
-      <div class="row"><label>Mix</label><span class="val" id="delMixVal">0 %</span></div>
-      <input type="range" id="delMix" min="0" max="100" step="1" value="0" />
-      <div class="row"><label>Time</label><span class="val" id="delTimeVal">250 ms</span></div>
-      <input type="range" id="delTime" min="20" max="1000" step="1" value="250" />
-      <div class="row"><label>Feedback</label><span class="val" id="delFbVal">40 %</span></div>
-      <input type="range" id="delFb" min="0" max="95" step="1" value="40" />
-      <div class="row"><label>Sync</label></div>
-      <div class="seg" id="delSyncSeg">
-        <button class="on" data-dsync="free">Free</button>
-        <button data-dsync="8">1/8</button>
-        <button data-dsync="8d">1/8.</button>
-        <button data-dsync="4">1/4</button>
-      </div>
-      <div class="meta" style="margin-top: 6px;">ping-pong: bounces L ↔ R</div>
-    </div>
+      <h2>Position</h2>
+      <div class="row"><label>Position</label><span class="val" id="posVal">0.10</span></div>
+      <input type="range" id="pos" min="0" max="1" step="0.001" value="0.1" />
 
-    <div class="block">
-      <h2>FX · Stutter</h2>
-      <div class="row"><label>Mix</label><span class="val" id="stutMixVal">0 %</span></div>
-      <input type="range" id="stutMix" min="0" max="100" step="1" value="0" />
-      <div class="row"><label>Grain</label><span class="val" id="stutLenVal">80 ms</span></div>
-      <input type="range" id="stutLen" min="10" max="400" step="1" value="80" />
-      <div class="row"><label>Feedback</label><span class="val" id="stutFbVal">60 %</span></div>
-      <input type="range" id="stutFb" min="0" max="98" step="1" value="60" />
-      <div class="meta" style="margin-top: 6px;">short comb-delay loop, granular wash</div>
-    </div>
+      <div class="row"><label>Pos Jitter</label><span class="val" id="pJitVal">5 %</span></div>
+      <input type="range" id="pJit" min="0" max="100" step="0.5" value="5" />
 
-    <div class="block">
-      <h2>Record</h2>
-      <div style="display:flex; gap:6px;">
-        <button id="recBtn" class="danger" style="flex:1;">● REC</button>
-        <button id="recStop" style="flex:1;" disabled>■ STOP</button>
-      </div>
-      <div class="rec-status" id="recStatus">idle · 32-bit float WAV</div>
-      <div class="row" style="margin-top:10px"><label>Master Mix</label></div>
-      <div class="seg" id="recMasterSeg">
-        <button data-armm="0">Off</button>
-        <button class="on" data-armm="1">Armed</button>
-      </div>
-      <div class="meta" style="margin-top: 8px;">
-        per-track arm = strip [R] · armed tracks dump as separate WAVs
+      <div class="row"><label>Scan Speed</label><span class="val" id="scanVal">0.000</span></div>
+      <input type="range" id="scan" min="-1" max="1" step="0.001" value="0" />
+
+      <div class="row"><label>Freeze</label></div>
+      <div class="seg" id="freezeSeg">
+        <button data-frz="0" class="on">Off</button>
+        <button data-frz="1">On</button>
       </div>
     </div>
 
     <div class="block">
-      <h2>Memory</h2>
-      <div class="mem-grid" id="memGrid"></div>
-      <div class="meta" style="margin-top: 8px;">
-        tap empty = save · tap full = recall · long-press = clear
+      <h2>Pitch / Pan</h2>
+      <div class="row"><label>Pitch</label><span class="val" id="pitVal">0 st</span></div>
+      <input type="range" id="pit" min="-24" max="24" step="0.1" value="0" />
+
+      <div class="row"><label>Pitch Jitter</label><span class="val" id="pitJitVal">0.0 st</span></div>
+      <input type="range" id="pitJit" min="0" max="24" step="0.1" value="0" />
+
+      <div class="row"><label>Reverse Prob</label><span class="val" id="revProbVal">0 %</span></div>
+      <input type="range" id="revProb" min="0" max="100" step="1" value="0" />
+
+      <div class="row"><label>Pan Spread</label><span class="val" id="spreadVal">40 %</span></div>
+      <input type="range" id="spread" min="0" max="100" step="1" value="40" />
+    </div>
+
+    <div class="block">
+      <h2>Envelope</h2>
+      <div class="row"><label>Shape</label></div>
+      <div class="seg" id="envSeg">
+        <button data-env="hann" class="on">Hann</button>
+        <button data-env="tri">Tri</button>
+        <button data-env="exp">Exp</button>
+        <button data-env="rect">Rect</button>
+      </div>
+
+      <div class="row" style="margin-top: 10px"><label>Gain</label><span class="val" id="gainVal">0 dB</span></div>
+      <input type="range" id="gain" min="-40" max="6" step="0.5" value="0" />
+    </div>
+
+    <div class="block">
+      <h2>FX 1</h2>
+      <div class="fx-slot" data-slot="0">
+        <select class="fx-type"></select>
+        <div class="fx-params"></div>
       </div>
     </div>
 
     <div class="block">
-      <h2>Project</h2>
-      <div style="display:flex; gap: 6px;">
-        <button id="projSave" style="flex:1;">Save…</button>
-        <button id="projLoad" style="flex:1;">Load…</button>
-        <input id="projFile" type="file" accept="application/json,.json" style="display:none" />
-      </div>
-      <div class="meta" style="margin-top: 8px;">
-        all 4 tracks + sequencers + memories<br>
-        (audio files are not embedded)
+      <h2>FX 2</h2>
+      <div class="fx-slot" data-slot="1">
+        <select class="fx-type"></select>
+        <div class="fx-params"></div>
       </div>
     </div>
   </section>
@@ -760,69 +784,60 @@
   </div>
 
 
-  <!-- ============== RIGHT ============== -->
+  <!-- ============== RIGHT (Global) ============== -->
   <section class="panel">
-    <h2>Grain · <span id="curTrkLabel2" style="color: var(--acc); font-weight:600;">T1</span></h2>
+    <h2>Master · Output</h2>
 
     <div class="block">
-      <div class="row"><label>Size</label><span class="val" id="sizeVal">80 ms</span></div>
-      <input type="range" id="size" min="2" max="500" step="1" value="80" />
+      <div class="row"><label>Output</label><span class="val" id="masterVal">-6 dB</span></div>
+      <input type="range" id="master" min="-60" max="6" step="0.5" value="-6" />
 
-      <div class="row"><label>Free Rate</label><span class="val" id="rateVal">20 g/s</span></div>
-      <input type="range" id="rate" min="0.5" max="200" step="0.1" value="20" />
+      <div class="row"><label>LPF Cutoff</label><span class="val" id="lpfVal">8000 Hz</span></div>
+      <input type="range" id="lpf" min="80" max="18000" step="1" value="8000" />
 
-      <div class="row"><label>Per-Beat</label><span class="val" id="perbeatVal">4 g/beat</span></div>
-      <input type="range" id="perbeat" min="1" max="32" step="1" value="4" />
+      <div class="row"><label>Reverb Mix</label><span class="val" id="revVal">25 %</span></div>
+      <input type="range" id="rev" min="0" max="100" step="1" value="25" />
 
-      <div class="row"><label>Density Jitter</label><span class="val" id="rJitVal">15 %</span></div>
-      <input type="range" id="rJit" min="0" max="100" step="1" value="15" />
+      <div class="row"><label>Reverb Tail</label><span class="val" id="revTailVal">3.0 s</span></div>
+      <input type="range" id="revTail" min="0.2" max="8" step="0.1" value="3" />
     </div>
 
     <div class="block">
-      <h2>Position</h2>
-      <div class="row"><label>Position</label><span class="val" id="posVal">0.10</span></div>
-      <input type="range" id="pos" min="0" max="1" step="0.001" value="0.1" />
-
-      <div class="row"><label>Pos Jitter</label><span class="val" id="pJitVal">5 %</span></div>
-      <input type="range" id="pJit" min="0" max="100" step="0.5" value="5" />
-
-      <div class="row"><label>Scan Speed</label><span class="val" id="scanVal">0.000</span></div>
-      <input type="range" id="scan" min="-1" max="1" step="0.001" value="0" />
-
-      <div class="row"><label>Freeze</label></div>
-      <div class="seg" id="freezeSeg">
-        <button data-frz="0" class="on">Off</button>
-        <button data-frz="1">On</button>
+      <h2>Record</h2>
+      <div style="display:flex; gap:6px;">
+        <button id="recBtn" class="danger" style="flex:1;">● REC</button>
+        <button id="recStop" style="flex:1;" disabled>■ STOP</button>
+      </div>
+      <div class="rec-status" id="recStatus">idle · 32-bit float WAV</div>
+      <div class="row" style="margin-top:10px"><label>Master Mix</label></div>
+      <div class="seg" id="recMasterSeg">
+        <button data-armm="0">Off</button>
+        <button class="on" data-armm="1">Armed</button>
+      </div>
+      <div class="meta" style="margin-top: 8px;">
+        per-track arm = strip [R] · armed tracks dump as separate WAVs
       </div>
     </div>
 
     <div class="block">
-      <h2>Pitch / Pan</h2>
-      <div class="row"><label>Pitch</label><span class="val" id="pitVal">0 st</span></div>
-      <input type="range" id="pit" min="-24" max="24" step="0.1" value="0" />
-
-      <div class="row"><label>Pitch Jitter</label><span class="val" id="pitJitVal">0.0 st</span></div>
-      <input type="range" id="pitJit" min="0" max="24" step="0.1" value="0" />
-
-      <div class="row"><label>Reverse Prob</label><span class="val" id="revProbVal">0 %</span></div>
-      <input type="range" id="revProb" min="0" max="100" step="1" value="0" />
-
-      <div class="row"><label>Pan Spread</label><span class="val" id="spreadVal">40 %</span></div>
-      <input type="range" id="spread" min="0" max="100" step="1" value="40" />
+      <h2>Memory</h2>
+      <div class="mem-grid" id="memGrid"></div>
+      <div class="meta" style="margin-top: 8px;">
+        tap empty = save · tap full = recall · long-press = clear
+      </div>
     </div>
 
     <div class="block">
-      <h2>Envelope</h2>
-      <div class="row"><label>Shape</label></div>
-      <div class="seg" id="envSeg">
-        <button data-env="hann" class="on">Hann</button>
-        <button data-env="tri">Tri</button>
-        <button data-env="exp">Exp</button>
-        <button data-env="rect">Rect</button>
+      <h2>Project</h2>
+      <div style="display:flex; gap: 6px;">
+        <button id="projSave" style="flex:1;">Save…</button>
+        <button id="projLoad" style="flex:1;">Load…</button>
+        <input id="projFile" type="file" accept="application/json,.json" style="display:none" />
       </div>
-
-      <div class="row" style="margin-top: 10px"><label>Gain</label><span class="val" id="gainVal">0 dB</span></div>
-      <input type="range" id="gain" min="-40" max="6" step="0.5" value="0" />
+      <div class="meta" style="margin-top: 8px;">
+        all 12 tracks + patterns + FX + memories<br>
+        (audio files are not embedded)
+      </div>
     </div>
   </section>
 
@@ -878,16 +893,6 @@ const G = {
     rate: 16,
   },
 
-  // master FX
-  fx: {
-    delMix: 0,    // 0..1
-    delTime: 0.25, // sec
-    delFb: 0.4,
-    stutMix: 0,
-    stutLen: 0.08,
-    stutFb: 0.6,
-  },
-
   // recording
   rec: {
     active: false,
@@ -934,6 +939,11 @@ function makeTrack(idx){
     nextGrainTime: 0,
     grainHistory: [],
 
+    fx: [
+      { type:"none", params:{}, in:null, out:null, nodes:[], cleanup:null },
+      { type:"none", params:{}, in:null, out:null, nodes:[], cleanup:null },
+    ],
+
     grainBus: null, gainNode: null, panNode: null, meterAna: null,
     recNode: null, pendingRec: false,
   };
@@ -968,52 +978,9 @@ async function ensureAudio(){
   G.conv = G.ctx.createConvolver();
   buildIR(G.revTail);
 
-  // ===== Master FX chain: lpf → Stutter → PingPongDelay → (dry / reverb) → master =====
-  // Stutter (short comb delay loop, granular wash)
-  G.stutIn    = G.ctx.createGain();
-  G.stutDelay = G.ctx.createDelay(1.0);
-  G.stutFb    = G.ctx.createGain();
-  G.stutWet   = G.ctx.createGain();
-  G.stutDry   = G.ctx.createGain();
-  G.stutOut   = G.ctx.createGain();
-  G.stutDelay.delayTime.value = G.fx.stutLen;
-  G.stutFb.gain.value         = G.fx.stutFb;
-  G.stutWet.gain.value        = G.fx.stutMix;
-  G.stutDry.gain.value        = 1 - G.fx.stutMix;
-  G.stutIn.connect(G.stutDry).connect(G.stutOut);
-  G.stutIn.connect(G.stutDelay);
-  G.stutDelay.connect(G.stutFb).connect(G.stutDelay);
-  G.stutDelay.connect(G.stutWet).connect(G.stutOut);
-
-  // Ping-Pong Delay (L→R cross-feedback)
-  G.delIn   = G.ctx.createGain();
-  G.dL      = G.ctx.createDelay(2.0);
-  G.dR      = G.ctx.createDelay(2.0);
-  G.fbLR    = G.ctx.createGain();
-  G.fbRL    = G.ctx.createGain();
-  G.delMerger = G.ctx.createChannelMerger(2);
-  G.delWet  = G.ctx.createGain();
-  G.delDry  = G.ctx.createGain();
-  G.delOut  = G.ctx.createGain();
-  G.dL.delayTime.value = G.fx.delTime;
-  G.dR.delayTime.value = G.fx.delTime;
-  G.fbLR.gain.value    = G.fx.delFb;
-  G.fbRL.gain.value    = G.fx.delFb;
-  G.delWet.gain.value  = G.fx.delMix;
-  G.delDry.gain.value  = 1 - G.fx.delMix;
-  G.delIn.connect(G.delDry).connect(G.delOut);
-  G.delIn.connect(G.dL);
-  G.dL.connect(G.fbLR).connect(G.dR);
-  G.dR.connect(G.fbRL).connect(G.dL);
-  G.dL.connect(G.delMerger, 0, 0);
-  G.dR.connect(G.delMerger, 0, 1);
-  G.delMerger.connect(G.delWet).connect(G.delOut);
-
   G.sumBus.connect(G.lpf);
-  G.lpf.connect(G.stutIn);
-  G.stutOut.connect(G.delIn);
-  G.delOut.connect(G.dry).connect(G.master);
-  G.delOut.connect(G.conv).connect(G.wet).connect(G.master);
+  G.lpf.connect(G.dry).connect(G.master);
+  G.lpf.connect(G.conv).connect(G.wet).connect(G.master);
 
   G.ana = G.ctx.createAnalyser();
   G.ana.fftSize = 2048; G.ana.smoothingTimeConstant = 0.1;
@@ -1023,14 +990,20 @@ async function ensureAudio(){
   G.master.connect(G.ana2);
   G.master.connect(G.ctx.destination);
 
-  // per-track buses
+  // per-track buses with FX chain
   for(const t of tracks){
     t.grainBus = G.ctx.createGain();
     t.gainNode = G.ctx.createGain();
     t.panNode  = G.ctx.createStereoPanner();
     t.meterAna = G.ctx.createAnalyser();
     t.meterAna.fftSize = 256;
-    t.grainBus.connect(t.gainNode).connect(t.panNode).connect(G.sumBus);
+    // build both fx slots
+    buildFX(t.fx[0]);
+    buildFX(t.fx[1]);
+    // chain: grainBus → fx0 → fx1 → gain → pan → sumBus
+    t.grainBus.connect(t.fx[0].in);
+    t.fx[0].out.connect(t.fx[1].in);
+    t.fx[1].out.connect(t.gainNode).connect(t.panNode).connect(G.sumBus);
     t.panNode.connect(t.meterAna);
     applyTrackMix(t);
   }
@@ -1052,6 +1025,291 @@ function buildIR(tailSec){
     }
   }
   G.conv.buffer = ir;
+}
+
+/* ============================================================
+   FX SYSTEM — per-track, 2 slots each
+   ============================================================ */
+const FX_TYPES = [
+  { id:"none",    label:"— off —", params: [] },
+  { id:"lpf",     label:"LPF",      params: [
+      { key:"cutoff", min:80, max:18000, def:5000, fmt: v=>v.toFixed(0)+" Hz" },
+      { key:"q",      min:0.1, max:10,   def:0.7, fmt: v=>v.toFixed(1) },
+  ]},
+  { id:"hpf",     label:"HPF",      params: [
+      { key:"cutoff", min:20, max:6000,  def:200, fmt: v=>v.toFixed(0)+" Hz" },
+      { key:"q",      min:0.1, max:10,   def:0.7, fmt: v=>v.toFixed(1) },
+  ]},
+  { id:"delay",   label:"Delay",    params: [
+      { key:"time",   min:0.01, max:1.0, def:0.25, fmt: v=>(v*1000).toFixed(0)+" ms" },
+      { key:"fb",     min:0,    max:0.95,def:0.4,  fmt: v=>(v*100).toFixed(0)+" %" },
+      { key:"mix",    min:0,    max:1,   def:0.3,  fmt: v=>(v*100).toFixed(0)+" %" },
+  ]},
+  { id:"reverb",  label:"Reverb",   params: [
+      { key:"tail",   min:0.2, max:6.0,  def:2.0,  fmt: v=>v.toFixed(1)+" s" },
+      { key:"mix",    min:0,   max:1,    def:0.3,  fmt: v=>(v*100).toFixed(0)+" %" },
+  ]},
+  { id:"bitcrush",label:"BitCrush", params: [
+      { key:"bits",   min:1,   max:16,   def:6,    fmt: v=>v.toFixed(0)+" bit" },
+      { key:"mix",    min:0,   max:1,    def:1.0,  fmt: v=>(v*100).toFixed(0)+" %" },
+  ]},
+  { id:"distort", label:"Dist",     params: [
+      { key:"drive",  min:1,   max:50,   def:5,    fmt: v=>v.toFixed(1)+"×" },
+      { key:"tone",   min:200, max:18000,def:5000, fmt: v=>v.toFixed(0)+" Hz" },
+      { key:"mix",    min:0,   max:1,    def:0.5,  fmt: v=>(v*100).toFixed(0)+" %" },
+  ]},
+  { id:"comp",    label:"Comp",     params: [
+      { key:"thr",    min:-60, max:0,    def:-24,  fmt: v=>v.toFixed(0)+" dB" },
+      { key:"ratio",  min:1,   max:20,   def:4,    fmt: v=>v.toFixed(1)+":1" },
+      { key:"attack", min:0.001,max:0.5, def:0.01, fmt: v=>(v*1000).toFixed(1)+" ms" },
+      { key:"release",min:0.01,max:1,    def:0.1,  fmt: v=>(v*1000).toFixed(0)+" ms" },
+  ]},
+  { id:"gate",    label:"Gate",     params: [
+      { key:"thr",    min:-80, max:0,    def:-50,  fmt: v=>v.toFixed(0)+" dB" },
+      { key:"attack", min:0.001,max:0.1, def:0.005,fmt: v=>(v*1000).toFixed(1)+" ms" },
+      { key:"release",min:0.01,max:1,    def:0.1,  fmt: v=>(v*1000).toFixed(0)+" ms" },
+  ]},
+];
+const FX_BY_ID = Object.fromEntries(FX_TYPES.map(f=>[f.id, f]));
+
+function makeDistortionCurve(amount){
+  const k = amount * 5;
+  const n = 8192;
+  const curve = new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const x = (i / (n-1)) * 2 - 1;
+    curve[i] = ((3 + k) * x * 0.35) / (1 + k * Math.abs(x) * 0.18);
+  }
+  return curve;
+}
+
+function buildFX(slot){
+  if(!G.ctx) return;
+  const ctx = G.ctx;
+  // tear down previous
+  if(slot.in)  try{ slot.in.disconnect(); }catch(_){}
+  if(slot.out) try{ slot.out.disconnect(); }catch(_){}
+  (slot.nodes||[]).forEach(n=>{ try{ n.disconnect(); }catch(_){} });
+  if(slot.cleanup){ try{ slot.cleanup(); }catch(_){} slot.cleanup = null; }
+  slot.nodes = []; slot.refs = {};
+
+  // fill missing params with defaults
+  const def = FX_BY_ID[slot.type] || FX_BY_ID.none;
+  for(const p of def.params){
+    if(slot.params[p.key] === undefined) slot.params[p.key] = p.def;
+  }
+
+  slot.in  = ctx.createGain();
+  slot.out = ctx.createGain();
+
+  switch(slot.type){
+    case "none":
+      slot.in.connect(slot.out);
+      break;
+    case "lpf":
+    case "hpf": {
+      const bq = ctx.createBiquadFilter();
+      bq.type = slot.type === "lpf" ? "lowpass" : "highpass";
+      bq.frequency.value = slot.params.cutoff;
+      bq.Q.value = slot.params.q;
+      slot.in.connect(bq).connect(slot.out);
+      slot.nodes.push(bq); slot.refs.filter = bq;
+      break;
+    }
+    case "delay": {
+      const dl = ctx.createDelay(2.0);
+      const fb = ctx.createGain();
+      const wet = ctx.createGain();
+      const dry = ctx.createGain();
+      dl.delayTime.value = slot.params.time;
+      fb.gain.value = slot.params.fb;
+      wet.gain.value = slot.params.mix;
+      dry.gain.value = 1 - slot.params.mix;
+      slot.in.connect(dry).connect(slot.out);
+      slot.in.connect(dl);
+      dl.connect(fb).connect(dl);
+      dl.connect(wet).connect(slot.out);
+      slot.nodes.push(dl, fb, wet, dry);
+      slot.refs = {delay: dl, fb, wet, dry};
+      break;
+    }
+    case "reverb": {
+      const conv = ctx.createConvolver();
+      const sr = ctx.sampleRate;
+      const len = Math.max(1, Math.floor(sr * slot.params.tail));
+      const ir = ctx.createBuffer(2, len, sr);
+      for(let ch=0; ch<2; ch++){
+        const d = ir.getChannelData(ch);
+        for(let i=0;i<len;i++){
+          d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, 2.2);
+        }
+      }
+      conv.buffer = ir;
+      const wet = ctx.createGain();
+      const dry = ctx.createGain();
+      wet.gain.value = slot.params.mix;
+      dry.gain.value = 1 - slot.params.mix;
+      slot.in.connect(dry).connect(slot.out);
+      slot.in.connect(conv).connect(wet).connect(slot.out);
+      slot.nodes.push(conv, wet, dry);
+      slot.refs = {conv, wet, dry};
+      break;
+    }
+    case "bitcrush": {
+      const shaper = ctx.createWaveShaper();
+      const levels = Math.pow(2, slot.params.bits);
+      const curve = new Float32Array(8192);
+      for(let i=0;i<curve.length;i++){
+        const x = (i / (curve.length-1)) * 2 - 1;
+        curve[i] = Math.round(x * (levels/2)) / (levels/2);
+      }
+      shaper.curve = curve;
+      const wet = ctx.createGain();
+      const dry = ctx.createGain();
+      wet.gain.value = slot.params.mix;
+      dry.gain.value = 1 - slot.params.mix;
+      slot.in.connect(dry).connect(slot.out);
+      slot.in.connect(shaper).connect(wet).connect(slot.out);
+      slot.nodes.push(shaper, wet, dry);
+      slot.refs = {shaper, wet, dry};
+      break;
+    }
+    case "distort": {
+      const shaper = ctx.createWaveShaper();
+      shaper.curve = makeDistortionCurve(slot.params.drive);
+      shaper.oversample = "2x";
+      const lpf = ctx.createBiquadFilter();
+      lpf.type = "lowpass";
+      lpf.frequency.value = slot.params.tone;
+      const wet = ctx.createGain();
+      const dry = ctx.createGain();
+      wet.gain.value = slot.params.mix;
+      dry.gain.value = 1 - slot.params.mix;
+      slot.in.connect(dry).connect(slot.out);
+      slot.in.connect(shaper).connect(lpf).connect(wet).connect(slot.out);
+      slot.nodes.push(shaper, lpf, wet, dry);
+      slot.refs = {shaper, lpf, wet, dry};
+      break;
+    }
+    case "comp": {
+      const c = ctx.createDynamicsCompressor();
+      c.threshold.value = slot.params.thr;
+      c.ratio.value     = slot.params.ratio;
+      c.attack.value    = slot.params.attack;
+      c.release.value   = slot.params.release;
+      c.knee.value      = 6;
+      slot.in.connect(c).connect(slot.out);
+      slot.nodes.push(c);
+      slot.refs = {comp: c};
+      break;
+    }
+    case "gate": {
+      const ana = ctx.createAnalyser();
+      ana.fftSize = 256;
+      const gateGain = ctx.createGain();
+      gateGain.gain.value = 0;
+      slot.in.connect(ana);
+      slot.in.connect(gateGain).connect(slot.out);
+      const buf = new Float32Array(ana.fftSize);
+      let open = false;
+      const timer = setInterval(()=>{
+        ana.getFloatTimeDomainData(buf);
+        let rms = 0;
+        for(let i=0;i<buf.length;i++) rms += buf[i]*buf[i];
+        rms = Math.sqrt(rms / buf.length);
+        const thrLin = Math.pow(10, slot.params.thr/20);
+        const want = rms > thrLin;
+        if(want !== open){
+          open = want;
+          const tc = open ? slot.params.attack : slot.params.release;
+          gateGain.gain.setTargetAtTime(open ? 1 : 0, ctx.currentTime, Math.max(0.001, tc));
+        }
+      }, 25);
+      slot.cleanup = ()=> clearInterval(timer);
+      slot.nodes.push(ana, gateGain);
+      slot.refs = {ana, gateGain};
+      break;
+    }
+  }
+}
+
+function applyFXParam(slot, key, v){
+  const r = slot.refs || {};
+  const ctx = G.ctx;
+  if(!ctx) return;
+  const now = ctx.currentTime;
+  switch(slot.type){
+    case "lpf":
+    case "hpf":
+      if(key === "cutoff" && r.filter) r.filter.frequency.setTargetAtTime(v, now, 0.02);
+      if(key === "q"      && r.filter) r.filter.Q.setTargetAtTime(v, now, 0.02);
+      break;
+    case "delay":
+      if(key === "time" && r.delay) r.delay.delayTime.setTargetAtTime(v, now, 0.05);
+      if(key === "fb"   && r.fb)    r.fb.gain.setTargetAtTime(v, now, 0.02);
+      if(key === "mix"  && r.wet){
+        r.wet.gain.setTargetAtTime(v, now, 0.02);
+        r.dry.gain.setTargetAtTime(1-v, now, 0.02);
+      }
+      break;
+    case "reverb":
+      if(key === "tail"){ buildFX(slot); reconnectTrackChain(findTrackForSlot(slot)); return; }
+      if(key === "mix" && r.wet){
+        r.wet.gain.setTargetAtTime(v, now, 0.02);
+        r.dry.gain.setTargetAtTime(1-v, now, 0.02);
+      }
+      break;
+    case "bitcrush":
+      if(key === "bits"){ buildFX(slot); reconnectTrackForSlot(slot); return; }
+      if(key === "mix" && r.wet){
+        r.wet.gain.setTargetAtTime(v, now, 0.02);
+        r.dry.gain.setTargetAtTime(1-v, now, 0.02);
+      }
+      break;
+    case "distort":
+      if(key === "drive" && r.shaper) r.shaper.curve = makeDistortionCurve(v);
+      if(key === "tone" && r.lpf) r.lpf.frequency.setTargetAtTime(v, now, 0.02);
+      if(key === "mix" && r.wet){
+        r.wet.gain.setTargetAtTime(v, now, 0.02);
+        r.dry.gain.setTargetAtTime(1-v, now, 0.02);
+      }
+      break;
+    case "comp":
+      if(r.comp){
+        if(key === "thr")     r.comp.threshold.setTargetAtTime(v, now, 0.02);
+        if(key === "ratio")   r.comp.ratio.setTargetAtTime(v, now, 0.02);
+        if(key === "attack")  r.comp.attack.setTargetAtTime(v, now, 0.02);
+        if(key === "release") r.comp.release.setTargetAtTime(v, now, 0.02);
+      }
+      break;
+    case "gate":
+      // gate's loop reads slot.params live, no node updates needed
+      break;
+  }
+}
+
+function findTrackForSlot(slot){
+  for(const t of tracks){
+    if(t.fx[0] === slot || t.fx[1] === slot) return t;
+  }
+  return null;
+}
+function reconnectTrackForSlot(slot){
+  const t = findTrackForSlot(slot);
+  if(t) reconnectTrackChain(t);
+}
+
+function reconnectTrackChain(t){
+  if(!t || !t.grainBus || !t.gainNode) return;
+  try{ t.grainBus.disconnect(); }catch(_){}
+  // ensure fx slots are built
+  if(!t.fx[0].in) buildFX(t.fx[0]);
+  if(!t.fx[1].in) buildFX(t.fx[1]);
+  try{ t.fx[0].out.disconnect(); }catch(_){}
+  try{ t.fx[1].out.disconnect(); }catch(_){}
+  t.grainBus.connect(t.fx[0].in);
+  t.fx[0].out.connect(t.fx[1].in);
+  t.fx[1].out.connect(t.gainNode);
 }
 
 function applyTrackMix(t){
@@ -1229,62 +1487,6 @@ bindGlobalRange("rev",     "revMix",    fmtPct);
 bindGlobalRange("revTail", "revTail",   fmtSec);
 bindGlobalRange("bpm",     "bpm",       fmtBPM, updateBpmDisplay);
 
-// Master FX bindings — store normalized values in G.fx
-function bindFXRange(id, key, scale, fmtFn){
-  const el = $(id), val = $(id+"Val");
-  el.addEventListener("input", ()=>{
-    const v = parseFloat(el.value);
-    G.fx[key] = v * scale;
-    if(val) val.textContent = fmtFn ? fmtFn(v) : v;
-    applyFXToAudio();
-  });
-}
-bindFXRange("delMix",  "delMix",  0.01,   fmtPct);  // % → 0..1
-bindFXRange("delTime", "delTime", 0.001,  fmtMs);   // ms → s
-bindFXRange("delFb",   "delFb",   0.01,   fmtPct);
-bindFXRange("stutMix", "stutMix", 0.01,   fmtPct);
-bindFXRange("stutLen", "stutLen", 0.001,  fmtMs);
-bindFXRange("stutFb",  "stutFb",  0.01,   fmtPct);
-
-document.querySelectorAll("#delSyncSeg button").forEach(b=>{
-  b.addEventListener("click", ()=>{
-    document.querySelectorAll("#delSyncSeg button").forEach(x=>x.classList.remove("on"));
-    b.classList.add("on");
-    const v = b.dataset.dsync;
-    let secs = null;
-    if(v === "8")   secs = (60/G.bpm)/2;
-    else if(v === "8d") secs = (60/G.bpm)/2 * 1.5;
-    else if(v === "4")  secs = 60/G.bpm;
-    if(secs !== null){
-      G.fx.delTime = clamp(secs, 0.02, 1.0);
-      setSliderUI("delTime", G.fx.delTime*1000, fmtMs);
-      applyFXToAudio();
-    }
-  });
-});
-
-function applyFXToAudio(){
-  if(!G.ctx || !G.dL) return;
-  const t = G.ctx.currentTime;
-  G.stutDelay.delayTime.setTargetAtTime(G.fx.stutLen, t, 0.05);
-  G.stutFb.gain.setTargetAtTime(G.fx.stutFb, t, 0.03);
-  G.stutWet.gain.setTargetAtTime(G.fx.stutMix, t, 0.03);
-  G.stutDry.gain.setTargetAtTime(1 - G.fx.stutMix, t, 0.03);
-  G.dL.delayTime.setTargetAtTime(G.fx.delTime, t, 0.05);
-  G.dR.delayTime.setTargetAtTime(G.fx.delTime, t, 0.05);
-  G.fbLR.gain.setTargetAtTime(G.fx.delFb, t, 0.05);
-  G.fbRL.gain.setTargetAtTime(G.fx.delFb, t, 0.05);
-  G.delWet.gain.setTargetAtTime(G.fx.delMix, t, 0.03);
-  G.delDry.gain.setTargetAtTime(1 - G.fx.delMix, t, 0.03);
-}
-function applyFXToDOM(){
-  setSliderUI("delMix",  G.fx.delMix*100,   fmtPct);
-  setSliderUI("delTime", G.fx.delTime*1000, fmtMs);
-  setSliderUI("delFb",   G.fx.delFb*100,    fmtPct);
-  setSliderUI("stutMix", G.fx.stutMix*100,  fmtPct);
-  setSliderUI("stutLen", G.fx.stutLen*1000, fmtMs);
-  setSliderUI("stutFb",  G.fx.stutFb*100,   fmtPct);
-}
 
 let regenTimer = null;
 function scheduleRegen(){
@@ -1417,10 +1619,70 @@ function selectTrack(i){
   buildStrip();
 }
 
+/* ===== FX slot UI ===== */
+function populateFXSelects(){
+  document.querySelectorAll(".fx-slot select.fx-type").forEach(sel=>{
+    sel.innerHTML = "";
+    for(const f of FX_TYPES){
+      const opt = document.createElement("option");
+      opt.value = f.id; opt.textContent = f.label;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener("change", e=>{
+      const slotIdx = +sel.closest(".fx-slot").dataset.slot;
+      const t = CT();
+      t.fx[slotIdx].type = sel.value;
+      t.fx[slotIdx].params = {};
+      if(G.ctx){ buildFX(t.fx[slotIdx]); reconnectTrackChain(t); }
+      renderFXSlot(t, slotIdx);
+    });
+  });
+}
+
+function renderFXSlot(t, slotIdx){
+  const root = document.querySelector(`.fx-slot[data-slot="${slotIdx}"]`);
+  if(!root) return;
+  const slot = t.fx[slotIdx];
+  const def  = FX_BY_ID[slot.type] || FX_BY_ID.none;
+  const sel  = root.querySelector("select.fx-type");
+  sel.value = slot.type;
+  root.classList.toggle("has-fx", slot.type !== "none");
+
+  const params = root.querySelector(".fx-params");
+  params.innerHTML = "";
+  for(const p of def.params){
+    if(slot.params[p.key] === undefined) slot.params[p.key] = p.def;
+    const v = slot.params[p.key];
+    const row = document.createElement("div");
+    row.className = "fx-param";
+    const step = (p.max - p.min) / 100;
+    row.innerHTML = `
+      <span class="lbl">${p.key}</span>
+      <input type="range" min="${p.min}" max="${p.max}" step="${step}" value="${v}" />
+      <span class="val">${p.fmt(v)}</span>
+    `;
+    const inp = row.querySelector("input");
+    const valEl = row.querySelector(".val");
+    inp.addEventListener("input", ()=>{
+      const newV = parseFloat(inp.value);
+      slot.params[p.key] = newV;
+      valEl.textContent = p.fmt(newV);
+      applyFXParam(slot, p.key, newV);
+    });
+    params.appendChild(row);
+  }
+}
+
+function refreshFXForTrack(){
+  const t = CT();
+  renderFXSlot(t, 0);
+  renderFXSlot(t, 1);
+}
+
+
 function refreshUIForTrack(){
   const t = CT();
   $("curTrkLabel").textContent = t.name;
-  $("curTrkLabel2").textContent = t.name;
 
   const setSlider = (id, v, fmtFn)=>{
     const el = $(id), val = $(id+"Val");
@@ -1481,6 +1743,7 @@ function refreshUIForTrack(){
   }
 
   buildPatternGrid();
+  refreshFXForTrack();
   drawWaveform();
 }
 
@@ -2522,7 +2785,6 @@ function snapshotState(){
       master_db: G.master_db, lpfHz: G.lpfHz, revMix: G.revMix, revTail: G.revTail,
       curTrack: G.curTrack,
       seq: { steps: G.seq.steps, slices: G.seq.slices, rate: G.seq.rate },
-      fx: { ...G.fx },
     },
     tracks: tracks.map(t=>({
       name: t.name,
@@ -2540,6 +2802,7 @@ function snapshotState(){
         active: t.seq.active.slice(),
         sliceMap: t.seq.sliceMap.slice(),
       },
+      fx: t.fx.map(s => ({ type: s.type, params: {...s.params} })),
     })),
   };
 }
@@ -2554,11 +2817,6 @@ function applyState(s){
       G.seq.steps  = s.G.seq.steps  || 16;
       G.seq.slices = s.G.seq.slices || 16;
       G.seq.rate   = s.G.seq.rate   || 16;
-    }
-    if(s.G.fx){
-      Object.assign(G.fx, s.G.fx);
-      applyFXToDOM();
-      applyFXToAudio();
     }
     setSliderUI("bpm", G.bpm, fmtBPM); updateBpmDisplay();
     setSliderUI("master", G.master_db, fmtDB);
@@ -2590,6 +2848,15 @@ function applyState(s){
         while(t.seq.active.length<64) t.seq.active.push(false);
         t.seq.sliceMap = (ts.seq.sliceMap||[]).slice(0,64);
         while(t.seq.sliceMap.length<64) t.seq.sliceMap.push(0);
+      }
+      if(ts.fx){
+        for(let k=0;k<2;k++){
+          const src = ts.fx[k] || {type:"none", params:{}};
+          t.fx[k].type   = src.type || "none";
+          t.fx[k].params = {...(src.params || {})};
+          if(G.ctx){ buildFX(t.fx[k]); }
+        }
+        if(G.ctx) reconnectTrackChain(t);
       }
       if(t.srcType !== "file") generateBuffer(t);
       applyTrackMix(t);
@@ -2803,6 +3070,7 @@ window.addEventListener("load", ()=>{
   buildMemGrid();
   buildStrip();
   buildPatternGrid();
+  populateFXSelects();
   refreshUIForTrack();
   updateBpmDisplay();
   drawWaveform();
