@@ -849,6 +849,20 @@ document.querySelectorAll("input[type=range]").forEach(el=>{
   el.addEventListener("input", syncDerived);
 });
 
+// auto re-generate the source buffer when Carrier Freq or Buffer Length
+// changes — debounced so dragging the slider doesn't thrash the audio thread.
+let regenTimer = null;
+function scheduleRegen(){
+  if(S.srcType === "file") return;
+  if(regenTimer) clearTimeout(regenTimer);
+  regenTimer = setTimeout(()=>{
+    regenTimer = null;
+    generateBuffer();
+  }, 120);
+}
+$("freq").addEventListener("input", scheduleRegen);
+$("blen").addEventListener("input", scheduleRegen);
+
 // source chips
 document.querySelectorAll("#srcTypeChips .chip").forEach(el=>{
   el.addEventListener("click", ()=>{
