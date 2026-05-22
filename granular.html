@@ -27,7 +27,8 @@
     --t4:         #8ec87c;
   }
   *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html,body{
+  html{ margin: 0; padding: 0; }
+  body{
     margin:0; padding:0;
     background: var(--bg);
     color: var(--ink);
@@ -35,7 +36,8 @@
     -webkit-font-smoothing: antialiased;
     user-select: none;
     overflow-x: hidden;
-    overscroll-behavior: none;
+    overflow-y: auto;
+    min-height: 100vh;
   }
   button, .chip, .seq-cell, .mem-btn, input[type=range], select, .tab, .strip{
     touch-action: manipulation;
