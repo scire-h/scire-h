@@ -728,6 +728,7 @@
           </div>
         </div>
         <div style="display:flex; gap:4px; margin-left:auto; flex-wrap: wrap;">
+          <button id="seqRandom">Random T</button>
           <button id="seqShuffle">Shuffle T</button>
           <button id="seqEuclid">Euclid T</button>
           <button id="seqFill">Fill T</button>
@@ -753,7 +754,7 @@
     </div>
 
     <div class="hint" id="hint">
-      space play · t tap · r re-gen · g freeze · 1–4 track · s shuffle · q seq · h mode · drag wave = scrub
+      space play · 1–4 track · ↑↓ size · ←→ position · t tap · r re-gen · g freeze · s shuffle · q seq · h mode · drag wave = scrub
     </div>
   </div>
 
@@ -1971,6 +1972,17 @@ document.querySelectorAll("#seqRateSeg button").forEach(b=>{
 });
 
 // macros: operate on currently selected track
+$("seqRandom").addEventListener("click", ()=>{
+  const t = CT();
+  const density = 0.18 + Math.random()*0.55; // 18–73 %
+  for(let i=0; i<G.seq.steps; i++){
+    t.seq.active[i] = Math.random() < density;
+    if(t.seq.active[i] && t.seq.mode === "slice"){
+      t.seq.sliceMap[i] = Math.floor(Math.random()*G.seq.slices);
+    }
+  }
+  buildPatternGrid();
+});
 $("seqShuffle").addEventListener("click", shuffleSlices);
 $("seqClear").addEventListener("click", ()=>{
   const t = CT();
@@ -2504,8 +2516,50 @@ $("projFile").addEventListener("change", async e=>{
 /* ============================================================
    KEYBOARD
    ============================================================ */
+// continuous arrow-key modulation
+const arrows = { up:false, down:false, left:false, right:false };
+let arrowsRAF = null;
+function startArrowsLoop(){
+  if(arrowsRAF) return;
+  const tick = ()=>{
+    const t = CT();
+    let any = false;
+    // ↑/↓ → grain size, exponential ramp (musically even from 2ms to 500ms)
+    if(arrows.up || arrows.down){
+      const factor = arrows.up ? 1.025 : 1/1.025;
+      t.size = clamp(t.size * factor, 2, 500);
+      $("size").value = t.size;
+      $("sizeVal").textContent = t.size.toFixed(0)+" ms";
+      any = true;
+    }
+    // ←/→ → position scrub
+    if(arrows.left || arrows.right){
+      const delta = arrows.right ? 0.005 : -0.005;
+      t.pos = clamp(t.pos + delta, 0, 1);
+      $("pos").value = t.pos;
+      $("posVal").textContent = t.pos.toFixed(3);
+      any = true;
+    }
+    arrowsRAF = any ? requestAnimationFrame(tick) : null;
+  };
+  arrowsRAF = requestAnimationFrame(tick);
+}
+document.addEventListener("keyup", e=>{
+  if(e.key === "ArrowUp")    arrows.up = false;
+  if(e.key === "ArrowDown")  arrows.down = false;
+  if(e.key === "ArrowLeft")  arrows.left = false;
+  if(e.key === "ArrowRight") arrows.right = false;
+});
+
 document.addEventListener("keydown", e=>{
   if(e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+
+  // arrow keys = analog modulation
+  if(e.key === "ArrowUp")   { e.preventDefault(); arrows.up = true;    startArrowsLoop(); return; }
+  if(e.key === "ArrowDown") { e.preventDefault(); arrows.down = true;  startArrowsLoop(); return; }
+  if(e.key === "ArrowLeft") { e.preventDefault(); arrows.left = true;  startArrowsLoop(); return; }
+  if(e.key === "ArrowRight"){ e.preventDefault(); arrows.right = true; startArrowsLoop(); return; }
+
   if(e.code === "Space"){
     e.preventDefault();
     if(G.running) $("stopBtn").click(); else $("playBtn").click();
