@@ -21,10 +21,18 @@
     --acc-d:      #2e9396;
     --warn:       #d3503a;
     --ok:         #8ec07c;
-    --t1:         #5dc6c8;
-    --t2:         #c8b15d;
-    --t3:         #c85d9c;
-    --t4:         #8ec87c;
+    --t1:  #5dc6c8;
+    --t2:  #c8b15d;
+    --t3:  #c85d9c;
+    --t4:  #8ec87c;
+    --t5:  #e85b3c;
+    --t6:  #ec9d2b;
+    --t7:  #d4cd33;
+    --t8:  #b0d432;
+    --t9:  #5ad9a0;
+    --t10: #4ed2c0;
+    --t11: #4c9be6;
+    --t12: #b15dd9;
   }
   *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body{
@@ -91,7 +99,7 @@
   /* ====== track strip row ====== */
   .tracks-strip{
     display:grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 1px;
     background: var(--line);
     border-bottom: 1px solid var(--line);
@@ -116,10 +124,21 @@
     letter-spacing: 0.18em;
     font-size: 11px;
   }
-  .strip[data-track="0"] .strip-head .swatch{ background: var(--t1); }
-  .strip[data-track="1"] .strip-head .swatch{ background: var(--t2); }
-  .strip[data-track="2"] .strip-head .swatch{ background: var(--t3); }
-  .strip[data-track="3"] .strip-head .swatch{ background: var(--t4); }
+  .strip[data-track="0"]  { --c: var(--t1); }
+  .strip[data-track="1"]  { --c: var(--t2); }
+  .strip[data-track="2"]  { --c: var(--t3); }
+  .strip[data-track="3"]  { --c: var(--t4); }
+  .strip[data-track="4"]  { --c: var(--t5); }
+  .strip[data-track="5"]  { --c: var(--t6); }
+  .strip[data-track="6"]  { --c: var(--t7); }
+  .strip[data-track="7"]  { --c: var(--t8); }
+  .strip[data-track="8"]  { --c: var(--t9); }
+  .strip[data-track="9"]  { --c: var(--t10); }
+  .strip[data-track="10"] { --c: var(--t11); }
+  .strip[data-track="11"] { --c: var(--t12); }
+  .strip .swatch{ background: var(--c); }
+  .strip.sel{ border-top-color: var(--c); }
+  .strip .meter .bar{ background: var(--c); }
   .strip-head .swatch{ display:inline-block; width:8px; height:8px; margin-right:6px; transform: translateY(1px); }
   .strip-head .ctl{ display:flex; gap: 4px; }
   .strip-head button{
@@ -388,10 +407,19 @@
     display:flex; align-items:center; justify-content:center;
     cursor: pointer;
   }
-  .pattern-row[data-track="0"] .lbl{ border-left: 3px solid var(--t1); }
-  .pattern-row[data-track="1"] .lbl{ border-left: 3px solid var(--t2); }
-  .pattern-row[data-track="2"] .lbl{ border-left: 3px solid var(--t3); }
-  .pattern-row[data-track="3"] .lbl{ border-left: 3px solid var(--t4); }
+  .pattern-row[data-track="0"]  { --c: var(--t1); }
+  .pattern-row[data-track="1"]  { --c: var(--t2); }
+  .pattern-row[data-track="2"]  { --c: var(--t3); }
+  .pattern-row[data-track="3"]  { --c: var(--t4); }
+  .pattern-row[data-track="4"]  { --c: var(--t5); }
+  .pattern-row[data-track="5"]  { --c: var(--t6); }
+  .pattern-row[data-track="6"]  { --c: var(--t7); }
+  .pattern-row[data-track="7"]  { --c: var(--t8); }
+  .pattern-row[data-track="8"]  { --c: var(--t9); }
+  .pattern-row[data-track="9"]  { --c: var(--t10); }
+  .pattern-row[data-track="10"] { --c: var(--t11); }
+  .pattern-row[data-track="11"] { --c: var(--t12); }
+  .pattern-row .lbl{ border-left: 3px solid var(--c); }
   .pattern-row.sel .lbl{ background: var(--acc); color: #07181a; }
   .pattern-row .ena, .pattern-row .modet{
     background: var(--panel); border: 1px solid var(--line2);
@@ -415,10 +443,7 @@
     position: relative;
   }
   .p-cell.on{ background: var(--acc); color: #07181a; border-color: var(--acc); }
-  .pattern-row[data-track="0"] .p-cell.on{ background: var(--t1); border-color: var(--t1); }
-  .pattern-row[data-track="1"] .p-cell.on{ background: var(--t2); border-color: var(--t2); }
-  .pattern-row[data-track="2"] .p-cell.on{ background: var(--t3); border-color: var(--t3); }
-  .pattern-row[data-track="3"] .p-cell.on{ background: var(--t4); border-color: var(--t4); }
+  .pattern-row .p-cell.on{ background: var(--c); border-color: var(--c); }
   .p-cell.cur{ box-shadow: 0 0 0 2px var(--ink) inset; }
   .p-cell.beat::before{
     content:""; position:absolute; top:-4px; left:0; right:0; height:2px;
@@ -457,7 +482,9 @@
     header{ padding: 10px 14px; }
     header .brand h1{ font-size: 11px; }
     header .brand .sub{ display: none; }
-    .tracks-strip{ grid-template-columns: repeat(2, 1fr); }
+    .tracks-strip{ grid-template-columns: repeat(3, 1fr); }
+    .strip{ padding: 8px 10px 10px; }
+    .strip .knob-row{ font-size: 9px; }
     section.panel{ padding: 14px 14px 18px; }
     .stage-block{ padding: 14px 14px; }
     .seq-cell{ min-height: 30px; aspect-ratio: auto; height: 34px; font-size: 10px; }
@@ -495,22 +522,8 @@
     <h2>Source · <span id="curTrkLabel" style="color: var(--acc); font-weight:600;">T1</span></h2>
 
     <div class="block">
-      <div class="row"><label>Voice</label></div>
-      <div class="chips" id="voiceChips">
-        <div class="chip on" data-voice="granular">Granular</div>
-        <div class="chip"    data-voice="kick">Kick</div>
-        <div class="chip"    data-voice="snare">Snare</div>
-        <div class="chip"    data-voice="hatc">Hat·C</div>
-        <div class="chip"    data-voice="hato">Hat·O</div>
-        <div class="chip"    data-voice="clap">Clap</div>
-        <div class="chip"    data-voice="tom">Tom</div>
-        <div class="chip"    data-voice="cym">Cym</div>
-        <div class="chip"    data-voice="cow">Cow</div>
-      </div>
-      <div class="meta" style="margin-top:6px;">
-        non-Granular voices ignore source/freq/pos — they use<br>
-        <b>Pitch</b> (tune) and <b>Size</b> (decay) sliders instead
-      </div>
+      <div class="row"><label>Voice</label><span class="val" id="voiceLabel">Granular</span></div>
+      <div class="meta" id="voiceMeta">uses Granular Source below</div>
     </div>
 
     <div class="block">
@@ -822,7 +835,22 @@
    single-file web audio app
    ================================================================= */
 
-const NUM_TRACKS = 4;
+const NUM_TRACKS = 12;
+
+const TRACK_PRESETS = [
+  { name: "T1",  voice: "granular", srcType: "sine",  freq: 220, pan: -0.4 },
+  { name: "T2",  voice: "granular", srcType: "tri",   freq: 330, pan:  0.4 },
+  { name: "T3",  voice: "granular", srcType: "white", freq: 165, pan: -0.15 },
+  { name: "T4",  voice: "granular", srcType: "saw",   freq: 110, pan:  0.15 },
+  { name: "KIK", voice: "kick",  size: 220, pit:   0 },
+  { name: "SNR", voice: "snare", size: 140, pit:   0 },
+  { name: "HHC", voice: "hatc",  size:  60, pit:   0 },
+  { name: "HHO", voice: "hato",  size: 180, pit:   0 },
+  { name: "CLP", voice: "clap",  size: 180, pit:   0 },
+  { name: "TOM", voice: "tom",   size: 180, pit:  -3 },
+  { name: "CYM", voice: "cym",   size: 250, pit:   0 },
+  { name: "COW", voice: "cow",   size: 200, pit:   0 },
+];
 const $ = id => document.getElementById(id);
 const clamp = (v,a,b)=> v<a?a:v>b?b:v;
 const lerp  = (a,b,t)=> a + (b-a)*t;
@@ -876,21 +904,23 @@ const G = {
 
 /* ---------- per-track state ---------- */
 function makeTrack(idx){
-  const seedFreq = [220, 330, 165, 110][idx];
-  const seedSrc  = ["sine","tri","white","saw"][idx];
-  const seedVoice = ["kick","snare","hatc","granular"][idx];
+  const p = TRACK_PRESETS[idx] || { name:"T"+(idx+1), voice:"granular" };
+  const isDrum = p.voice !== "granular";
   return {
-    idx, name: "T"+(idx+1),
+    idx, name: p.name,
     mute: false, solo: false, armed: true,
-    gain_db: -8, pan: idx===0 ? -0.4 : idx===1 ? 0.4 : idx===2 ? -0.15 : 0.15,
+    gain_db: isDrum ? -6 : -8,
+    pan: p.pan ?? 0,
 
-    voice: seedVoice,
-    srcType: seedSrc, freq: seedFreq, blen: 2,
+    voice: p.voice,
+    srcType: p.srcType ?? "sine",
+    freq:    p.freq    ?? 220,
+    blen: 2,
     buffer: null, bufferTag: "none", bufferDuration: 0,
 
-    size: 80, rate: 20, perbeat: 4, rJit: 15,
-    pos: 0.1 + idx*0.05, pJit: 5, scan: 0, freeze: false,
-    pit: 0, pitJit: 0, revProb: 0, spread: 40,
+    size: p.size ?? 80, rate: 20, perbeat: 4, rJit: 15,
+    pos: 0.1 + (idx % 4) * 0.05, pJit: 5, scan: 0, freeze: false,
+    pit: p.pit ?? 0, pitJit: 0, revProb: 0, spread: isDrum ? 0 : 40,
     env: "hann", grainGain: 0,
 
     seq: {
@@ -909,7 +939,8 @@ function makeTrack(idx){
   };
 }
 
-const tracks = [makeTrack(0), makeTrack(1), makeTrack(2), makeTrack(3)];
+const tracks = [];
+for(let i=0; i<NUM_TRACKS; i++) tracks.push(makeTrack(i));
 function CT(){ return tracks[G.curTrack]; }
 
 
@@ -1263,18 +1294,6 @@ function scheduleRegen(){
   regenTimer = setTimeout(()=>{ regenTimer = null; generateBuffer(t); }, 120);
 }
 
-// voice chips (granular | drum)
-document.querySelectorAll("#voiceChips .chip").forEach(el=>{
-  el.addEventListener("click", ()=>{
-    document.querySelectorAll("#voiceChips .chip").forEach(x=> x.classList.remove("on"));
-    el.classList.add("on");
-    const t = CT();
-    t.voice = el.dataset.voice;
-    if(t.voice === "granular" && !t.buffer && G.ctx) generateBuffer(t);
-    drawWaveform();
-  });
-});
-
 // source chips
 document.querySelectorAll("#srcTypeChips .chip").forEach(el=>{
   el.addEventListener("click", ()=>{
@@ -1423,9 +1442,16 @@ function refreshUIForTrack(){
   setSlider("spread",  t.spread,  fmtPct);
   setSlider("gain",    t.grainGain, fmtDB);
 
-  document.querySelectorAll("#voiceChips .chip").forEach(c=>{
-    c.classList.toggle("on", c.dataset.voice === (t.voice || "granular"));
-  });
+  const voiceNames = {
+    granular: "Granular", kick: "Kick (TR-808)", snare: "Snare (TR-808)",
+    hatc: "Closed Hat (TR-808)", hato: "Open Hat (TR-808)", clap: "Clap (TR-808)",
+    tom: "Tom (TR-808)", cym: "Cymbal (TR-808)", cow: "Cowbell (TR-808)",
+  };
+  $("voiceLabel").textContent = voiceNames[t.voice || "granular"] || t.voice;
+  $("voiceMeta").textContent = (t.voice === "granular")
+    ? "uses Granular Source below — Pitch / Pos / Pan / Env all apply"
+    : "fixed analog voice — Pitch = tune, Size = decay, Pan-Spread + Pitch-Jitter add variation";
+
   document.querySelectorAll("#srcTypeChips .chip").forEach(c=>{
     c.classList.toggle("on", c.dataset.src === t.srcType);
   });
@@ -2550,7 +2576,7 @@ function applyState(s){
       Object.assign(t, {
         mute: !!ts.mute, solo: !!ts.solo, armed: !!ts.armed,
         gain_db: ts.gain_db, pan: ts.pan,
-        voice: ts.voice || "granular",
+        // voice intentionally not restored — it's fixed per track index by preset
         srcType: ts.srcType, freq: ts.freq, blen: ts.blen,
         size: ts.size, rate: ts.rate, perbeat: ts.perbeat, rJit: ts.rJit,
         pos: ts.pos, pJit: ts.pJit, scan: ts.scan, freeze: !!ts.freeze,
@@ -2744,10 +2770,10 @@ document.addEventListener("keydown", e=>{
     t.seq.mode = t.seq.mode === "slice" ? "hit" : "slice";
     buildPatternGrid();
   }
-  // 1-4 = select track (most frequent live action)
-  const tIdx = "1234".indexOf(e.key);
+  // 1–9 = T1–T9, 0 = T10  (12 tracks total — use strip click for T11/T12)
+  const tIdx = "1234567890".indexOf(e.key);
   if(tIdx >= 0){ selectTrack(tIdx); return; }
-  // F1-F4 keep working as an alias
+  // F1-F4 alias
   if(e.key === "F1") { e.preventDefault(); selectTrack(0); }
   if(e.key === "F2") { e.preventDefault(); selectTrack(1); }
   if(e.key === "F3") { e.preventDefault(); selectTrack(2); }
