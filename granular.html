@@ -341,6 +341,73 @@
   .seg button:last-child{ border-right:none; }
   .seg button.on{ background: var(--acc); color:#07181a; }
 
+  /* sequencer */
+  .seq-toolbar{
+    display:flex; align-items:center; gap: 10px; flex-wrap: wrap;
+  }
+  .seq-toolbar h2{ margin: 0 !important; }
+  .seq-toolbar .group{
+    display:flex; align-items:center; gap: 6px;
+    font-size: 10px;
+    color: var(--ink-d);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .seq-toolbar .seg{ margin: 0; }
+  .seq-toolbar .seg button{ padding: 5px 8px; }
+  .seq-grid{
+    display: grid; gap: 2px;
+    margin-top: 10px;
+  }
+  .seq-cell{
+    aspect-ratio: 1 / 1;
+    background: var(--panel);
+    border: 1px solid var(--line2);
+    font-family: "JetBrains Mono","SF Mono",monospace;
+    font-size: 9px;
+    color: var(--ink-dd);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.05s;
+  }
+  .seq-cell:hover{ border-color: var(--acc-d); }
+  .seq-cell.on{
+    background: var(--acc);
+    color: #07181a;
+    border-color: var(--acc);
+  }
+  .seq-cell.cur{
+    box-shadow: 0 0 0 2px var(--warn) inset;
+  }
+  .seq-cell.beat{ border-color: var(--line2); position: relative; }
+  .seq-cell.beat::before{
+    content:""; position:absolute; top:-3px; left:0; right:0; height:2px; background: var(--acc-d);
+    opacity: 0.6;
+  }
+
+  /* memory */
+  .mem-grid{
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .mem-btn{
+    padding: 9px 4px;
+    font-family: "JetBrains Mono","SF Mono",monospace;
+    font-size: 10px;
+    letter-spacing: 0.10em;
+    text-align: center;
+    background: var(--panel);
+    border: 1px solid var(--line2);
+    color: var(--ink-dd);
+    cursor: pointer;
+  }
+  .mem-btn:hover{ color: var(--ink); border-color: var(--acc-d); }
+  .mem-btn.full{ color: var(--acc); border-color: var(--acc-d); }
+  .mem-btn.cur{ background: var(--acc); color: #07181a; border-color: var(--acc); }
+
   @media (max-width: 1100px){
     main{ grid-template-columns: 1fr; }
     .visuals{ grid-template-columns: 1fr; }
@@ -413,6 +480,27 @@
       <div class="row"><label>Reverb Tail</label><span class="val" id="revTailVal">3.0 s</span></div>
       <input type="range" id="revTail" min="0.2" max="8" step="0.1" value="3" />
     </div>
+
+    <div class="block">
+      <h2>Memory</h2>
+      <div class="mem-grid" id="memGrid"></div>
+      <div class="meta" style="margin-top: 8px;">
+        click = recall · shift+click = save · alt+click = clear
+      </div>
+    </div>
+
+    <div class="block">
+      <h2>Project</h2>
+      <div style="display:flex; gap: 6px;">
+        <button id="projSave" style="flex:1;">Save…</button>
+        <button id="projLoad" style="flex:1;">Load…</button>
+        <input id="projFile" type="file" accept="application/json,.json" style="display:none" />
+      </div>
+      <div class="meta" style="margin-top: 8px;">
+        params + sequencer + memories<br>
+        (audio files are not embedded — reload manually)
+      </div>
+    </div>
   </section>
 
 
@@ -467,8 +555,60 @@
     <!-- waveform + position -->
     <div class="canvas-wrap" style="height: 240px;">
       <canvas id="wave"></canvas>
-      <div class="canvas-label">BUFFER · GRAINS</div>
+      <div class="canvas-label">BUFFER · GRAINS · SLICES</div>
       <div class="canvas-coord" id="waveCoord">0.00 / 0.00 s</div>
+    </div>
+
+    <!-- sequencer -->
+    <div class="stage-block">
+      <div class="seq-toolbar">
+        <h2 style="font-size:10px; letter-spacing: 0.28em; color: var(--ink-d); text-transform: uppercase; display:flex; align-items:center; gap:8px;">
+          <span style="display:inline-block; width:6px; height:6px; background: var(--acc);"></span>Sequencer
+        </h2>
+        <div class="group">
+          <span>Mode</span>
+          <div class="seg" id="seqEnableSeg">
+            <button class="on" data-seq="0">Off</button>
+            <button data-seq="1">On</button>
+          </div>
+        </div>
+        <div class="group">
+          <span>Steps</span>
+          <div class="seg" id="stepCountSeg">
+            <button data-steps="8">8</button>
+            <button class="on" data-steps="16">16</button>
+            <button data-steps="32">32</button>
+          </div>
+        </div>
+        <div class="group">
+          <span>Slices</span>
+          <div class="seg" id="sliceCountSeg">
+            <button data-slices="4">4</button>
+            <button data-slices="8">8</button>
+            <button class="on" data-slices="16">16</button>
+            <button data-slices="32">32</button>
+          </div>
+        </div>
+        <div class="group">
+          <span>Step</span>
+          <div class="seg" id="seqRateSeg">
+            <button data-rate="4">1/4</button>
+            <button data-rate="8">1/8</button>
+            <button class="on" data-rate="16">1/16</button>
+            <button data-rate="32">1/32</button>
+          </div>
+        </div>
+        <div style="display:flex; gap:4px; margin-left:auto;">
+          <button id="seqShuffle">Shuffle</button>
+          <button id="seqEuclid">Euclid</button>
+          <button id="seqFill">Fill</button>
+          <button id="seqClear">Clear</button>
+        </div>
+      </div>
+      <div class="seq-grid" id="seqGrid"></div>
+      <div class="meta" style="margin-top: 6px;">
+        click = toggle · right-click = next slice · shift+click = clear cell · cells show slice index 1—N
+      </div>
     </div>
 
     <!-- visuals row -->
@@ -484,7 +624,7 @@
     </div>
 
     <div class="hint" id="hint">
-      space = play/stop · t = tap · r = re-gen · 1–9 = source type · g = freeze · drag waveform = scrub position
+      space play · t tap · r re-gen · g freeze · 1–9 source · s shuffle slices · q seq on/off · drag waveform = scrub
     </div>
   </div>
 
@@ -624,6 +764,22 @@ const S = {
   grainHistory: [], // recent grain start positions (for waveform overlay)
   beat: 1, bar: 1,
   tapTimes: [],
+
+  // sequencer
+  seq: {
+    enabled: false,
+    steps:   16,
+    slices:  16,
+    rate:    16,            // step subdivision: 1/N notes
+    active:  new Array(32).fill(false),
+    sliceMap:new Array(32).fill(0).map((_,i)=> i % 16),
+    currentStep: -1,
+    euclidIdx: 0,
+  },
+
+  // memory bank
+  memories: new Array(10).fill(null),
+  lastMem:  -1,
 };
 
 /* ------------- DOM bindings ------------- */
@@ -981,13 +1137,35 @@ function schedTick(){
     buildIR(S.revTail);
   }
 
-  // schedule grains until lookahead window full
-  while(S.nextGrainTime < now + S.scheduleAheadTime){
-    fireGrain(S.nextGrainTime);
-    advanceGrainTime();
+  if(S.seq.enabled){
+    // step-driven scheduling
+    const stepDur = 60 / (S.bpm * S.seq.rate / 4); // 1/rate note at current bpm
+    while(S.nextGrainTime < now + S.scheduleAheadTime){
+      S.seq.currentStep = (S.seq.currentStep + 1) % S.seq.steps;
+      const idx = S.seq.currentStep;
+      if(S.seq.active[idx]){
+        const posN = (S.seq.sliceMap[idx] + 0.5) / S.seq.slices;
+        fireGrain(S.nextGrainTime, posN);
+      }
+      scheduleStepVisual(idx, S.nextGrainTime);
+      S.nextGrainTime += stepDur;
+    }
+  } else {
+    while(S.nextGrainTime < now + S.scheduleAheadTime){
+      fireGrain(S.nextGrainTime);
+      advanceGrainTime();
+    }
   }
 
   setTimeout(schedTick, S.lookahead);
+}
+
+function scheduleStepVisual(idx, when){
+  const ms = Math.max(0, (when - S.ctx.currentTime) * 1000);
+  setTimeout(()=>{
+    const cells = document.querySelectorAll("#seqGrid .seq-cell");
+    cells.forEach((el,i)=> el.classList.toggle("cur", i === idx));
+  }, ms);
 }
 
 function advanceGrainTime(){
@@ -1011,19 +1189,19 @@ function advanceGrainTime(){
   }
 }
 
-function fireGrain(when){
+function fireGrain(when, posOverride){
   if(!S.buffer) return;
 
   const dur   = clamp(S.size_s, 0.002, 2.0);
-  const dur_play_buf = dur; // we play `dur` seconds of buffer time at base rate, but pitched
   const pitJit = rand(-S.pitJit, S.pitJit);
   const semis  = S.pit + pitJit;
   const rate   = Math.pow(2, semis/12);
   const reverse = (Math.random() < S.revProb_n);
 
   // position with jitter, normalized 0..1 of buffer
-  const jit = rand(-S.pJit_n, S.pJit_n);
-  const posN = clamp(S.pos + jit, 0, 1);
+  const jitter = rand(-S.pJit_n, S.pJit_n);
+  const base   = (posOverride !== undefined) ? posOverride : S.pos;
+  const posN   = clamp(base + jitter, 0, 1);
   const offset = posN * Math.max(0, S.bufferDuration - dur*rate - 0.001);
 
   // pan
@@ -1233,6 +1411,29 @@ function drawWaveOverlay(){
   // re-blit base
   drawWaveform();
 
+  // slice boundaries (subtle dashed lines)
+  if(S.seq.slices >= 2){
+    const n = S.seq.slices;
+    waveCtx.strokeStyle = "rgba(255,255,255,0.08)";
+    waveCtx.setLineDash([2,3]);
+    waveCtx.beginPath();
+    for(let i=1; i<n; i++){
+      const sx = (i/n) * w;
+      waveCtx.moveTo(sx, 0); waveCtx.lineTo(sx, h);
+    }
+    waveCtx.stroke();
+    waveCtx.setLineDash([]);
+  }
+
+  // current sequencer slice highlight
+  if(S.seq.enabled && S.seq.currentStep >= 0 && S.seq.active[S.seq.currentStep]){
+    const sIdx = S.seq.sliceMap[S.seq.currentStep];
+    const sx0  = (sIdx / S.seq.slices) * w;
+    const sx1  = ((sIdx+1) / S.seq.slices) * w;
+    waveCtx.fillStyle = "rgba(93,198,200,0.12)";
+    waveCtx.fillRect(sx0, 0, sx1-sx0, h);
+  }
+
   // position marker
   const x = S.pos * w;
   waveCtx.strokeStyle = "#d3503a";
@@ -1402,6 +1603,15 @@ document.addEventListener("keydown", e=>{
       b.classList.toggle("on", b.dataset.frz === (S.freeze? "1":"0"));
     });
   }
+  if(e.key === "s") shuffleSlices();
+  if(e.key === "q"){
+    S.seq.enabled = !S.seq.enabled;
+    document.querySelectorAll("#seqEnableSeg button").forEach(b=>{
+      b.classList.toggle("on", b.dataset.seq === (S.seq.enabled? "1":"0"));
+    });
+    S.seq.currentStep = -1;
+    if(S.ctx && S.running) S.nextGrainTime = S.ctx.currentTime + 0.05;
+  }
   const idx = "123456789".indexOf(e.key);
   if(idx>=0){
     const chips = document.querySelectorAll("#srcTypeChips .chip");
@@ -1409,8 +1619,315 @@ document.addEventListener("keydown", e=>{
   }
 });
 
+/* ------------- sequencer ------------- */
+function buildSeqGrid(){
+  const grid = $("seqGrid");
+  grid.innerHTML = "";
+  grid.style.gridTemplateColumns = `repeat(${S.seq.steps}, 1fr)`;
+  const stepsPerBeat = S.seq.rate / 4; // e.g. 1/16 → 4 per beat
+  for(let i=0; i<S.seq.steps; i++){
+    const cell = document.createElement("div");
+    let cls = "seq-cell";
+    if(S.seq.active[i]) cls += " on";
+    if(stepsPerBeat>=1 && (i % stepsPerBeat === 0)) cls += " beat";
+    cell.className = cls;
+    cell.dataset.idx = i;
+    cell.textContent = S.seq.active[i]
+      ? String(S.seq.sliceMap[i]+1).padStart(2,"0")
+      : "";
+    cell.addEventListener("click", e=>{
+      const idx = +cell.dataset.idx;
+      if(e.shiftKey){
+        S.seq.active[idx] = false;
+      } else {
+        S.seq.active[idx] = !S.seq.active[idx];
+        if(S.seq.active[idx]) S.seq.sliceMap[idx] = Math.floor(Math.random()*S.seq.slices);
+      }
+      buildSeqGrid();
+    });
+    cell.addEventListener("contextmenu", e=>{
+      e.preventDefault();
+      const idx = +cell.dataset.idx;
+      if(!S.seq.active[idx]) S.seq.active[idx] = true;
+      S.seq.sliceMap[idx] = (S.seq.sliceMap[idx]+1) % S.seq.slices;
+      buildSeqGrid();
+    });
+    grid.appendChild(cell);
+  }
+}
+
+// sequencer segs
+document.querySelectorAll("#seqEnableSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#seqEnableSeg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    S.seq.enabled = b.dataset.seq === "1";
+    S.seq.currentStep = -1;
+    if(S.ctx && S.running) S.nextGrainTime = S.ctx.currentTime + 0.05;
+  });
+});
+document.querySelectorAll("#stepCountSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#stepCountSeg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    S.seq.steps = +b.dataset.steps;
+    buildSeqGrid();
+  });
+});
+document.querySelectorAll("#sliceCountSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#sliceCountSeg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    S.seq.slices = +b.dataset.slices;
+    for(let i=0;i<S.seq.sliceMap.length;i++) S.seq.sliceMap[i] = S.seq.sliceMap[i] % S.seq.slices;
+    buildSeqGrid();
+  });
+});
+document.querySelectorAll("#seqRateSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#seqRateSeg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    S.seq.rate = +b.dataset.rate;
+    buildSeqGrid();
+  });
+});
+
+$("seqShuffle").addEventListener("click", shuffleSlices);
+$("seqClear").addEventListener("click", ()=>{
+  for(let i=0;i<S.seq.active.length;i++) S.seq.active[i] = false;
+  buildSeqGrid();
+});
+$("seqFill").addEventListener("click", ()=>{
+  for(let i=0;i<S.seq.steps;i++){
+    S.seq.active[i] = true;
+    S.seq.sliceMap[i] = i % S.seq.slices;
+  }
+  buildSeqGrid();
+});
+$("seqEuclid").addEventListener("click", ()=>{
+  // cycle through musical k counts
+  const choices = [3,5,7,9,11,13];
+  const k = choices[S.seq.euclidIdx % choices.length];
+  S.seq.euclidIdx += 1;
+  const pat = euclid(k, S.seq.steps);
+  for(let i=0;i<S.seq.steps;i++){
+    S.seq.active[i] = !!pat[i];
+    if(S.seq.active[i]) S.seq.sliceMap[i] = Math.floor(Math.random()*S.seq.slices);
+  }
+  buildSeqGrid();
+});
+
+function shuffleSlices(){
+  for(let i=0;i<S.seq.steps;i++){
+    if(S.seq.active[i]) S.seq.sliceMap[i] = Math.floor(Math.random()*S.seq.slices);
+  }
+  buildSeqGrid();
+}
+
+// Bresenham euclidean rhythm
+function euclid(k, n){
+  const r = new Array(n).fill(0);
+  let bucket = 0;
+  for(let i=0;i<n;i++){
+    bucket += k;
+    if(bucket >= n){ bucket -= n; r[i] = 1; }
+  }
+  return r;
+}
+
+
+/* ------------- memory + project ------------- */
+function snapshotState(){
+  return {
+    srcType: S.srcType,
+    freq:   +$("freq").value,
+    blen:   +$("blen").value,
+    master: +$("master").value,
+    lpf:    +$("lpf").value,
+    rev:    +$("rev").value,
+    revTail:+$("revTail").value,
+    bpm:    +$("bpm").value,
+    sub:    S.sub,
+    sync:   S.sync,
+    size:   +$("size").value,
+    rate:   +$("rate").value,
+    perbeat:+$("perbeat").value,
+    rJit:   +$("rJit").value,
+    pos:    +$("pos").value,
+    pJit:   +$("pJit").value,
+    scan:   +$("scan").value,
+    freeze: S.freeze,
+    pit:    +$("pit").value,
+    pitJit: +$("pitJit").value,
+    revProb:+$("revProb").value,
+    spread: +$("spread").value,
+    env:    S.env,
+    gain:   +$("gain").value,
+    seq: {
+      enabled: S.seq.enabled,
+      steps:   S.seq.steps,
+      slices:  S.seq.slices,
+      rate:    S.seq.rate,
+      active:  S.seq.active.slice(),
+      sliceMap:S.seq.sliceMap.slice(),
+    },
+  };
+}
+
+function applyState(s){
+  if(!s) return;
+  const setSlider = (id,v)=>{
+    const el = $(id); if(!el || v===undefined) return;
+    el.value = v; el.dispatchEvent(new Event("input"));
+  };
+  setSlider("freq", s.freq);
+  setSlider("blen", s.blen);
+  setSlider("master", s.master);
+  setSlider("lpf",  s.lpf);
+  setSlider("rev",  s.rev);
+  setSlider("revTail", s.revTail);
+  setSlider("bpm",  s.bpm);
+  setSlider("size", s.size);
+  setSlider("rate", s.rate);
+  setSlider("perbeat", s.perbeat);
+  setSlider("rJit", s.rJit);
+  setSlider("pos",  s.pos);
+  setSlider("pJit", s.pJit);
+  setSlider("scan", s.scan);
+  setSlider("pit",  s.pit);
+  setSlider("pitJit", s.pitJit);
+  setSlider("revProb", s.revProb);
+  setSlider("spread", s.spread);
+  setSlider("gain", s.gain);
+  updateBpmDisplay();
+
+  const setSeg = (segId, dataAttr, val)=>{
+    document.querySelectorAll("#"+segId+" button").forEach(b=>{
+      b.classList.toggle("on", String(b.dataset[dataAttr]) === String(val));
+    });
+  };
+  setSeg("subSeg",     "sub", s.sub);
+  setSeg("syncSeg",    "sync", s.sync ? 1 : 0);
+  setSeg("freezeSeg",  "frz", s.freeze ? 1 : 0);
+  setSeg("envSeg",     "env", s.env);
+
+  S.sub = s.sub; S.sync = !!s.sync; S.freeze = !!s.freeze; S.env = s.env;
+  $("ppqLabel").textContent = "1/"+S.sub;
+
+  // source chip
+  document.querySelectorAll("#srcTypeChips .chip").forEach(c=>{
+    c.classList.toggle("on", c.dataset.src === s.srcType);
+  });
+  S.srcType = s.srcType;
+
+  // sequencer
+  if(s.seq){
+    S.seq.enabled  = !!s.seq.enabled;
+    S.seq.steps    = s.seq.steps;
+    S.seq.slices   = s.seq.slices;
+    S.seq.rate     = s.seq.rate || 16;
+    S.seq.active   = (s.seq.active   || []).slice(0, 32);
+    while(S.seq.active.length < 32)   S.seq.active.push(false);
+    S.seq.sliceMap = (s.seq.sliceMap || []).slice(0, 32);
+    while(S.seq.sliceMap.length < 32) S.seq.sliceMap.push(0);
+    setSeg("seqEnableSeg", "seq",    S.seq.enabled ? 1 : 0);
+    setSeg("stepCountSeg", "steps",  S.seq.steps);
+    setSeg("sliceCountSeg","slices", S.seq.slices);
+    setSeg("seqRateSeg",   "rate",   S.seq.rate);
+    buildSeqGrid();
+  }
+
+  // regen buffer for synth sources (file source needs manual reload)
+  if(s.srcType && s.srcType !== "file") generateBuffer();
+}
+
+function buildMemGrid(){
+  const g = $("memGrid");
+  g.innerHTML = "";
+  for(let i=0; i<10; i++){
+    const b = document.createElement("div");
+    let cls = "mem-btn" + (S.memories[i] ? " full" : "") + (S.lastMem===i ? " cur" : "");
+    b.className = cls;
+    b.textContent = "M"+String(i+1).padStart(2,"0");
+    b.dataset.idx = i;
+    b.title = S.memories[i] ? "occupied · click to recall" : "empty · shift+click to save";
+    b.addEventListener("click", e=>{
+      const idx = +b.dataset.idx;
+      if(e.altKey){
+        S.memories[idx] = null;
+        localStorage.removeItem("granular.mem."+idx);
+        if(S.lastMem === idx) S.lastMem = -1;
+      } else if(e.shiftKey){
+        S.memories[idx] = snapshotState();
+        try{ localStorage.setItem("granular.mem."+idx, JSON.stringify(S.memories[idx])); }catch(_){}
+        S.lastMem = idx;
+      } else if(S.memories[idx]){
+        applyState(S.memories[idx]);
+        S.lastMem = idx;
+      }
+      buildMemGrid();
+    });
+    g.appendChild(b);
+  }
+}
+
+function loadMemoriesFromLocal(){
+  for(let i=0;i<10;i++){
+    const raw = localStorage.getItem("granular.mem."+i);
+    if(raw){ try{ S.memories[i] = JSON.parse(raw); }catch(_){} }
+  }
+}
+
+$("projSave").addEventListener("click", ()=>{
+  const proj = {
+    app:     "granular",
+    version: 1,
+    date:    new Date().toISOString(),
+    state:   snapshotState(),
+    memories:S.memories,
+  };
+  const blob = new Blob([JSON.stringify(proj, null, 2)], {type:"application/json"});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  const stamp= new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
+  a.href = url;
+  a.download = "granular-"+stamp+".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 1000);
+});
+
+$("projLoad").addEventListener("click", ()=> $("projFile").click());
+$("projFile").addEventListener("change", async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const text = await f.text();
+    const proj = JSON.parse(text);
+    if(proj && proj.state) applyState(proj.state);
+    if(proj && Array.isArray(proj.memories)){
+      S.memories = proj.memories.slice(0,10);
+      while(S.memories.length < 10) S.memories.push(null);
+      for(let i=0;i<10;i++){
+        if(S.memories[i]) {
+          try{ localStorage.setItem("granular.mem."+i, JSON.stringify(S.memories[i])); }catch(_){}
+        } else {
+          localStorage.removeItem("granular.mem."+i);
+        }
+      }
+      buildMemGrid();
+    }
+  } catch(err){
+    alert("Load failed: "+err.message);
+  } finally {
+    e.target.value = "";
+  }
+});
+
+
 /* ------------- init ------------- */
 window.addEventListener("load", ()=>{
+  loadMemoriesFromLocal();
+  buildMemGrid();
+  buildSeqGrid();
   drawWaveform();
   drawScope(); drawSpec();
   updateBpmDisplay();
