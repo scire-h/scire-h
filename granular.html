@@ -2,7 +2,9 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=1180" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>GRANULAR // signal + buffer granulator</title>
 <style>
   :root{
@@ -20,7 +22,7 @@
     --warn:       #d3503a;
     --ok:         #8ec07c;
   }
-  *{ box-sizing: border-box; }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html,body{
     margin:0; padding:0;
     background: var(--bg);
@@ -29,6 +31,10 @@
     -webkit-font-smoothing: antialiased;
     user-select: none;
     overflow-x: hidden;
+    overscroll-behavior: none;
+  }
+  button, .chip, .seq-cell, .mem-btn, input[type=range], select{
+    touch-action: manipulation;
   }
   /* ascii grid background */
   body::before{
@@ -412,6 +418,21 @@
     main{ grid-template-columns: 1fr; }
     .visuals{ grid-template-columns: 1fr; }
   }
+  @media (max-width: 720px){
+    header{ padding: 12px 14px; }
+    header .brand h1{ font-size: 11px; }
+    header .brand .sub{ display: none; }
+    section.panel{ padding: 14px 14px 18px; }
+    .stage-block{ padding: 14px 14px; }
+    .canvas-wrap{ }
+    .seq-cell{ min-height: 30px; aspect-ratio: auto; height: 34px; font-size: 10px; }
+    .seq-toolbar{ gap: 8px; }
+    .seq-toolbar .group{ gap: 4px; font-size: 9px; letter-spacing: 0.10em; }
+    .seq-toolbar .seg button{ padding: 5px 6px; font-size: 9px; }
+    .bpm-display{ font-size: 22px; min-width: 100px; padding: 0 12px; }
+    .mem-btn{ padding: 11px 4px; font-size: 11px; }
+    .chips .chip{ padding: 7px 10px; }
+  }
 </style>
 </head>
 <body>
@@ -485,7 +506,7 @@
       <h2>Memory</h2>
       <div class="mem-grid" id="memGrid"></div>
       <div class="meta" style="margin-top: 8px;">
-        click = recall · shift+click = save · alt+click = clear
+        tap empty = save · tap full = recall · long-press = clear
       </div>
     </div>
 
@@ -607,7 +628,7 @@
       </div>
       <div class="seq-grid" id="seqGrid"></div>
       <div class="meta" style="margin-top: 6px;">
-        click = toggle · right-click = next slice · shift+click = clear cell · cells show slice index 1—N
+        tap = toggle · long-press = next slice · shift+tap = clear · numbers = slice index
       </div>
     </div>
 
@@ -1635,25 +1656,48 @@ function buildSeqGrid(){
     cell.textContent = S.seq.active[i]
       ? String(S.seq.sliceMap[i]+1).padStart(2,"0")
       : "";
-    cell.addEventListener("click", e=>{
-      const idx = +cell.dataset.idx;
-      if(e.shiftKey){
-        S.seq.active[idx] = false;
-      } else {
-        S.seq.active[idx] = !S.seq.active[idx];
-        if(S.seq.active[idx]) S.seq.sliceMap[idx] = Math.floor(Math.random()*S.seq.slices);
-      }
-      buildSeqGrid();
-    });
-    cell.addEventListener("contextmenu", e=>{
-      e.preventDefault();
-      const idx = +cell.dataset.idx;
-      if(!S.seq.active[idx]) S.seq.active[idx] = true;
-      S.seq.sliceMap[idx] = (S.seq.sliceMap[idx]+1) % S.seq.slices;
-      buildSeqGrid();
-    });
+    attachCellPointer(cell);
     grid.appendChild(cell);
   }
+}
+
+function cycleSlice(idx){
+  if(!S.seq.active[idx]) S.seq.active[idx] = true;
+  S.seq.sliceMap[idx] = (S.seq.sliceMap[idx]+1) % S.seq.slices;
+  buildSeqGrid();
+}
+
+function attachCellPointer(cell){
+  let timer = null, longFired = false, sx=0, sy=0;
+  cell.addEventListener("pointerdown", e=>{
+    longFired = false; sx = e.clientX; sy = e.clientY;
+    timer = setTimeout(()=>{
+      longFired = true;
+      cycleSlice(+cell.dataset.idx);
+    }, 380);
+  });
+  cell.addEventListener("pointermove", e=>{
+    if(timer && (Math.abs(e.clientX-sx)>6 || Math.abs(e.clientY-sy)>6)){
+      clearTimeout(timer); timer = null;
+    }
+  });
+  cell.addEventListener("pointerup", e=>{
+    if(timer){ clearTimeout(timer); timer = null; }
+    if(longFired) return;
+    const idx = +cell.dataset.idx;
+    if(e.shiftKey){
+      S.seq.active[idx] = false;
+    } else {
+      S.seq.active[idx] = !S.seq.active[idx];
+      if(S.seq.active[idx]) S.seq.sliceMap[idx] = Math.floor(Math.random()*S.seq.slices);
+    }
+    buildSeqGrid();
+  });
+  cell.addEventListener("pointercancel", ()=>{ if(timer){ clearTimeout(timer); timer = null; } });
+  cell.addEventListener("contextmenu", e=>{
+    e.preventDefault();
+    cycleSlice(+cell.dataset.idx);
+  });
 }
 
 // sequencer segs
@@ -1850,25 +1894,56 @@ function buildMemGrid(){
     b.className = cls;
     b.textContent = "M"+String(i+1).padStart(2,"0");
     b.dataset.idx = i;
-    b.title = S.memories[i] ? "occupied · click to recall" : "empty · shift+click to save";
-    b.addEventListener("click", e=>{
-      const idx = +b.dataset.idx;
-      if(e.altKey){
-        S.memories[idx] = null;
-        localStorage.removeItem("granular.mem."+idx);
-        if(S.lastMem === idx) S.lastMem = -1;
-      } else if(e.shiftKey){
-        S.memories[idx] = snapshotState();
-        try{ localStorage.setItem("granular.mem."+idx, JSON.stringify(S.memories[idx])); }catch(_){}
-        S.lastMem = idx;
-      } else if(S.memories[idx]){
-        applyState(S.memories[idx]);
-        S.lastMem = idx;
-      }
-      buildMemGrid();
-    });
+    b.title = S.memories[i] ? "occupied · tap to recall · long-press to clear" : "empty · tap to save";
+    attachMemPointer(b, i);
     g.appendChild(b);
   }
+}
+
+function attachMemPointer(b, idx){
+  let timer = null, longFired = false, sx = 0, sy = 0;
+  b.addEventListener("pointerdown", e=>{
+    longFired = false; sx = e.clientX; sy = e.clientY;
+    timer = setTimeout(()=>{
+      longFired = true;
+      // long-press = clear
+      S.memories[idx] = null;
+      localStorage.removeItem("granular.mem."+idx);
+      if(S.lastMem === idx) S.lastMem = -1;
+      buildMemGrid();
+      b.style.transition = "transform 0.08s";
+      b.style.transform = "scale(0.92)";
+      setTimeout(()=>{ b.style.transform = ""; }, 120);
+    }, 600);
+  });
+  b.addEventListener("pointermove", e=>{
+    if(timer && (Math.abs(e.clientX-sx)>6 || Math.abs(e.clientY-sy)>6)){
+      clearTimeout(timer); timer = null;
+    }
+  });
+  b.addEventListener("pointerup", e=>{
+    if(timer){ clearTimeout(timer); timer = null; }
+    if(longFired) return;
+    if(e.altKey){
+      S.memories[idx] = null;
+      localStorage.removeItem("granular.mem."+idx);
+      if(S.lastMem === idx) S.lastMem = -1;
+    } else if(e.shiftKey){
+      S.memories[idx] = snapshotState();
+      try{ localStorage.setItem("granular.mem."+idx, JSON.stringify(S.memories[idx])); }catch(_){}
+      S.lastMem = idx;
+    } else if(S.memories[idx]){
+      applyState(S.memories[idx]);
+      S.lastMem = idx;
+    } else {
+      // empty slot → save current state
+      S.memories[idx] = snapshotState();
+      try{ localStorage.setItem("granular.mem."+idx, JSON.stringify(S.memories[idx])); }catch(_){}
+      S.lastMem = idx;
+    }
+    buildMemGrid();
+  });
+  b.addEventListener("pointercancel", ()=>{ if(timer){ clearTimeout(timer); timer = null; } });
 }
 
 function loadMemoriesFromLocal(){
