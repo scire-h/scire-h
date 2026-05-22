@@ -359,6 +359,74 @@
     background: var(--acc-d); opacity: 0.6;
   }
 
+  /* pattern (4 × N grid, TR-808 style) */
+  .pattern-toolbar{ display:flex; align-items:center; gap: 10px; flex-wrap: wrap; }
+  .pattern-toolbar .group{
+    display:flex; align-items:center; gap: 6px;
+    font-size: 10px; color: var(--ink-d);
+    letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .pattern-toolbar .seg{ margin: 0; }
+  .pattern-toolbar .seg button{ padding: 5px 8px; }
+
+  .pattern-grid{
+    display: grid; gap: 3px;
+    margin-top: 12px;
+  }
+  .pattern-row{
+    display: grid;
+    grid-template-columns: 34px 26px 38px 1fr;
+    gap: 3px;
+    align-items: stretch;
+    padding: 2px;
+    border: 1px solid transparent;
+  }
+  .pattern-row.sel{ border-color: var(--line2); background: rgba(93,198,200,0.04); }
+  .pattern-row .lbl{
+    font-family: "JetBrains Mono","SF Mono",monospace;
+    font-size: 11px; letter-spacing: 0.12em;
+    color: var(--ink); text-align: center; font-weight: 600;
+    background: var(--panel); border: 1px solid var(--line2);
+    display:flex; align-items:center; justify-content:center;
+    cursor: pointer;
+  }
+  .pattern-row[data-track="0"] .lbl{ border-left: 3px solid var(--t1); }
+  .pattern-row[data-track="1"] .lbl{ border-left: 3px solid var(--t2); }
+  .pattern-row[data-track="2"] .lbl{ border-left: 3px solid var(--t3); }
+  .pattern-row[data-track="3"] .lbl{ border-left: 3px solid var(--t4); }
+  .pattern-row.sel .lbl{ background: var(--acc); color: #07181a; }
+  .pattern-row .ena, .pattern-row .modet{
+    background: var(--panel); border: 1px solid var(--line2);
+    color: var(--ink-dd); font-size: 10px; letter-spacing: 0.06em;
+    font-family: "JetBrains Mono","SF Mono",monospace;
+    display:flex; align-items:center; justify-content:center;
+    cursor: pointer;
+  }
+  .pattern-row .ena.on{ background: var(--acc); color: #07181a; border-color: var(--acc); }
+  .pattern-row .modet{ font-size: 9px; }
+  .pattern-row .modet.slice{ background: var(--warn); color: #fff; border-color: var(--warn); }
+  .pattern-row .cells{ display: grid; gap: 2px; }
+  .p-cell{
+    background: var(--panel);
+    border: 1px solid var(--line2);
+    font-family: "JetBrains Mono","SF Mono",monospace;
+    font-size: 9px; color: var(--ink-dd);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; user-select: none;
+    min-height: 28px;
+    position: relative;
+  }
+  .p-cell.on{ background: var(--acc); color: #07181a; border-color: var(--acc); }
+  .pattern-row[data-track="0"] .p-cell.on{ background: var(--t1); border-color: var(--t1); }
+  .pattern-row[data-track="1"] .p-cell.on{ background: var(--t2); border-color: var(--t2); }
+  .pattern-row[data-track="2"] .p-cell.on{ background: var(--t3); border-color: var(--t3); }
+  .pattern-row[data-track="3"] .p-cell.on{ background: var(--t4); border-color: var(--t4); }
+  .p-cell.cur{ box-shadow: 0 0 0 2px var(--ink) inset; }
+  .p-cell.beat::before{
+    content:""; position:absolute; top:-4px; left:0; right:0; height:2px;
+    background: var(--acc-d); opacity: 0.7;
+  }
+
   /* memory */
   .mem-grid{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 4px; }
   .mem-btn{
@@ -632,21 +700,13 @@
       <div class="canvas-coord" id="waveCoord">0.00 / 0.00 s</div>
     </div>
 
-    <!-- sequencer -->
+    <!-- pattern (4 × N grid) -->
     <div class="stage-block">
-      <div class="seq-toolbar">
+      <div class="pattern-toolbar">
         <h2 style="font-size:10px; letter-spacing: 0.28em; color: var(--ink-d); text-transform: uppercase; display:flex; align-items:center; gap:8px; margin:0;">
           <span style="display:inline-block; width:6px; height:6px; background: var(--acc);"></span>
-          Sequencer
-          <span style="color: var(--ink-dd); margin-left: 4px;" id="seqTrackLabel">T1</span>
+          Pattern
         </h2>
-        <div class="group">
-          <span>Mode</span>
-          <div class="seg" id="seqEnableSeg">
-            <button class="on" data-seq="0">Off</button>
-            <button data-seq="1">On</button>
-          </div>
-        </div>
         <div class="group">
           <span>Steps</span>
           <div class="seg" id="stepCountSeg">
@@ -673,16 +733,17 @@
             <button data-rate="32">1/32</button>
           </div>
         </div>
-        <div style="display:flex; gap:4px; margin-left:auto;">
-          <button id="seqShuffle">Shuffle</button>
-          <button id="seqEuclid">Euclid</button>
-          <button id="seqFill">Fill</button>
-          <button id="seqClear">Clear</button>
+        <div style="display:flex; gap:4px; margin-left:auto; flex-wrap: wrap;">
+          <button id="seqShuffle">Shuffle T</button>
+          <button id="seqEuclid">Euclid T</button>
+          <button id="seqFill">Fill T</button>
+          <button id="seqClear">Clear T</button>
+          <button id="seqClearAll">Clear All</button>
         </div>
       </div>
-      <div class="seq-grid" id="seqGrid"></div>
+      <div class="pattern-grid" id="patternGrid"></div>
       <div class="meta" style="margin-top: 6px;">
-        tap = toggle · long-press = next slice · shift+tap = clear · numbers = slice index
+        tap = toggle · long-press in Slice mode = cycle slice · tap name = select track for editing
       </div>
     </div>
 
@@ -698,7 +759,7 @@
     </div>
 
     <div class="hint" id="hint">
-      space play · t tap · r re-gen · g freeze · 1–9 source · s shuffle · q seq · F1–F4 select track · drag waveform = scrub
+      space play · t tap · r re-gen · g freeze · 1–9 src · s shuffle · q seq · h mode · F1–F4 track · drag wave = scrub
     </div>
   </div>
 
@@ -799,6 +860,13 @@ const G = {
   scheduleAheadTime: 0.12, lookahead: 25,
   beat: 1, bar: 1, lastBeat: 0, tapTimes: [],
 
+  // global pattern config (steps/slices/rate apply to all 4 tracks)
+  seq: {
+    steps: 16,
+    slices: 16,
+    rate: 16,
+  },
+
   // gyro
   gyro: {
     enabled: false,
@@ -844,7 +912,8 @@ function makeTrack(idx){
     env: "hann", grainGain: 0,
 
     seq: {
-      enabled: false, steps: 16, slices: 16, rate: 16,
+      enabled: false,
+      mode: "hit",        // "hit" = TR-808 (fire grain at current Position); "slice" = chop sliceMap
       active: new Array(32).fill(false),
       sliceMap: new Array(32).fill(0).map((_,i)=> i % 16),
       currentStep: -1, euclidIdx: 0,
@@ -1248,7 +1317,6 @@ function refreshUIForTrack(){
   const t = CT();
   $("curTrkLabel").textContent = t.name;
   $("curTrkLabel2").textContent = t.name;
-  $("seqTrackLabel").textContent = t.name;
 
   const setSlider = (id, v, fmtFn)=>{
     const el = $(id), val = $(id+"Val");
@@ -1279,17 +1347,15 @@ function refreshUIForTrack(){
   document.querySelectorAll("#envSeg button").forEach(b=>{
     b.classList.toggle("on", b.dataset.env === t.env);
   });
-  document.querySelectorAll("#seqEnableSeg button").forEach(b=>{
-    b.classList.toggle("on", b.dataset.seq === (t.seq.enabled?"1":"0"));
-  });
+  // global pattern segs reflect G.seq.*
   document.querySelectorAll("#stepCountSeg button").forEach(b=>{
-    b.classList.toggle("on", String(b.dataset.steps) === String(t.seq.steps));
+    b.classList.toggle("on", String(b.dataset.steps) === String(G.seq.steps));
   });
   document.querySelectorAll("#sliceCountSeg button").forEach(b=>{
-    b.classList.toggle("on", String(b.dataset.slices) === String(t.seq.slices));
+    b.classList.toggle("on", String(b.dataset.slices) === String(G.seq.slices));
   });
   document.querySelectorAll("#seqRateSeg button").forEach(b=>{
-    b.classList.toggle("on", String(b.dataset.rate) === String(t.seq.rate));
+    b.classList.toggle("on", String(b.dataset.rate) === String(G.seq.rate));
   });
 
   if(t.buffer){
@@ -1300,7 +1366,7 @@ function refreshUIForTrack(){
     $("fileMeta").textContent = "no buffer";
   }
 
-  buildSeqGrid();
+  buildPatternGrid();
   drawWaveform();
 }
 
@@ -1364,15 +1430,20 @@ function schedTick(){
 function schedTrack(t, now){
   if(!t.buffer) return;
   if(t.seq.enabled){
-    const stepDur = 60 / (G.bpm * t.seq.rate / 4);
+    const stepDur = 60 / (G.bpm * G.seq.rate / 4);
     while(t.nextGrainTime < now + G.scheduleAheadTime){
-      t.seq.currentStep = (t.seq.currentStep + 1) % t.seq.steps;
+      t.seq.currentStep = (t.seq.currentStep + 1) % G.seq.steps;
       const idx = t.seq.currentStep;
       if(t.seq.active[idx]){
-        const posN = (t.seq.sliceMap[idx] + 0.5) / t.seq.slices;
-        fireGrain(t, t.nextGrainTime, posN);
+        if(t.seq.mode === "slice"){
+          const posN = (t.seq.sliceMap[idx] + 0.5) / G.seq.slices;
+          fireGrain(t, t.nextGrainTime, posN);
+        } else {
+          // hit mode — TR-808 style: fire grain at the track's current Position slider
+          fireGrain(t, t.nextGrainTime);
+        }
       }
-      if(t === CT()) scheduleStepVisual(idx, t.nextGrainTime);
+      schedulePatternStepVisual(t.idx, idx, t.nextGrainTime);
       t.nextGrainTime += stepDur;
     }
   } else {
@@ -1395,11 +1466,13 @@ function advanceGrainTime(t){
   }
 }
 
-function scheduleStepVisual(idx, when){
+function schedulePatternStepVisual(trackIdx, stepIdx, when){
   const ms = Math.max(0, (when - G.ctx.currentTime) * 1000);
   setTimeout(()=>{
-    const cells = document.querySelectorAll("#seqGrid .seq-cell");
-    cells.forEach((el,i)=> el.classList.toggle("cur", i === idx));
+    const row = document.querySelector(`#patternGrid .pattern-row[data-track="${trackIdx}"]`);
+    if(!row) return;
+    const cells = row.querySelectorAll(".p-cell");
+    cells.forEach((el,i)=> el.classList.toggle("cur", i === stepIdx));
   }, ms);
 }
 
@@ -1599,9 +1672,9 @@ function drawWaveOverlay(){
   const w = r.width, h = r.height;
   drawWaveform();
 
-  // slice boundaries
-  if(t.seq.slices >= 2){
-    const n = t.seq.slices;
+  // slice boundaries (only meaningful in Slice mode but always drawn)
+  if(G.seq.slices >= 2){
+    const n = G.seq.slices;
     waveCtx.strokeStyle = "rgba(255,255,255,0.08)";
     waveCtx.setLineDash([2,3]);
     waveCtx.beginPath();
@@ -1613,11 +1686,11 @@ function drawWaveOverlay(){
     waveCtx.setLineDash([]);
   }
 
-  // current sequencer slice highlight
-  if(t.seq.enabled && t.seq.currentStep >= 0 && t.seq.active[t.seq.currentStep]){
+  // current sequencer slice highlight (slice mode only)
+  if(t.seq.enabled && t.seq.mode === "slice" && t.seq.currentStep >= 0 && t.seq.active[t.seq.currentStep]){
     const sIdx = t.seq.sliceMap[t.seq.currentStep];
-    const sx0  = (sIdx / t.seq.slices) * w;
-    const sx1  = ((sIdx+1) / t.seq.slices) * w;
+    const sx0  = (sIdx / G.seq.slices) * w;
+    const sx1  = ((sIdx+1) / G.seq.slices) * w;
     waveCtx.fillStyle = "rgba(93,198,200,0.12)";
     waveCtx.fillRect(sx0, 0, sx1-sx0, h);
   }
@@ -1769,37 +1842,93 @@ function updateBeat(){
 
 
 /* ============================================================
-   SEQUENCER
+   PATTERN — 4 × N grid, TR-808 style
    ============================================================ */
-function buildSeqGrid(){
-  const t = CT();
-  const grid = $("seqGrid");
+function buildPatternGrid(){
+  const grid = $("patternGrid");
   grid.innerHTML = "";
-  grid.style.gridTemplateColumns = `repeat(${t.seq.steps}, 1fr)`;
-  const stepsPerBeat = t.seq.rate / 4;
-  for(let i=0; i<t.seq.steps; i++){
-    const cell = document.createElement("div");
-    let cls = "seq-cell";
-    if(t.seq.active[i]) cls += " on";
-    if(stepsPerBeat>=1 && (i % stepsPerBeat === 0)) cls += " beat";
-    cell.className = cls;
-    cell.dataset.idx = i;
-    cell.textContent = t.seq.active[i] ? String(t.seq.sliceMap[i]+1).padStart(2,"0") : "";
-    attachCellPointer(cell);
-    grid.appendChild(cell);
-  }
+  tracks.forEach((t, tIdx)=>{
+    const row = document.createElement("div");
+    row.className = "pattern-row" + (tIdx === G.curTrack ? " sel" : "");
+    row.dataset.track = tIdx;
+
+    // label (click to select track for editing)
+    const lbl = document.createElement("div");
+    lbl.className = "lbl";
+    lbl.textContent = t.name;
+    lbl.addEventListener("click", ()=> selectTrack(tIdx));
+    row.appendChild(lbl);
+
+    // enable toggle
+    const ena = document.createElement("div");
+    ena.className = "ena" + (t.seq.enabled ? " on" : "");
+    ena.textContent = t.seq.enabled ? "●" : "○";
+    ena.title = "sequencer on/off";
+    ena.addEventListener("click", e=>{
+      e.stopPropagation();
+      t.seq.enabled = !t.seq.enabled;
+      t.seq.currentStep = -1;
+      if(G.ctx && G.running) t.nextGrainTime = G.ctx.currentTime + 0.05;
+      ena.classList.toggle("on", t.seq.enabled);
+      ena.textContent = t.seq.enabled ? "●" : "○";
+    });
+    row.appendChild(ena);
+
+    // mode toggle
+    const md = document.createElement("div");
+    md.className = "modet" + (t.seq.mode === "slice" ? " slice" : "");
+    md.textContent = t.seq.mode === "slice" ? "SLC" : "HIT";
+    md.title = "click to toggle Hit (TR-808) / Slice (chop) mode";
+    md.addEventListener("click", e=>{
+      e.stopPropagation();
+      t.seq.mode = t.seq.mode === "slice" ? "hit" : "slice";
+      md.className = "modet" + (t.seq.mode === "slice" ? " slice" : "");
+      md.textContent = t.seq.mode === "slice" ? "SLC" : "HIT";
+      buildPatternGrid();
+    });
+    row.appendChild(md);
+
+    // cells container
+    const cells = document.createElement("div");
+    cells.className = "cells";
+    cells.style.gridTemplateColumns = `repeat(${G.seq.steps}, 1fr)`;
+    const stepsPerBeat = G.seq.rate / 4;
+    for(let i=0; i<G.seq.steps; i++){
+      const cell = document.createElement("div");
+      let cls = "p-cell";
+      if(t.seq.active[i]) cls += " on";
+      if(stepsPerBeat>=1 && (i % stepsPerBeat === 0)) cls += " beat";
+      cell.className = cls;
+      cell.dataset.idx = i;
+      cell.dataset.track = tIdx;
+      if(t.seq.mode === "slice" && t.seq.active[i]){
+        cell.textContent = String(t.seq.sliceMap[i]+1).padStart(2,"0");
+      } else {
+        cell.textContent = "";
+      }
+      attachPatternCellPointer(cell, t);
+      cells.appendChild(cell);
+    }
+    row.appendChild(cells);
+
+    grid.appendChild(row);
+  });
 }
-function cycleSlice(idx){
-  const t = CT();
+
+function cycleSliceFor(t, idx){
   if(!t.seq.active[idx]) t.seq.active[idx] = true;
-  t.seq.sliceMap[idx] = (t.seq.sliceMap[idx]+1) % t.seq.slices;
-  buildSeqGrid();
+  t.seq.sliceMap[idx] = (t.seq.sliceMap[idx]+1) % G.seq.slices;
+  buildPatternGrid();
 }
-function attachCellPointer(cell){
+
+function attachPatternCellPointer(cell, t){
   let timer = null, longFired = false, sx=0, sy=0;
   cell.addEventListener("pointerdown", e=>{
     longFired = false; sx = e.clientX; sy = e.clientY;
-    timer = setTimeout(()=>{ longFired = true; cycleSlice(+cell.dataset.idx); }, 380);
+    // long-press only meaningful in slice mode
+    if(t.seq.mode === "slice"){
+      timer = setTimeout(()=>{ longFired = true; cycleSliceFor(t, +cell.dataset.idx); }, 380);
+    }
   });
   cell.addEventListener("pointermove", e=>{
     if(timer && (Math.abs(e.clientX-sx)>6 || Math.abs(e.clientY-sy)>6)){
@@ -1809,82 +1938,106 @@ function attachCellPointer(cell){
   cell.addEventListener("pointerup", e=>{
     if(timer){ clearTimeout(timer); timer = null; }
     if(longFired) return;
-    const t = CT(); const idx = +cell.dataset.idx;
+    const idx = +cell.dataset.idx;
     if(e.shiftKey){
       t.seq.active[idx] = false;
     } else {
       t.seq.active[idx] = !t.seq.active[idx];
-      if(t.seq.active[idx]) t.seq.sliceMap[idx] = Math.floor(Math.random()*t.seq.slices);
+      if(t.seq.active[idx] && t.seq.mode === "slice"){
+        t.seq.sliceMap[idx] = Math.floor(Math.random()*G.seq.slices);
+      }
     }
-    buildSeqGrid();
+    buildPatternGrid();
   });
   cell.addEventListener("pointercancel", ()=>{ if(timer){ clearTimeout(timer); timer = null; } });
-  cell.addEventListener("contextmenu", e=>{ e.preventDefault(); cycleSlice(+cell.dataset.idx); });
+  cell.addEventListener("contextmenu", e=>{
+    e.preventDefault();
+    if(t.seq.mode === "slice") cycleSliceFor(t, +cell.dataset.idx);
+  });
 }
 
-document.querySelectorAll("#seqEnableSeg button").forEach(b=>{
-  b.addEventListener("click", ()=>{
-    document.querySelectorAll("#seqEnableSeg button").forEach(x=>x.classList.remove("on"));
-    b.classList.add("on");
-    const t = CT();
-    t.seq.enabled = b.dataset.seq === "1";
-    t.seq.currentStep = -1;
-    if(G.ctx && G.running) t.nextGrainTime = G.ctx.currentTime + 0.05;
-  });
-});
+// global Steps/Slices/Step rate handlers — apply to all tracks
 document.querySelectorAll("#stepCountSeg button").forEach(b=>{
   b.addEventListener("click", ()=>{
     document.querySelectorAll("#stepCountSeg button").forEach(x=>x.classList.remove("on"));
     b.classList.add("on");
-    CT().seq.steps = +b.dataset.steps; buildSeqGrid();
+    G.seq.steps = +b.dataset.steps;
+    buildPatternGrid();
   });
 });
 document.querySelectorAll("#sliceCountSeg button").forEach(b=>{
   b.addEventListener("click", ()=>{
     document.querySelectorAll("#sliceCountSeg button").forEach(x=>x.classList.remove("on"));
     b.classList.add("on");
-    const t = CT();
-    t.seq.slices = +b.dataset.slices;
-    for(let i=0;i<t.seq.sliceMap.length;i++) t.seq.sliceMap[i] = t.seq.sliceMap[i] % t.seq.slices;
-    buildSeqGrid();
+    G.seq.slices = +b.dataset.slices;
+    for(const t of tracks){
+      for(let i=0;i<t.seq.sliceMap.length;i++) t.seq.sliceMap[i] = t.seq.sliceMap[i] % G.seq.slices;
+    }
+    buildPatternGrid();
   });
 });
 document.querySelectorAll("#seqRateSeg button").forEach(b=>{
   b.addEventListener("click", ()=>{
     document.querySelectorAll("#seqRateSeg button").forEach(x=>x.classList.remove("on"));
     b.classList.add("on");
-    CT().seq.rate = +b.dataset.rate; buildSeqGrid();
+    G.seq.rate = +b.dataset.rate;
+    buildPatternGrid();
   });
 });
 
+// macros: operate on currently selected track
 $("seqShuffle").addEventListener("click", shuffleSlices);
 $("seqClear").addEventListener("click", ()=>{
-  const t = CT(); for(let i=0;i<t.seq.active.length;i++) t.seq.active[i] = false; buildSeqGrid();
+  const t = CT();
+  for(let i=0;i<t.seq.active.length;i++) t.seq.active[i] = false;
+  buildPatternGrid();
 });
 $("seqFill").addEventListener("click", ()=>{
   const t = CT();
-  for(let i=0;i<t.seq.steps;i++){ t.seq.active[i] = true; t.seq.sliceMap[i] = i % t.seq.slices; }
-  buildSeqGrid();
+  for(let i=0;i<G.seq.steps;i++){
+    t.seq.active[i] = true;
+    if(t.seq.mode === "slice") t.seq.sliceMap[i] = i % G.seq.slices;
+  }
+  buildPatternGrid();
 });
 $("seqEuclid").addEventListener("click", ()=>{
   const choices = [3,5,7,9,11,13];
   const t = CT();
   const k = choices[t.seq.euclidIdx % choices.length];
   t.seq.euclidIdx += 1;
-  const pat = euclid(k, t.seq.steps);
-  for(let i=0;i<t.seq.steps;i++){
+  const pat = euclid(k, G.seq.steps);
+  for(let i=0;i<G.seq.steps;i++){
     t.seq.active[i] = !!pat[i];
-    if(t.seq.active[i]) t.seq.sliceMap[i] = Math.floor(Math.random()*t.seq.slices);
+    if(t.seq.active[i] && t.seq.mode === "slice"){
+      t.seq.sliceMap[i] = Math.floor(Math.random()*G.seq.slices);
+    }
   }
-  buildSeqGrid();
+  buildPatternGrid();
 });
+$("seqClearAll").addEventListener("click", ()=>{
+  for(const t of tracks){
+    for(let i=0;i<t.seq.active.length;i++) t.seq.active[i] = false;
+  }
+  buildPatternGrid();
+});
+
 function shuffleSlices(){
   const t = CT();
-  for(let i=0;i<t.seq.steps;i++){
-    if(t.seq.active[i]) t.seq.sliceMap[i] = Math.floor(Math.random()*t.seq.slices);
+  if(t.seq.mode !== "slice"){
+    // in hit mode, shuffle the on-pattern itself
+    const onCount = t.seq.active.slice(0, G.seq.steps).filter(Boolean).length;
+    for(let i=0;i<G.seq.steps;i++) t.seq.active[i] = false;
+    while(t.seq.active.slice(0, G.seq.steps).filter(Boolean).length < onCount){
+      t.seq.active[Math.floor(Math.random()*G.seq.steps)] = true;
+    }
+  } else {
+    for(let i=0;i<G.seq.steps;i++){
+      if(t.seq.active[i]) t.seq.sliceMap[i] = Math.floor(Math.random()*G.seq.slices);
+    }
   }
-  buildSeqGrid();
+  buildPatternGrid();
 }
+
 function euclid(k, n){
   const r = new Array(n).fill(0);
   let bucket = 0;
@@ -2190,9 +2343,8 @@ function snapshotState(){
       bpm: G.bpm, sub: G.sub, sync: G.sync,
       master_db: G.master_db, lpfHz: G.lpfHz, revMix: G.revMix, revTail: G.revTail,
       curTrack: G.curTrack,
-      gyro: {
-        mappings: G.gyro.mappings.map(m=>({...m})),
-      },
+      seq: { steps: G.seq.steps, slices: G.seq.slices, rate: G.seq.rate },
+      gyro: { mappings: G.gyro.mappings.map(m=>({...m})) },
     },
     tracks: tracks.map(t=>({
       name: t.name,
@@ -2204,7 +2356,8 @@ function snapshotState(){
       pit: t.pit, pitJit: t.pitJit, revProb: t.revProb, spread: t.spread,
       env: t.env, grainGain: t.grainGain,
       seq: {
-        enabled: t.seq.enabled, steps: t.seq.steps, slices: t.seq.slices, rate: t.seq.rate,
+        enabled: t.seq.enabled,
+        mode: t.seq.mode || "hit",
         active: t.seq.active.slice(),
         sliceMap: t.seq.sliceMap.slice(),
       },
@@ -2218,6 +2371,11 @@ function applyState(s){
     G.bpm = s.G.bpm; G.sub = s.G.sub; G.sync = !!s.G.sync;
     G.master_db = s.G.master_db; G.lpfHz = s.G.lpfHz;
     G.revMix = s.G.revMix; G.revTail = s.G.revTail;
+    if(s.G.seq){
+      G.seq.steps  = s.G.seq.steps  || 16;
+      G.seq.slices = s.G.seq.slices || 16;
+      G.seq.rate   = s.G.seq.rate   || 16;
+    }
     if(s.G.gyro && s.G.gyro.mappings){
       G.gyro.mappings = s.G.gyro.mappings.map(m=>({...m}));
       buildGyroUI();
@@ -2250,9 +2408,7 @@ function applyState(s){
       });
       if(ts.seq){
         t.seq.enabled = !!ts.seq.enabled;
-        t.seq.steps   = ts.seq.steps;
-        t.seq.slices  = ts.seq.slices;
-        t.seq.rate    = ts.seq.rate || 16;
+        t.seq.mode    = ts.seq.mode || "hit";
         t.seq.active  = (ts.seq.active||[]).slice(0,32);
         while(t.seq.active.length<32) t.seq.active.push(false);
         t.seq.sliceMap = (ts.seq.sliceMap||[]).slice(0,32);
@@ -2386,11 +2542,14 @@ document.addEventListener("keydown", e=>{
   if(e.key === "q"){
     const t = CT();
     t.seq.enabled = !t.seq.enabled;
-    document.querySelectorAll("#seqEnableSeg button").forEach(b=>{
-      b.classList.toggle("on", b.dataset.seq === (t.seq.enabled?"1":"0"));
-    });
     t.seq.currentStep = -1;
     if(G.ctx && G.running) t.nextGrainTime = G.ctx.currentTime + 0.05;
+    buildPatternGrid();
+  }
+  if(e.key === "h"){
+    const t = CT();
+    t.seq.mode = t.seq.mode === "slice" ? "hit" : "slice";
+    buildPatternGrid();
   }
   const idx = "123456789".indexOf(e.key);
   if(idx>=0){
@@ -2426,7 +2585,7 @@ window.addEventListener("load", ()=>{
   buildMemGrid();
   buildStrip();
   buildGyroUI();
-  buildSeqGrid();
+  buildPatternGrid();
   refreshUIForTrack();
   updateBpmDisplay();
   drawWaveform();
