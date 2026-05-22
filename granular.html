@@ -441,53 +441,6 @@
   .mem-btn.full{ color: var(--acc); border-color: var(--acc-d); }
   .mem-btn.cur{ background: var(--acc); color: #07181a; border-color: var(--acc); }
 
-  /* gyro */
-  .gyro-row{
-    display:grid;
-    grid-template-columns: 36px 1fr 1fr;
-    gap: 4px;
-    margin-top: 4px;
-    align-items: center;
-  }
-  .gyro-row .onoff{
-    background: var(--panel);
-    border: 1px solid var(--line2);
-    color: var(--ink-dd);
-    padding: 6px 0; text-align: center;
-    cursor: pointer;
-    font-family: "JetBrains Mono","SF Mono",monospace;
-    font-size: 11px;
-  }
-  .gyro-row .onoff.on{ background: var(--acc); color:#07181a; border-color: var(--acc); }
-  .gyro-row select{
-    padding: 5px 4px;
-    font-size: 10px;
-    letter-spacing: 0.10em;
-  }
-  .gyro-row input[type=range]{ margin: 0; grid-column: 2 / span 2; }
-  .gyro-tray{
-    margin-top: 6px;
-    height: 50px;
-    background: #050507;
-    border: 1px solid var(--line);
-    position: relative;
-    overflow: hidden;
-  }
-  .gyro-tray .dot{
-    position: absolute;
-    width: 8px; height: 8px;
-    background: var(--warn);
-    box-shadow: 0 0 8px var(--warn);
-    transform: translate(-50%, -50%);
-  }
-  .gyro-tray .crosshair{
-    position: absolute; inset: 0;
-    background:
-      linear-gradient(to right, transparent 49.5%, rgba(255,255,255,0.08) 50%, transparent 50.5%),
-      linear-gradient(to bottom, transparent 49.5%, rgba(255,255,255,0.08) 50%, transparent 50.5%);
-    pointer-events: none;
-  }
-
   /* recording */
   .rec-status{
     font-family: "JetBrains Mono","SF Mono",monospace;
@@ -540,8 +493,28 @@
   <section class="panel">
 
     <h2>Source · <span id="curTrkLabel" style="color: var(--acc); font-weight:600;">T1</span></h2>
+
     <div class="block">
-      <div class="row"><label>Type</label></div>
+      <div class="row"><label>Voice</label></div>
+      <div class="chips" id="voiceChips">
+        <div class="chip on" data-voice="granular">Granular</div>
+        <div class="chip"    data-voice="kick">Kick</div>
+        <div class="chip"    data-voice="snare">Snare</div>
+        <div class="chip"    data-voice="hatc">Hat·C</div>
+        <div class="chip"    data-voice="hato">Hat·O</div>
+        <div class="chip"    data-voice="clap">Clap</div>
+        <div class="chip"    data-voice="tom">Tom</div>
+        <div class="chip"    data-voice="cym">Cym</div>
+        <div class="chip"    data-voice="cow">Cow</div>
+      </div>
+      <div class="meta" style="margin-top:6px;">
+        non-Granular voices ignore source/freq/pos — they use<br>
+        <b>Pitch</b> (tune) and <b>Size</b> (decay) sliders instead
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="row"><label>Granular Source</label></div>
       <div class="chips" id="srcTypeChips">
         <div class="chip"      data-src="sine">Sine</div>
         <div class="chip"      data-src="tri">Tri</div>
@@ -591,17 +564,32 @@
     </div>
 
     <div class="block">
-      <h2>Gyro</h2>
-      <button id="gyroEnable" style="width:100%;">Enable Gyro</button>
-      <div class="meta" id="gyroStatus">disabled</div>
-      <div id="gyroMaps" style="margin-top: 10px;"></div>
-      <div class="gyro-tray" id="gyroTray">
-        <div class="crosshair"></div>
-        <div class="dot" id="gyroDot" style="left:50%; top:50%;"></div>
+      <h2>FX · Stereo Delay</h2>
+      <div class="row"><label>Mix</label><span class="val" id="delMixVal">0 %</span></div>
+      <input type="range" id="delMix" min="0" max="100" step="1" value="0" />
+      <div class="row"><label>Time</label><span class="val" id="delTimeVal">250 ms</span></div>
+      <input type="range" id="delTime" min="20" max="1000" step="1" value="250" />
+      <div class="row"><label>Feedback</label><span class="val" id="delFbVal">40 %</span></div>
+      <input type="range" id="delFb" min="0" max="95" step="1" value="40" />
+      <div class="row"><label>Sync</label></div>
+      <div class="seg" id="delSyncSeg">
+        <button class="on" data-dsync="free">Free</button>
+        <button data-dsync="8">1/8</button>
+        <button data-dsync="8d">1/8.</button>
+        <button data-dsync="4">1/4</button>
       </div>
-      <div class="meta" style="margin-top: 8px;">
-        affects selected track · iOS asks for motion permission
-      </div>
+      <div class="meta" style="margin-top: 6px;">ping-pong: bounces L ↔ R</div>
+    </div>
+
+    <div class="block">
+      <h2>FX · Stutter</h2>
+      <div class="row"><label>Mix</label><span class="val" id="stutMixVal">0 %</span></div>
+      <input type="range" id="stutMix" min="0" max="100" step="1" value="0" />
+      <div class="row"><label>Grain</label><span class="val" id="stutLenVal">80 ms</span></div>
+      <input type="range" id="stutLen" min="10" max="400" step="1" value="80" />
+      <div class="row"><label>Feedback</label><span class="val" id="stutFbVal">60 %</span></div>
+      <input type="range" id="stutFb" min="0" max="98" step="1" value="60" />
+      <div class="meta" style="margin-top: 6px;">short comb-delay loop, granular wash</div>
     </div>
 
     <div class="block">
@@ -862,17 +850,14 @@ const G = {
     rate: 16,
   },
 
-  // gyro
-  gyro: {
-    enabled: false,
-    permission: "unknown",
-    lastBeta: 0, lastGamma: 0,
-    mappings: [
-      { axis: "gamma", target: "pos",   on: true,  scale: 1.0 },
-      { axis: "beta",  target: "pit",   on: false, scale: 1.0 },
-      { axis: "gamma", target: "size",  on: false, scale: 1.0 },
-      { axis: "beta",  target: "lpf",   on: false, scale: 1.0 },
-    ],
+  // master FX
+  fx: {
+    delMix: 0,    // 0..1
+    delTime: 0.25, // sec
+    delFb: 0.4,
+    stutMix: 0,
+    stutLen: 0.08,
+    stutFb: 0.6,
   },
 
   // recording
@@ -893,11 +878,13 @@ const G = {
 function makeTrack(idx){
   const seedFreq = [220, 330, 165, 110][idx];
   const seedSrc  = ["sine","tri","white","saw"][idx];
+  const seedVoice = ["kick","snare","hatc","granular"][idx];
   return {
     idx, name: "T"+(idx+1),
     mute: false, solo: false, armed: true,
     gain_db: -8, pan: idx===0 ? -0.4 : idx===1 ? 0.4 : idx===2 ? -0.15 : 0.15,
 
+    voice: seedVoice,
     srcType: seedSrc, freq: seedFreq, blen: 2,
     buffer: null, bufferTag: "none", bufferDuration: 0,
 
@@ -950,9 +937,52 @@ async function ensureAudio(){
   G.conv = G.ctx.createConvolver();
   buildIR(G.revTail);
 
+  // ===== Master FX chain: lpf → Stutter → PingPongDelay → (dry / reverb) → master =====
+  // Stutter (short comb delay loop, granular wash)
+  G.stutIn    = G.ctx.createGain();
+  G.stutDelay = G.ctx.createDelay(1.0);
+  G.stutFb    = G.ctx.createGain();
+  G.stutWet   = G.ctx.createGain();
+  G.stutDry   = G.ctx.createGain();
+  G.stutOut   = G.ctx.createGain();
+  G.stutDelay.delayTime.value = G.fx.stutLen;
+  G.stutFb.gain.value         = G.fx.stutFb;
+  G.stutWet.gain.value        = G.fx.stutMix;
+  G.stutDry.gain.value        = 1 - G.fx.stutMix;
+  G.stutIn.connect(G.stutDry).connect(G.stutOut);
+  G.stutIn.connect(G.stutDelay);
+  G.stutDelay.connect(G.stutFb).connect(G.stutDelay);
+  G.stutDelay.connect(G.stutWet).connect(G.stutOut);
+
+  // Ping-Pong Delay (L→R cross-feedback)
+  G.delIn   = G.ctx.createGain();
+  G.dL      = G.ctx.createDelay(2.0);
+  G.dR      = G.ctx.createDelay(2.0);
+  G.fbLR    = G.ctx.createGain();
+  G.fbRL    = G.ctx.createGain();
+  G.delMerger = G.ctx.createChannelMerger(2);
+  G.delWet  = G.ctx.createGain();
+  G.delDry  = G.ctx.createGain();
+  G.delOut  = G.ctx.createGain();
+  G.dL.delayTime.value = G.fx.delTime;
+  G.dR.delayTime.value = G.fx.delTime;
+  G.fbLR.gain.value    = G.fx.delFb;
+  G.fbRL.gain.value    = G.fx.delFb;
+  G.delWet.gain.value  = G.fx.delMix;
+  G.delDry.gain.value  = 1 - G.fx.delMix;
+  G.delIn.connect(G.delDry).connect(G.delOut);
+  G.delIn.connect(G.dL);
+  G.dL.connect(G.fbLR).connect(G.dR);
+  G.dR.connect(G.fbRL).connect(G.dL);
+  G.dL.connect(G.delMerger, 0, 0);
+  G.dR.connect(G.delMerger, 0, 1);
+  G.delMerger.connect(G.delWet).connect(G.delOut);
+
   G.sumBus.connect(G.lpf);
-  G.lpf.connect(G.dry).connect(G.master);
-  G.lpf.connect(G.conv).connect(G.wet).connect(G.master);
+  G.lpf.connect(G.stutIn);
+  G.stutOut.connect(G.delIn);
+  G.delOut.connect(G.dry).connect(G.master);
+  G.delOut.connect(G.conv).connect(G.wet).connect(G.master);
 
   G.ana = G.ctx.createAnalyser();
   G.ana.fftSize = 2048; G.ana.smoothingTimeConstant = 0.1;
@@ -1168,6 +1198,63 @@ bindGlobalRange("rev",     "revMix",    fmtPct);
 bindGlobalRange("revTail", "revTail",   fmtSec);
 bindGlobalRange("bpm",     "bpm",       fmtBPM, updateBpmDisplay);
 
+// Master FX bindings — store normalized values in G.fx
+function bindFXRange(id, key, scale, fmtFn){
+  const el = $(id), val = $(id+"Val");
+  el.addEventListener("input", ()=>{
+    const v = parseFloat(el.value);
+    G.fx[key] = v * scale;
+    if(val) val.textContent = fmtFn ? fmtFn(v) : v;
+    applyFXToAudio();
+  });
+}
+bindFXRange("delMix",  "delMix",  0.01,   fmtPct);  // % → 0..1
+bindFXRange("delTime", "delTime", 0.001,  fmtMs);   // ms → s
+bindFXRange("delFb",   "delFb",   0.01,   fmtPct);
+bindFXRange("stutMix", "stutMix", 0.01,   fmtPct);
+bindFXRange("stutLen", "stutLen", 0.001,  fmtMs);
+bindFXRange("stutFb",  "stutFb",  0.01,   fmtPct);
+
+document.querySelectorAll("#delSyncSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#delSyncSeg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    const v = b.dataset.dsync;
+    let secs = null;
+    if(v === "8")   secs = (60/G.bpm)/2;
+    else if(v === "8d") secs = (60/G.bpm)/2 * 1.5;
+    else if(v === "4")  secs = 60/G.bpm;
+    if(secs !== null){
+      G.fx.delTime = clamp(secs, 0.02, 1.0);
+      setSliderUI("delTime", G.fx.delTime*1000, fmtMs);
+      applyFXToAudio();
+    }
+  });
+});
+
+function applyFXToAudio(){
+  if(!G.ctx || !G.dL) return;
+  const t = G.ctx.currentTime;
+  G.stutDelay.delayTime.setTargetAtTime(G.fx.stutLen, t, 0.05);
+  G.stutFb.gain.setTargetAtTime(G.fx.stutFb, t, 0.03);
+  G.stutWet.gain.setTargetAtTime(G.fx.stutMix, t, 0.03);
+  G.stutDry.gain.setTargetAtTime(1 - G.fx.stutMix, t, 0.03);
+  G.dL.delayTime.setTargetAtTime(G.fx.delTime, t, 0.05);
+  G.dR.delayTime.setTargetAtTime(G.fx.delTime, t, 0.05);
+  G.fbLR.gain.setTargetAtTime(G.fx.delFb, t, 0.05);
+  G.fbRL.gain.setTargetAtTime(G.fx.delFb, t, 0.05);
+  G.delWet.gain.setTargetAtTime(G.fx.delMix, t, 0.03);
+  G.delDry.gain.setTargetAtTime(1 - G.fx.delMix, t, 0.03);
+}
+function applyFXToDOM(){
+  setSliderUI("delMix",  G.fx.delMix*100,   fmtPct);
+  setSliderUI("delTime", G.fx.delTime*1000, fmtMs);
+  setSliderUI("delFb",   G.fx.delFb*100,    fmtPct);
+  setSliderUI("stutMix", G.fx.stutMix*100,  fmtPct);
+  setSliderUI("stutLen", G.fx.stutLen*1000, fmtMs);
+  setSliderUI("stutFb",  G.fx.stutFb*100,   fmtPct);
+}
+
 let regenTimer = null;
 function scheduleRegen(){
   const t = CT();
@@ -1175,6 +1262,18 @@ function scheduleRegen(){
   if(regenTimer) clearTimeout(regenTimer);
   regenTimer = setTimeout(()=>{ regenTimer = null; generateBuffer(t); }, 120);
 }
+
+// voice chips (granular | drum)
+document.querySelectorAll("#voiceChips .chip").forEach(el=>{
+  el.addEventListener("click", ()=>{
+    document.querySelectorAll("#voiceChips .chip").forEach(x=> x.classList.remove("on"));
+    el.classList.add("on");
+    const t = CT();
+    t.voice = el.dataset.voice;
+    if(t.voice === "granular" && !t.buffer && G.ctx) generateBuffer(t);
+    drawWaveform();
+  });
+});
 
 // source chips
 document.querySelectorAll("#srcTypeChips .chip").forEach(el=>{
@@ -1324,6 +1423,9 @@ function refreshUIForTrack(){
   setSlider("spread",  t.spread,  fmtPct);
   setSlider("gain",    t.grainGain, fmtDB);
 
+  document.querySelectorAll("#voiceChips .chip").forEach(c=>{
+    c.classList.toggle("on", c.dataset.voice === (t.voice || "granular"));
+  });
   document.querySelectorAll("#srcTypeChips .chip").forEach(c=>{
     c.classList.toggle("on", c.dataset.src === t.srcType);
   });
@@ -1362,7 +1464,10 @@ function refreshUIForTrack(){
    ============================================================ */
 $("playBtn").addEventListener("click", async ()=>{
   await ensureAudio();
-  for(const t of tracks){ if(!t.buffer) generateBuffer(t); }
+  for(const t of tracks){
+    if(t.voice !== "granular") continue;
+    if(!t.buffer) generateBuffer(t);
+  }
   if(G.ctx.state === "suspended") await G.ctx.resume();
   G.running = true;
   const t0 = G.ctx.currentTime + 0.05;
@@ -1414,7 +1519,7 @@ function schedTick(){
 }
 
 function schedTrack(t, now){
-  if(!t.buffer) return;
+  if(t.voice === "granular" && !t.buffer) return;
   if(t.seq.enabled){
     const stepDur = 60 / (G.bpm * G.seq.rate / 4);
     while(t.nextGrainTime < now + G.scheduleAheadTime){
@@ -1463,6 +1568,7 @@ function schedulePatternStepVisual(trackIdx, stepIdx, when){
 }
 
 function fireGrain(t, when, posOverride){
+  if(t.voice && t.voice !== "granular"){ fireDrum(t, when); return; }
   if(!t.buffer) return;
   const dur = clamp(t.size/1000, 0.002, 2.0);
   const semis = t.pit + rand(-t.pitJit, t.pitJit);
@@ -1513,6 +1619,174 @@ function makeReverseSlice(buf, offsetSec, durSec){
   }
   return ob;
 }
+
+/* ===== drum voice synthesis (TR-808 style) ===== */
+let G_noiseBuffer = null;
+function getNoiseBuffer(){
+  if(G_noiseBuffer) return G_noiseBuffer;
+  const sr = G.ctx.sampleRate;
+  const len = sr * 2;
+  const buf = G.ctx.createBuffer(1, len, sr);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i] = (Math.random()*2-1) * 0.9;
+  G_noiseBuffer = buf;
+  return buf;
+}
+
+function fireDrum(t, when){
+  const semis = t.pit + rand(-t.pitJit, t.pitJit);
+  const tune = Math.pow(2, semis/12);
+  const dec  = clamp(t.size/1000, 0.005, 2.0);
+  const amp  = db2lin(t.grainGain);
+  const pan  = rand(-t.spread/100, t.spread/100);
+  const panner = G.ctx.createStereoPanner();
+  panner.pan.setValueAtTime(pan, when);
+  panner.connect(t.grainBus);
+  switch(t.voice){
+    case "kick":  synthKick(when, tune, dec, amp, panner); break;
+    case "snare": synthSnare(when, tune, dec, amp, panner); break;
+    case "hatc":  synthHat(when, tune, dec*0.4, amp, panner); break;
+    case "hato":  synthHat(when, tune, dec*1.4, amp, panner); break;
+    case "clap":  synthClap(when, tune, dec, amp, panner); break;
+    case "tom":   synthTom(when, tune, dec, amp, panner); break;
+    case "cym":   synthCym(when, tune, dec*2, amp, panner); break;
+    case "cow":   synthCow(when, tune, dec, amp, panner); break;
+  }
+  t.grainHistory.push({pos: 0.5, t: performance.now(), pan});
+  if(t.grainHistory.length > 240) t.grainHistory.shift();
+}
+
+function synthKick(when, tune, dec, amp, out){
+  const osc = G.ctx.createOscillator(); osc.type = "sine";
+  const f0 = 110 * tune;
+  osc.frequency.setValueAtTime(f0, when);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20, f0*0.35), when + 0.05);
+  const gain = G.ctx.createGain();
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(amp, when + 0.002);
+  gain.gain.exponentialRampToValueAtTime(0.0005, when + dec);
+  osc.connect(gain).connect(out);
+  osc.start(when); osc.stop(when + dec + 0.05);
+}
+
+function synthSnare(when, tune, dec, amp, out){
+  const noise = G.ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(); noise.loop = true;
+  const hp = G.ctx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value = 1200 * tune;
+  const ng = G.ctx.createGain();
+  ng.gain.setValueAtTime(0, when);
+  ng.gain.linearRampToValueAtTime(amp * 0.6, when + 0.001);
+  ng.gain.exponentialRampToValueAtTime(0.001, when + dec);
+  noise.connect(hp).connect(ng).connect(out);
+  noise.start(when); noise.stop(when + dec + 0.05);
+
+  const osc = G.ctx.createOscillator(); osc.type = "triangle";
+  osc.frequency.setValueAtTime(220 * tune, when);
+  osc.frequency.exponentialRampToValueAtTime(120 * tune, when + 0.03);
+  const og = G.ctx.createGain();
+  og.gain.setValueAtTime(0, when);
+  og.gain.linearRampToValueAtTime(amp * 0.45, when + 0.001);
+  og.gain.exponentialRampToValueAtTime(0.001, when + dec * 0.5);
+  osc.connect(og).connect(out);
+  osc.start(when); osc.stop(when + dec + 0.05);
+}
+
+function synthHat(when, tune, dec, amp, out){
+  const freqs = [320, 463, 591, 803, 932, 1102];
+  const merger = G.ctx.createGain(); merger.gain.value = 0.2;
+  for(const f of freqs){
+    const o = G.ctx.createOscillator(); o.type = "square";
+    o.frequency.value = f * tune;
+    o.connect(merger);
+    o.start(when); o.stop(when + dec + 0.05);
+  }
+  const bp = G.ctx.createBiquadFilter(); bp.type = "bandpass";
+  bp.frequency.value = 10000 * tune; bp.Q.value = 0.6;
+  const hp = G.ctx.createBiquadFilter(); hp.type = "highpass";
+  hp.frequency.value = 7000 * tune;
+  const gain = G.ctx.createGain();
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(amp * 0.5, when + 0.001);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + dec);
+  merger.connect(bp).connect(hp).connect(gain).connect(out);
+}
+
+function synthClap(when, tune, dec, amp, out){
+  const burstTimes = [0, 0.013, 0.026, 0.040];
+  for(const dt of burstTimes){
+    const t0 = when + dt;
+    const noise = G.ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(); noise.loop = true;
+    const bp = G.ctx.createBiquadFilter();
+    bp.type = "bandpass"; bp.frequency.value = 1200 * tune; bp.Q.value = 0.7;
+    const g = G.ctx.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(amp * 0.5, t0 + 0.001);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.04);
+    noise.connect(bp).connect(g).connect(out);
+    noise.start(t0); noise.stop(t0 + 0.08);
+  }
+  const tT = when + 0.045;
+  const tNoise = G.ctx.createBufferSource();
+  tNoise.buffer = getNoiseBuffer(); tNoise.loop = true;
+  const bpT = G.ctx.createBiquadFilter();
+  bpT.type = "bandpass"; bpT.frequency.value = 1100 * tune; bpT.Q.value = 0.6;
+  const gT = G.ctx.createGain();
+  gT.gain.setValueAtTime(0, tT);
+  gT.gain.linearRampToValueAtTime(amp * 0.32, tT + 0.005);
+  gT.gain.exponentialRampToValueAtTime(0.001, tT + dec);
+  tNoise.connect(bpT).connect(gT).connect(out);
+  tNoise.start(tT); tNoise.stop(tT + dec + 0.05);
+}
+
+function synthTom(when, tune, dec, amp, out){
+  const osc = G.ctx.createOscillator(); osc.type = "sine";
+  const f0 = 180 * tune;
+  osc.frequency.setValueAtTime(f0 * 1.6, when);
+  osc.frequency.exponentialRampToValueAtTime(f0, when + 0.08);
+  const gain = G.ctx.createGain();
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(amp * 0.8, when + 0.003);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + dec);
+  osc.connect(gain).connect(out);
+  osc.start(when); osc.stop(when + dec + 0.05);
+}
+
+function synthCym(when, tune, dec, amp, out){
+  const freqs = [205, 304, 369, 522, 540, 800];
+  const merger = G.ctx.createGain(); merger.gain.value = 0.18;
+  for(const f of freqs){
+    const o = G.ctx.createOscillator(); o.type = "square";
+    o.frequency.value = f * tune * (1 + Math.random()*0.02);
+    o.connect(merger);
+    o.start(when); o.stop(when + dec + 0.1);
+  }
+  const hp = G.ctx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value = 5000 * tune;
+  const bp = G.ctx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value = 9500 * tune; bp.Q.value = 0.7;
+  const gain = G.ctx.createGain();
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(amp * 0.4, when + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + dec);
+  merger.connect(hp).connect(bp).connect(gain).connect(out);
+}
+
+function synthCow(when, tune, dec, amp, out){
+  const f1 = 540 * tune, f2 = 800 * tune;
+  const o1 = G.ctx.createOscillator(); o1.type="square"; o1.frequency.value = f1;
+  const o2 = G.ctx.createOscillator(); o2.type="square"; o2.frequency.value = f2;
+  const merger = G.ctx.createGain(); merger.gain.value = 0.45;
+  o1.connect(merger); o2.connect(merger);
+  const bp = G.ctx.createBiquadFilter();
+  bp.type = "bandpass"; bp.frequency.value = 1100 * tune; bp.Q.value = 4;
+  const gain = G.ctx.createGain();
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(amp * 0.45, when + 0.001);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + dec);
+  merger.connect(bp).connect(gain).connect(out);
+  o1.start(when); o2.start(when);
+  o1.stop(when + dec + 0.05); o2.stop(when + dec + 0.05);
+}
+
 
 function applyEnvelope(p, when, dur, g, shape){
   const half = dur*0.5, start = when, mid = when+half, end = when+dur;
@@ -2046,129 +2320,10 @@ function euclid(k, n){
 }
 
 
-/* ============================================================
-   GYRO
-   ============================================================ */
-const GYRO_TARGETS = [
-  {key:"pos",    label:"Position"},
-  {key:"pit",    label:"Pitch"},
-  {key:"size",   label:"Grain Size"},
-  {key:"rate",   label:"Free Rate"},
-  {key:"perbeat",label:"Per-Beat"},
-  {key:"spread", label:"Pan Spread"},
-  {key:"freq",   label:"Carrier Freq"},
-  {key:"lpf",    label:"LPF (global)"},
-  {key:"revMix", label:"Reverb Mix (global)"},
-];
-
-function buildGyroUI(){
-  const c = $("gyroMaps"); c.innerHTML = "";
-  G.gyro.mappings.forEach((m, idx)=>{
-    const row = document.createElement("div");
-    row.className = "gyro-row";
-    row.innerHTML = `
-      <div class="onoff ${m.on?'on':''}" data-idx="${idx}">${m.on?'●':'·'}</div>
-      <select data-idx="${idx}" data-kind="axis">
-        <option value="gamma" ${m.axis==='gamma'?'selected':''}>tilt-X</option>
-        <option value="beta"  ${m.axis==='beta' ?'selected':''}>tilt-Y</option>
-      </select>
-      <select data-idx="${idx}" data-kind="target">
-        ${GYRO_TARGETS.map(g=>`<option value="${g.key}" ${m.target===g.key?'selected':''}>${g.label}</option>`).join("")}
-      </select>
-      <input type="range" min="0" max="2" step="0.01" value="${m.scale}" data-idx="${idx}" data-kind="scale"
-             style="grid-column: 2 / span 2;" />
-    `;
-    row.querySelector(".onoff").addEventListener("click", e=>{
-      m.on = !m.on;
-      e.target.classList.toggle("on", m.on);
-      e.target.textContent = m.on ? "●" : "·";
-    });
-    row.querySelectorAll("select, input").forEach(el=>{
-      el.addEventListener("change", ()=>{
-        const kind = el.dataset.kind;
-        if(kind==="axis")   m.axis = el.value;
-        if(kind==="target") m.target = el.value;
-        if(kind==="scale")  m.scale = parseFloat(el.value);
-      });
-      el.addEventListener("input", ()=>{
-        if(el.dataset.kind === "scale") m.scale = parseFloat(el.value);
-      });
-    });
-    c.appendChild(row);
-  });
-}
-
-$("gyroEnable").addEventListener("click", enableGyro);
-
-async function enableGyro(){
-  try{
-    if(typeof DeviceOrientationEvent !== "undefined" &&
-       typeof DeviceOrientationEvent.requestPermission === "function"){
-      const perm = await DeviceOrientationEvent.requestPermission();
-      G.gyro.permission = perm;
-      if(perm !== "granted"){
-        $("gyroStatus").textContent = "permission denied";
-        return;
-      }
-    }
-    window.addEventListener("deviceorientation", onOrient);
-    G.gyro.enabled = true;
-    $("gyroEnable").textContent = "Disable Gyro";
-    $("gyroStatus").textContent = "active";
-    $("gyroEnable").onclick = disableGyro;
-  } catch(e){
-    $("gyroStatus").textContent = "error: "+e.message;
-  }
-}
-function disableGyro(){
-  window.removeEventListener("deviceorientation", onOrient);
-  G.gyro.enabled = false;
-  $("gyroEnable").textContent = "Enable Gyro";
-  $("gyroStatus").textContent = "disabled";
-  $("gyroEnable").onclick = enableGyro;
-}
-
-let lastGyroDisplay = 0;
-function onOrient(e){
-  if(!G.gyro.enabled) return;
-  const beta  = clamp((e.beta  || 0) / 90, -1, 1);
-  const gamma = clamp((e.gamma || 0) / 90, -1, 1);
-  G.gyro.lastBeta = beta;
-  G.gyro.lastGamma = gamma;
-  const t = CT();
-  for(const m of G.gyro.mappings){
-    if(!m.on) continue;
-    const raw = (m.axis === "gamma" ? gamma : beta) * m.scale;
-    const v = clamp(raw, -1, 1);
-    applyGyro(t, m.target, v);
-  }
-  const now = performance.now();
-  if(now - lastGyroDisplay > 90){
-    lastGyroDisplay = now;
-    $("gyroStatus").textContent = `active · X ${gamma.toFixed(2)}  Y ${beta.toFixed(2)}`;
-    const dot = $("gyroDot");
-    dot.style.left = `${50 + gamma*45}%`;
-    dot.style.top  = `${50 + beta*45}%`;
-  }
-}
 function setSliderUI(id, v, fmtFn){
   const el = $(id), val = $(id+"Val");
   if(el) el.value = v;
   if(val) val.textContent = fmtFn ? fmtFn(v) : v;
-}
-function applyGyro(t, target, v){
-  const n = (v + 1) * 0.5;
-  switch(target){
-    case "pos":    t.pos = n; setSliderUI("pos", t.pos, fmt3); break;
-    case "pit":    t.pit = v * 12; setSliderUI("pit", t.pit, fmtST); break;
-    case "size":   t.size = lerp(5, 300, n); setSliderUI("size", t.size, fmtMs); break;
-    case "rate":   t.rate = lerp(1, 80, n); setSliderUI("rate", t.rate, fmtGps); break;
-    case "perbeat":t.perbeat = Math.round(lerp(1, 16, n)); setSliderUI("perbeat", t.perbeat, fmtGpb); break;
-    case "spread": t.spread = n * 100; setSliderUI("spread", t.spread, fmtPct); break;
-    case "freq":   t.freq = lerp(40, 2000, n); setSliderUI("freq", t.freq, fmtHz); scheduleRegen(); break;
-    case "lpf":    G.lpfHz = lerp(120, 18000, n); setSliderUI("lpf", G.lpfHz, fmtHz); break;
-    case "revMix": G.revMix = n * 100; setSliderUI("rev", G.revMix, fmtPct); break;
-  }
 }
 
 
@@ -2341,12 +2496,13 @@ function snapshotState(){
       master_db: G.master_db, lpfHz: G.lpfHz, revMix: G.revMix, revTail: G.revTail,
       curTrack: G.curTrack,
       seq: { steps: G.seq.steps, slices: G.seq.slices, rate: G.seq.rate },
-      gyro: { mappings: G.gyro.mappings.map(m=>({...m})) },
+      fx: { ...G.fx },
     },
     tracks: tracks.map(t=>({
       name: t.name,
       mute: t.mute, solo: t.solo, armed: t.armed,
       gain_db: t.gain_db, pan: t.pan,
+      voice: t.voice || "granular",
       srcType: t.srcType, freq: t.freq, blen: t.blen,
       size: t.size, rate: t.rate, perbeat: t.perbeat, rJit: t.rJit,
       pos: t.pos, pJit: t.pJit, scan: t.scan, freeze: t.freeze,
@@ -2373,9 +2529,10 @@ function applyState(s){
       G.seq.slices = s.G.seq.slices || 16;
       G.seq.rate   = s.G.seq.rate   || 16;
     }
-    if(s.G.gyro && s.G.gyro.mappings){
-      G.gyro.mappings = s.G.gyro.mappings.map(m=>({...m}));
-      buildGyroUI();
+    if(s.G.fx){
+      Object.assign(G.fx, s.G.fx);
+      applyFXToDOM();
+      applyFXToAudio();
     }
     setSliderUI("bpm", G.bpm, fmtBPM); updateBpmDisplay();
     setSliderUI("master", G.master_db, fmtDB);
@@ -2393,6 +2550,7 @@ function applyState(s){
       Object.assign(t, {
         mute: !!ts.mute, solo: !!ts.solo, armed: !!ts.armed,
         gain_db: ts.gain_db, pan: ts.pan,
+        voice: ts.voice || "granular",
         srcType: ts.srcType, freq: ts.freq, blen: ts.blen,
         size: ts.size, rate: ts.rate, perbeat: ts.perbeat, rJit: ts.rJit,
         pos: ts.pos, pJit: ts.pJit, scan: ts.scan, freeze: !!ts.freeze,
@@ -2618,7 +2776,6 @@ window.addEventListener("load", ()=>{
   loadMemoriesFromLocal();
   buildMemGrid();
   buildStrip();
-  buildGyroUI();
   buildPatternGrid();
   refreshUIForTrack();
   updateBpmDisplay();
