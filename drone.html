@@ -329,6 +329,34 @@
   }
   .preset-row button{ font-size:10px; padding: 4px 0; }
 
+  /* save slots */
+  .patch-slots{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin: 6px 0 2px;
+  }
+  .patch-slot{
+    padding: 4px 2px 5px;
+    text-align: center;
+    background:#fff;
+    border:1px solid #000;
+    cursor:pointer;
+    font-size:10px;
+    font-family:"JetBrains Mono","SF Mono",monospace;
+    box-shadow:1px 1px 0 #000;
+    min-height: 32px;
+    line-height: 1.15;
+  }
+  .patch-slot:hover{ background:#eee; }
+  .patch-slot.has-data{ background:#000; color:#fff; }
+  .patch-slot.has-data:hover{ background:#222; }
+  .patch-slot .slot-name{ font-weight:700; font-size:11px; display:block; }
+  .patch-slot .slot-summary{ font-size:9px; opacity:0.85; }
+  /* slot mode hints */
+  .slots-mode-store .patch-slot{ border:1px dashed #000; }
+  .slots-mode-clear .patch-slot{ border:1px dashed var(--warn); }
+
   @media (max-width: 1100px){
     main{ grid-template-columns: 1fr; }
   }
@@ -409,6 +437,18 @@
         <button data-preset="abyss">Abyss</button>
         <button data-preset="davachi">Davachi</button>
         <button data-preset="aurora">Aurora</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>PATCHES</h2>
+      <div class="row" style="margin-top:8px; gap:4px;">
+        <button id="storeBtn" style="flex:1;">STORE</button>
+        <button id="clearBtn" style="flex:0 0 auto;">CLR</button>
+      </div>
+      <div class="patch-slots" id="patchSlots"></div>
+      <div style="font-size:9px; color:var(--ink-dd); margin-top:4px; line-height:1.4;">
+        STORE → タップして保存 / 何も無いとロード / CLR → タップで消去
       </div>
     </section>
   </div>
@@ -601,20 +641,33 @@ const EVOLVE_PROGRESSIONS = [
   { id:"lydian",  label:"Lydian",  chords:["maj","sus2","add9","maj7","fifth","add9"],     roots:[0, 7, 2, 9, 0, 5] },
   { id:"dark",    label:"Dark",    chords:["min","min7","sus4","low8","min9","low8"],      roots:[0, 5, 10, 3, 7, 0] },
   { id:"pent",    label:"Pent",    chords:["pent","fifth","add9","oct","pent","sus2"],     roots:[0, 7, 5, 2, 9, 0] },
-  // Bach / St Matthew Passion idioms (concept only, not a quotation):
-  //   – circle-of-fifths descent (i → iv → VII → III → VI → ii° → V → i)
-  //   – Picardy third on the final chord (minor key resolving onto a major tonic)
-  // In A minor: A m → D m → G Maj → C Maj → F Maj → D m → E Maj → A Maj
-  { id:"bach",    label:"Bach",    chords:["min","min","maj","maj","maj","min","maj","maj"],
-                                   roots: [0,    5,    10,   3,    8,    5,    7,    0] },
-  // Phrygian lament: descending tetrachord (i – VII – VI – V) with suspension
-  //   In A minor: A m → G Maj → F Maj → E Maj (Andalusian / passacaglia bass)
-  { id:"lament",  label:"Lament",  chords:["min","maj","maj","sus4","maj"],
-                                   roots: [0,    10,   8,    7,     7] },
+  // Bach / St Matthew Passion — circle-of-fifths descent ending on a Picardy
+  // third. In A minor: A m → D m → G Maj7 → C Maj → F Maj → B m7 → E Maj → A Maj
+  // → A m. Roughly the harmonic skeleton of "Kommt, ihr Töchter" cycling.
+  { id:"bach",    label:"Bach",
+                  chords:["min","min","maj7","maj","maj","min7","maj","maj","min"],
+                  roots: [0,    5,    10,    3,    8,    2,     7,    0,    0] },
+  // Erbarme dich — minor lamento with diatonic bass descent + Picardy
+  // In A minor: A m → F Maj → D m → C Maj → B m7 → E Maj → A Maj
+  { id:"erbarme", label:"Erbarme",
+                  chords:["min","maj","min","maj","min7","maj","maj"],
+                  roots: [0,    8,    5,    3,    2,     7,    0] },
+  // Phrygian lament: descending tetrachord (i – VII – VI – V) with sus4
+  //   In A minor: A m → G Maj → F Maj → E sus4 → E Maj → A Maj (Picardy)
+  { id:"lament",  label:"Lament",
+                  chords:["min","maj","maj","sus4","maj","maj"],
+                  roots: [0,    10,   8,    7,     7,    0] },
   // Slow chorale: tonic → subdominant → dominant → tonic, all major
   //   In A: A → D → E → A → D → A
-  { id:"choral",  label:"Chorale", chords:["maj","maj","maj","maj","maj","maj"],
-                                   roots: [0,    5,    7,    0,    5,    0] },
+  { id:"choral",  label:"Chorale",
+                  chords:["maj","maj","maj","maj","maj","maj"],
+                  roots: [0,    5,    7,    0,    5,    0] },
+  // Sacred (Renaissance / Gregorian feel): bare 4ths and 5ths,
+  // Phrygian half-cadence in the middle. Sparse, drone-like.
+  //   1 → 4 → 1 → 5 → 1 → 5 → 1 (mostly open intervals, modal)
+  { id:"sacred",  label:"Sacred",
+                  chords:["fifth","oct","fifth","low8","fifth","sus4","fifth"],
+                  roots: [0,      0,    5,      0,     7,      7,     0] },
 ];
 
 // ----- note frequency: noteIdx (0=C), octave offset from A4 octave -----
@@ -2264,6 +2317,110 @@ function loadPatchFromHash(){
   return true;
 }
 
+// ============================================================
+// PATCH SLOTS (localStorage)
+// ============================================================
+const NUM_SLOTS = 8;
+const SLOT_KEY = "drone_slot_v1_";
+let slotMode = "load"; // "load" | "store" | "clear"
+
+function readSlot(i){
+  try { return JSON.parse(localStorage.getItem(SLOT_KEY + i)); }
+  catch(_){ return null; }
+}
+function writeSlot(i, data){
+  try { localStorage.setItem(SLOT_KEY + i, JSON.stringify(data)); }
+  catch(e){ console.warn("save failed", e); }
+}
+function eraseSlot(i){
+  try { localStorage.removeItem(SLOT_KEY + i); }
+  catch(_){}
+}
+
+function patchSummary(){
+  // brief label for a saved slot: "A-1+5" style
+  const root = NOTE_NAMES[G.noteIdx];
+  const oct  = G.octave >= 0 ? "+"+G.octave : ""+G.octave;
+  const ch   = (CHORDS.find(c => c.id === G.chord) || {}).label || G.chord;
+  return `${root}${oct}\n${ch}`;
+}
+
+function renderPatchSlots(){
+  const box = $("patchSlots");
+  if(!box) return;
+  box.innerHTML = "";
+  for(let i=0; i<NUM_SLOTS; i++){
+    const data = readSlot(i);
+    const el = document.createElement("div");
+    el.className = "patch-slot" + (data ? " has-data" : "");
+    const sum = data && data.summary ? data.summary : "—";
+    el.innerHTML = `<span class="slot-name">M${i+1}</span><span class="slot-summary">${sum.replace(/\n/g,"<br>")}</span>`;
+    el.title = data ? `M${i+1}: ${data.summary || "patch"}` : `M${i+1}: empty`;
+    el.addEventListener("click", ()=> onSlotClick(i));
+    box.appendChild(el);
+  }
+}
+
+function applyPatchObj(data){
+  for(const short in PATCH_KEYS){
+    if(data[short] === undefined) continue;
+    const k = PATCH_KEYS[short];
+    let v = data[short];
+    if(k === "evolveRootWalk") v = !!v;
+    G[k] = v;
+    if(knobRefs[k]) knobRefs[k].setValue(v);
+  }
+  buildNoteChips();
+  buildOctChips();
+  buildChordChips();
+  buildEvolveChips();
+  buildSrcChips();
+  renderChordStrip();
+  refreshRootWalkUI();
+  refreshNextChordIndicator();
+  refreshSeedUI();
+  $("octVal").textContent = (G.octave>=0?"+":"") + G.octave;
+  $("vSpread").textContent = G.spread.toFixed(0) + " %";
+  if(G.ctx){
+    rebuildBuffer();
+    if(G.playing) rebuildVoices({force:true});
+    buildIR(G.reverbTail);
+    applyFilter();
+    applyShimmer();
+    applyReverb();
+    applyVolume();
+  }
+}
+
+function onSlotClick(i){
+  if(slotMode === "store"){
+    const enc = encodePatch();
+    const data = JSON.parse(atob(enc));
+    data.summary = patchSummary();
+    writeSlot(i, data);
+    setSlotMode("load");
+    renderPatchSlots();
+    return;
+  }
+  if(slotMode === "clear"){
+    eraseSlot(i);
+    setSlotMode("load");
+    renderPatchSlots();
+    return;
+  }
+  const data = readSlot(i);
+  if(!data) return; // empty slot, no-op
+  applyPatchObj(data);
+}
+
+function setSlotMode(m){
+  slotMode = m;
+  $("storeBtn").classList.toggle("active", m === "store");
+  $("clearBtn").classList.toggle("active", m === "clear");
+  document.body.classList.toggle("slots-mode-store", m === "store");
+  document.body.classList.toggle("slots-mode-clear", m === "clear");
+}
+
 function sharePatch(){
   const enc = encodePatch();
   const url = location.origin + location.pathname + "#" + enc;
@@ -2433,6 +2590,9 @@ function init(){
   });
   $("shareBtn").addEventListener("click", sharePatch);
   $("reseedBtn").addEventListener("click", reseedFromCrypto);
+  $("storeBtn").addEventListener("click", ()=> setSlotMode(slotMode === "store" ? "load" : "store"));
+  $("clearBtn").addEventListener("click", ()=> setSlotMode(slotMode === "clear" ? "load" : "clear"));
+  renderPatchSlots();
 
   // load patch from URL if present (must run after all knobs/chips exist)
   loadPatchFromHash();
