@@ -2374,11 +2374,26 @@ function refreshSeedUI(){
 function refreshSrUI(){
   const el = $("srDisplay");
   if(!el) return;
-  if(!G.ctx){ el.textContent = G.preferredSR ? (G.preferredSR/1000).toFixed(1)+"k?" : "—"; return; }
-  el.textContent = (G.ctx.sampleRate/1000).toFixed(1)+"k";
-  // update chip on-state to match actual context rate
+  if(!G.ctx){
+    el.textContent = G.preferredSR ? (G.preferredSR/1000).toFixed(1)+"k?" : "—";
+  } else {
+    const actual = G.ctx.sampleRate;
+    if(G.preferredSR && G.preferredSR !== actual){
+      // browser refused the requested rate and fell back
+      el.textContent = (actual/1000).toFixed(1)+"k ← "+(G.preferredSR/1000).toFixed(1)+"k?";
+      el.title = "Requested " + G.preferredSR + " Hz but device only supports " + actual + " Hz";
+    } else {
+      el.textContent = (actual/1000).toFixed(1)+"k";
+      el.title = "AudioContext sample rate";
+    }
+  }
+  // chip state: solid = actual, dashed = requested-but-unavailable
   document.querySelectorAll("#srChips .chip").forEach(c=>{
-    c.classList.toggle("on", +c.dataset.sr === G.ctx.sampleRate);
+    const sr = +c.dataset.sr;
+    const isActual    = G.ctx && sr === G.ctx.sampleRate;
+    const isRequested = !isActual && sr === G.preferredSR;
+    c.classList.toggle("on", isActual);
+    c.classList.toggle("next", isRequested);
   });
 }
 
