@@ -352,6 +352,7 @@
     <button id="panicBtn">PANIC</button>
     <span class="sep"></span>
     <button id="recBtn">● REC</button>
+    <button id="shareBtn" title="Copy patch URL">SHARE</button>
     <span class="status" id="status"><span class="dot"></span>idle</span>
     <span class="status" id="recStatus" style="display:none;"><span class="dot" style="background:var(--warn);"></span>rec</span>
   </div>
@@ -1631,6 +1632,7 @@ const PRESETS = {
     grainSize:360, grainRate:6, grainJit:25, grainPosJit:35,
     spread:70, reverbMix:70, reverbTail:7.0,
     chord:"fifthoct", src:"choir",
+    evolveMode:"lydian", evolveInterval:120, evolveRootWalk:false,
   },
   machine: {
     oscVoices:2, oscDetune:18, oscTone:0.9, oscTri:0.05,
@@ -1658,6 +1660,7 @@ const PRESETS = {
     grainSize:340, grainRate:5, grainJit:18, grainPosJit:35,
     spread:45, reverbMix:38, reverbTail:4.4,
     chord:"low8", src:"sine",
+    evolveMode:"static", evolveInterval:90, evolveRootWalk:false,
   },
   celeste: {
     oscVoices:4, oscDetune:12, oscTone:0.45, oscTri:0.2,
@@ -1667,6 +1670,7 @@ const PRESETS = {
     grainSize:80, grainRate:24, grainJit:55, grainPosJit:70,
     spread:85, reverbMix:60, reverbTail:6.0,
     chord:"add9", src:"bell",
+    evolveMode:"ambient", evolveInterval:75, evolveRootWalk:true,
   },
   abyss: {
     oscVoices:3, oscDetune:5, oscTone:0.65, oscTri:0.55,
@@ -1676,6 +1680,7 @@ const PRESETS = {
     grainSize:480, grainRate:3.5, grainJit:35, grainPosJit:65,
     spread:55, reverbMix:55, reverbTail:7.5,
     chord:"low8", src:"choir",
+    evolveMode:"dark", evolveInterval:180, evolveRootWalk:true,
   },
 };
 
@@ -1705,7 +1710,9 @@ function applyPreset(name){
     applyShimmer();
     applyReverb();
     applyVolume();
+    evolveReset();
   }
+  refreshNextChordIndicator();
 }
 
 // ============================================================
@@ -1875,6 +1882,93 @@ function tickMeter(){
 }
 
 // ============================================================
+// PATCH SHARE (URL hash)
+// ============================================================
+const PATCH_KEYS = {
+  n:"noteIdx", o:"octave", ch:"chord",
+  em:"evolveMode", ei:"evolveInterval", er:"evolveRootWalk",
+  ov:"oscVoices", od:"oscDetune", ot:"oscTone", ots:"oscTri",
+  ol:"oscLevel", gl:"grainLevel",
+  dr:"drift", drr:"driftRate", am:"amDepth", amr:"amRate", pd:"panDepth", jt:"jitter",
+  bt:"bright", fd:"filtDrift", sh:"shimmer",
+  gs:"grainSize", gr:"grainRate", gj:"grainJit", gpj:"grainPosJit",
+  sp:"spread", rm:"reverbMix", rt:"reverbTail", vol:"vol_db",
+  src:"src",
+};
+
+function encodePatch(){
+  const p = {};
+  for(const short in PATCH_KEYS){
+    const k = PATCH_KEYS[short];
+    let v = G[k];
+    if(typeof v === "boolean") v = v ? 1 : 0;
+    if(typeof v === "number") v = +v.toFixed(3);
+    p[short] = v;
+  }
+  return btoa(JSON.stringify(p));
+}
+
+function decodePatch(str){
+  let p;
+  try { p = JSON.parse(atob(str)); }
+  catch(e){ console.error("decode patch failed", e); return false; }
+  for(const short in PATCH_KEYS){
+    if(p[short] === undefined) continue;
+    const k = PATCH_KEYS[short];
+    let v = p[short];
+    if(k === "evolveRootWalk") v = !!v;
+    G[k] = v;
+    if(knobRefs[k]) knobRefs[k].setValue(v);
+  }
+  return true;
+}
+
+function loadPatchFromHash(){
+  const h = location.hash.slice(1);
+  if(!h) return false;
+  if(!decodePatch(h)) return false;
+  buildNoteChips();
+  buildOctChips();
+  buildChordChips();
+  buildEvolveChips();
+  buildSrcChips();
+  renderChordStrip();
+  refreshRootWalkUI();
+  refreshNextChordIndicator();
+  $("octVal").textContent = (G.octave>=0?"+":"") + G.octave;
+  $("vSpread").textContent = G.spread.toFixed(0) + " %";
+  if(G.ctx){
+    rebuildBuffer();
+    if(G.playing) rebuildVoices();
+    buildIR(G.reverbTail);
+    applyFilter();
+    applyShimmer();
+    applyReverb();
+    applyVolume();
+  }
+  return true;
+}
+
+function sharePatch(){
+  const enc = encodePatch();
+  const url = location.origin + location.pathname + "#" + enc;
+  history.replaceState(null, "", "#" + enc);
+  const flash = (msg)=>{
+    const btn = $("shareBtn");
+    const orig = btn.textContent;
+    btn.textContent = msg;
+    setTimeout(()=> btn.textContent = orig, 1400);
+  };
+  if(navigator.share){
+    navigator.share({ url }).then(()=> flash("SHARED ↗")).catch(()=> flash("LINK ✓"));
+  } else if(navigator.clipboard){
+    navigator.clipboard.writeText(url).then(()=> flash("COPIED ↗")).catch(()=> flash("LINK ✓"));
+  } else {
+    flash("LINK ✓");
+  }
+}
+
+// ============================================================
 // WAV RECORDER (AudioWorklet -> 32-bit float WAV)
 // ============================================================
 const RECORDER_WORKLET = `
@@ -2017,6 +2111,11 @@ function init(){
   $("recBtn").addEventListener("click", ()=>{
     if(REC.active) stopRecording(); else startRecording();
   });
+  $("shareBtn").addEventListener("click", sharePatch);
+
+  // load patch from URL if present (must run after all knobs/chips exist)
+  loadPatchFromHash();
+  window.addEventListener("hashchange", loadPatchFromHash);
 
   // preset buttons
   document.querySelectorAll(".preset-row button[data-preset]").forEach(b=>{
