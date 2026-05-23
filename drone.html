@@ -409,6 +409,7 @@
   </div>
   <div class="hdr-controls">
     <button id="playBtn" class="primary">▶ PLAY</button>
+    <button id="fadeBtn" title="Slow fade to silence over FADE TIME">⇣ FADE</button>
     <button id="panicBtn">PANIC</button>
     <span class="sep"></span>
     <button id="recBtn">● REC</button>
@@ -729,6 +730,9 @@ const G = {
   // Preferred output sample rate; the browser may quietly substitute a
   // different rate. Actual context sampleRate is shown in the header.
   preferredSR: 96000,
+
+  // Auto-fade-out — slow user-driven fade to silence
+  fadeTime: 30,  // seconds (3 .. 600)
 
   // 3-band master EQ (low-shelf 220Hz / mid-peak / high-shelf 4500Hz)
   eqLowGain:  0,   // dB, -12..+12
@@ -1428,6 +1432,7 @@ function updateOscToneGains(v){
 function startDrone(){
   ensureAudio().then(()=>{
     if(G.playing) return;
+    cancelFadeOut();
     rebuildVoices();
     const t = G.ctx.currentTime;
     G.master.gain.cancelScheduledValues(t);
@@ -1446,6 +1451,7 @@ function startDrone(){
 
 function stopDrone(){
   if(!G.playing || !G.ctx) return;
+  cancelFadeOut();
   const t = G.ctx.currentTime;
   G.master.gain.cancelScheduledValues(t);
   G.master.gain.setValueAtTime(G.master.gain.value, t);
@@ -1462,6 +1468,7 @@ function stopDrone(){
 
 function panic(){
   if(!G.ctx) return;
+  cancelFadeOut();
   G.master.gain.cancelScheduledValues(G.ctx.currentTime);
   G.master.gain.setValueAtTime(0, G.ctx.currentTime);
   const dying = G.voices;
@@ -1472,6 +1479,58 @@ function panic(){
   $("playBtn").textContent = "▶ PLAY";
   $("status").classList.remove("on");
   $("status").innerHTML = '<span class="dot"></span>idle';
+}
+
+// ============================================================
+// AUTO FADE OUT — long user-driven fade to silence
+// ============================================================
+let _fadeTimer = null;
+
+function startFadeOut(){
+  if(!G.playing || !G.ctx) return;
+  if(_fadeTimer) return; // already fading
+  const dur = Math.max(1, G.fadeTime);
+  const t = G.ctx.currentTime;
+  G.master.gain.cancelScheduledValues(t);
+  G.master.gain.setValueAtTime(G.master.gain.value, t);
+  // exponential fade reads as natural decay to the ear; clamp away from 0
+  G.master.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  $("fadeBtn").classList.add("active");
+  $("fadeBtn").textContent = "■ CANCEL FADE";
+  $("status").innerHTML = '<span class="dot"></span>fading';
+  _fadeTimer = setTimeout(()=>{
+    // teardown after the fade completes
+    const dying = G.voices;
+    G.voices = [];
+    for(const v of dying) freeVoice(v, 0);
+    G.playing = false;
+    _fadeTimer = null;
+    G.master.gain.cancelScheduledValues(G.ctx.currentTime);
+    G.master.gain.setValueAtTime(0, G.ctx.currentTime);
+    $("playBtn").classList.remove("on");
+    $("playBtn").textContent = "▶ PLAY";
+    $("status").classList.remove("on");
+    $("status").innerHTML = '<span class="dot"></span>idle';
+    $("fadeBtn").classList.remove("active");
+    $("fadeBtn").textContent = "⇣ FADE";
+  }, dur * 1000 + 120);
+}
+
+function cancelFadeOut(){
+  if(!_fadeTimer) return;
+  clearTimeout(_fadeTimer);
+  _fadeTimer = null;
+  $("fadeBtn").classList.remove("active");
+  $("fadeBtn").textContent = "⇣ FADE";
+  if(G.ctx && G.playing){
+    // recover to current volume over a couple of seconds
+    const t = G.ctx.currentTime;
+    G.master.gain.cancelScheduledValues(t);
+    G.master.gain.setValueAtTime(G.master.gain.value, t);
+    G.master.gain.linearRampToValueAtTime(db2lin(G.vol_db), t + 2);
+    $("status").classList.add("on");
+    $("status").innerHTML = '<span class="dot"></span>droning';
+  }
 }
 
 let _rebuildId = 0;
@@ -2205,6 +2264,17 @@ function buildAllKnobs(){
                          fmt:v=>v.toFixed(0)+" dB", defaultValue:-16,
                          onInput:v=>{ G.vol_db = v; applyVolume(); }
                        }, "vol");
+  addKnob("spaceKnobs", { label:"Fade",   min:3, max:600, value:G.fadeTime,
+                         log:true,
+                         fmt:v=>{
+                           const t = Math.round(v);
+                           if(t < 60) return t+" s";
+                           const m = Math.floor(t/60), s = t%60;
+                           return m+":"+(s<10?"0":"")+s;
+                         },
+                         defaultValue:30,
+                         onInput:v=>{ G.fadeTime = v; }
+                       }, "fadeTime");
 
   // INPUT GRAIN — mix is the master on/off (0 = silent); grain is dry/wet
   addKnob("inputKnobs", { label:"Mix",   min:0, max:100, value:INPUT.mix,
@@ -2840,6 +2910,7 @@ const PATCH_KEYS = {
   psr:"preferredSR",
   eql:"eqLowGain", eqm:"eqMidGain", eqmh:"eqMidHz", eqh:"eqHighGain",
   ts:"transitionStyle",
+  ft:"fadeTime",
 };
 
 // INPUT GRAIN params travel under their own short keys (saved alongside G)
@@ -3458,6 +3529,10 @@ function init(){
     if(G.playing) stopDrone(); else startDrone();
   });
   $("panicBtn").addEventListener("click", panic);
+  $("fadeBtn").addEventListener("click", ()=>{
+    if(_fadeTimer) cancelFadeOut();
+    else startFadeOut();
+  });
   $("rootWalkToggle").addEventListener("click", ()=>{
     G.evolveRootWalk = !G.evolveRootWalk;
     refreshRootWalkUI();
