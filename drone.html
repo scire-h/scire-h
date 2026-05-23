@@ -538,6 +538,11 @@
       <h2>SPACE</h2>
       <div class="row" style="margin-top:8px;"><label>Binaural (3D)</label><span class="chip" id="binauralToggle">OFF</span></div>
       <div class="knob-grid" id="spaceKnobs"></div>
+      <div class="row" style="margin-top:6px;"><label>Reverb Modes</label></div>
+      <div class="chips" id="reverbModeChips"></div>
+      <div style="font-size:9px; color:var(--ink-dd); margin-top:4px; line-height:1.4;">
+        Gated=短い直線残響 / Freeze=無限ホールド / Mod=tail を揺らす / Shimmer=オクターブ上を重ねていく (kira-kira)
+      </div>
     </section>
 
     <section class="panel">
@@ -748,6 +753,12 @@ const G = {
   // Binaural (HRTF panning) mode
   binaural: false,
 
+  // Special reverb modes (toggle, independent)
+  revGated:   false,   // IR has linear envelope with a hard cut (gated)
+  revFreeze:  false,   // wet output feeds back into conv input -> infinite hold
+  revMod:     false,   // chorus modulation on wet bus
+  revShimmer: false,   // pitch-up feedback from wet -> conv input
+
   // 3-band master EQ (low-shelf 220Hz / mid-peak / high-shelf 4500Hz)
   eqLowGain:  0,   // dB, -12..+12
   eqMidGain:  0,
@@ -939,13 +950,50 @@ async function ensureAudio(){
   G.shimmerLfo.connect(G.shimmerGain).connect(G.shimmerFilt.gain);
   G.shimmerLfo.start();
 
-  // dry / wet
-  G.dry = ctx.createGain();
-  G.wet = ctx.createGain();
+  // dry / wet — with auxiliary nodes for special reverb modes:
+  //   revIn      : the convolver's input. Both the main signal AND the special-mode
+  //                feedback loops (freeze, shimmer) go through here.
+  //   freezeFb   : wet -> revIn feedback (FREEZE mode)
+  //   modL/R     : chorus delays on the wet output (MOD mode)
+  //   shimmerPS  : pitch-up shifter on wet -> revIn (SHIMMER mode)
+  G.dry  = ctx.createGain();
+  G.wet  = ctx.createGain();
   G.conv = ctx.createConvolver();
+  G.revIn = ctx.createGain();
+  G.revIn.gain.value = 1;
   buildIR(G.reverbTail);
   G.dry.gain.value = 1 - G.reverbMix/100;
   G.wet.gain.value = G.reverbMix/100;
+
+  // FREEZE feedback (off by default)
+  G.freezeFb = ctx.createGain();
+  G.freezeFb.gain.value = G.revFreeze ? 0.92 : 0;
+  // MOD chorus (off by default)
+  G.modDelayL = ctx.createDelay(0.05);
+  G.modDelayR = ctx.createDelay(0.05);
+  G.modDelayL.delayTime.value = 0.018;
+  G.modDelayR.delayTime.value = 0.022;
+  G.modGainL = ctx.createGain();
+  G.modGainR = ctx.createGain();
+  G.modGainL.gain.value = G.revMod ? 0.6 : 0;
+  G.modGainR.gain.value = G.revMod ? 0.6 : 0;
+  G.modSplit = ctx.createChannelSplitter(2);
+  G.modMerge = ctx.createChannelMerger(2);
+  G.modLfoL = ctx.createOscillator();
+  G.modLfoR = ctx.createOscillator();
+  G.modLfoL.frequency.value = 0.43;
+  G.modLfoR.frequency.value = 0.37;
+  G.modLfoLg = ctx.createGain();
+  G.modLfoRg = ctx.createGain();
+  G.modLfoLg.gain.value = 0.005;
+  G.modLfoRg.gain.value = 0.005;
+  G.modLfoL.connect(G.modLfoLg).connect(G.modDelayL.delayTime);
+  G.modLfoR.connect(G.modLfoRg).connect(G.modDelayR.delayTime);
+  G.modLfoL.start();
+  G.modLfoR.start();
+  // SHIMMER pitch-up shifter (registered separately, see PITCH_WORKLET below)
+  G.shimmerFbGain = ctx.createGain();
+  G.shimmerFbGain.gain.value = 0; // enabled after worklet loads
 
   // 3-band EQ (low-shelf / mid-peak / high-shelf), in series after the
   // shimmer high-shelf and before the dry/wet split. All flat at startup.
@@ -974,7 +1022,20 @@ async function ensureAudio(){
   G.eqHigh.connect(G.postFilter);
   G.postFilter.connect(G.shimmerFilt);
   G.shimmerFilt.connect(G.dry).connect(G.master);
-  G.shimmerFilt.connect(G.conv).connect(G.wet).connect(G.master);
+  // main wet path: shimmerFilt -> revIn -> conv -> wet -> master
+  G.shimmerFilt.connect(G.revIn);
+  G.revIn.connect(G.conv).connect(G.wet).connect(G.master);
+  // FREEZE feedback: wet (post-conv) -> freezeFb -> revIn (= back into conv)
+  G.conv.connect(G.freezeFb).connect(G.revIn);
+  // MOD chorus on wet (post-conv): per-channel delays modulated by slow LFOs
+  G.wet.connect(G.modSplit);
+  G.modSplit.connect(G.modDelayL, 0);
+  G.modSplit.connect(G.modDelayR, 1);
+  G.modDelayL.connect(G.modMerge, 0, 0);
+  G.modDelayR.connect(G.modMerge, 0, 1);
+  G.modMerge.connect(G.modGainL).connect(G.master);
+  // SHIMMER pitch-up feedback is wired in once the worklet finishes loading
+  ensureShimmerShifter();
 
   // ----- Ping-pong stereo delay -----
   // L → delayL → out L → feedback gain → delayR (crosses to R)
@@ -1053,13 +1114,23 @@ function buildIR(tailSec){
   const sr = G.ctx.sampleRate;
   const len = Math.max(1, Math.floor(sr * tailSec));
   const ir = G.ctx.createBuffer(2, len, sr);
+  const gated = !!G.revGated;
   for(let ch=0; ch<2; ch++){
     const d = ir.getChannelData(ch);
     for(let i=0; i<len; i++){
       const t = i/len;
-      // slightly diffuse early reflections then smooth tail
       const early = (i < sr*0.02) ? (Math.random()*2-1) * 0.4 : 0;
-      d[i] = ((Math.random()*2-1) * 0.6 + early) * Math.pow(1-t, 2.4);
+      let env;
+      if(gated){
+        // Gated: dense diffuse field, mostly flat, hard cut at the end.
+        // Gives the dry-yet-spatial 80s drum-room sound.
+        const plateau = t < 0.85 ? 1.0 : (1.0 - (t - 0.85) / 0.15);
+        env = Math.max(0, plateau);
+      } else {
+        // Hall: standard exponential-ish decay
+        env = Math.pow(1 - t, 2.4);
+      }
+      d[i] = ((Math.random()*2-1) * 0.6 + early) * env;
     }
   }
   G.conv.buffer = ir;
@@ -2002,6 +2073,86 @@ function applyDelay(){
   G.delayWet.gain.setTargetAtTime(G.delayMix, t, 0.05);
 }
 
+function applyReverbModes(){
+  if(!G.ctx) return;
+  const t = G.ctx.currentTime;
+  if(G.freezeFb)  G.freezeFb.gain.setTargetAtTime(G.revFreeze ? 0.92 : 0, t, 0.1);
+  if(G.modGainL)  G.modGainL.gain.setTargetAtTime(G.revMod ? 0.6 : 0, t, 0.1);
+  if(G.modGainR)  G.modGainR.gain.setTargetAtTime(G.revMod ? 0.6 : 0, t, 0.1);
+  if(G.shimmerFbGain) G.shimmerFbGain.gain.setTargetAtTime(G.revShimmer ? 0.45 : 0, t, 0.1);
+  // GATED affects IR shape — rebuild the impulse response
+  buildIR(G.reverbTail);
+}
+
+// ============================================================
+// SHIMMER pitch-up worklet — granular dual-window pitch shifter
+// ============================================================
+const PITCH_UP_WORKLET = `
+class PitchUpP extends AudioWorkletProcessor {
+  constructor(opts){
+    super();
+    this.ratio = (opts && opts.processorOptions && opts.processorOptions.ratio) || 2.0;
+    this.bufLen = 16384;
+    this.buf = new Float32Array(this.bufLen);
+    this.wp = 0;
+    this.winLen = 2048;
+    this.rpA = 0;
+    this.rpB = this.winLen / 2;
+  }
+  process(inputs, outputs){
+    const inCh = inputs[0] && inputs[0][0];
+    const outCh = outputs[0] && outputs[0][0];
+    if(!outCh) return true;
+    const N = this.bufLen, W = this.winLen;
+    for(let i=0; i<outCh.length; i++){
+      if(inCh) this.buf[this.wp] = inCh[i];
+      this.wp = (this.wp + 1) % N;
+      const phA = ((this.rpA % W) + W) % W / W;
+      const phB = ((this.rpB % W) + W) % W / W;
+      const envA = 0.5 - 0.5 * Math.cos(2*Math.PI * phA);
+      const envB = 0.5 - 0.5 * Math.cos(2*Math.PI * phB);
+      const idxA = ((Math.floor(this.rpA) % N) + N) % N;
+      const idxB = ((Math.floor(this.rpB) % N) + N) % N;
+      outCh[i] = this.buf[idxA] * envA + this.buf[idxB] * envB;
+      this.rpA += this.ratio;
+      this.rpB += this.ratio;
+      // wrap each read head back near the write pointer when it completes a window
+      if((this.rpA % W) < this.ratio){
+        this.rpA = (this.wp - W + N) % N;
+      }
+      if((this.rpB % W) < this.ratio){
+        this.rpB = ((this.wp - W + N) % N) + W/2;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor("pitch-up-p", PitchUpP);
+`;
+let _pitchUpWorkletURL = null;
+let _pitchUpReady = false;
+async function ensureShimmerShifter(){
+  if(_pitchUpReady) return;
+  if(!_pitchUpWorkletURL){
+    _pitchUpWorkletURL = URL.createObjectURL(new Blob([PITCH_UP_WORKLET], {type:"application/javascript"}));
+  }
+  try {
+    await G.ctx.audioWorklet.addModule(_pitchUpWorkletURL);
+    _pitchUpReady = true;
+    G.shimmerPS = new AudioWorkletNode(G.ctx, "pitch-up-p", { processorOptions: { ratio: 2.0 } });
+    // pre-tone the shimmer with a gentle high-shelf so it has air
+    G.shimmerShelf = G.ctx.createBiquadFilter();
+    G.shimmerShelf.type = "highshelf";
+    G.shimmerShelf.frequency.value = 1200;
+    G.shimmerShelf.gain.value = 6;
+    G.wet.connect(G.shimmerPS).connect(G.shimmerShelf).connect(G.shimmerFbGain).connect(G.revIn);
+    // apply current state in case revShimmer was already on at load time
+    applyReverbModes();
+  } catch(e){
+    console.warn("shimmer worklet failed:", e);
+  }
+}
+
 function applyNoise(){
   if(!G.ctx) return;
   const tgt = (G.noise/100) * 0.3;
@@ -2508,6 +2659,29 @@ function refreshBinauralUI(){
   t.textContent = G.binaural ? "ON" : "OFF";
 }
 
+function buildReverbModeChips(){
+  const box = $("reverbModeChips");
+  if(!box) return;
+  box.innerHTML = "";
+  const modes = [
+    { id:"revGated",   label:"Gated"   },
+    { id:"revFreeze",  label:"Freeze"  },
+    { id:"revMod",     label:"Mod"     },
+    { id:"revShimmer", label:"Shimmer" },
+  ];
+  modes.forEach(m=>{
+    const c = document.createElement("div");
+    c.className = "chip" + (G[m.id] ? " on" : "");
+    c.textContent = m.label;
+    c.addEventListener("click", ()=>{
+      G[m.id] = !G[m.id];
+      c.classList.toggle("on", G[m.id]);
+      applyReverbModes();
+    });
+    box.appendChild(c);
+  });
+}
+
 function buildTransitionChips(){
   const box = $("transitionChips");
   if(!box) return;
@@ -2803,6 +2977,7 @@ function applyPreset(name){
     applyVolume();
     applyEQ();
     applyDelay();
+    applyReverbModes();
     evolveReset();
   }
   refreshNextChordIndicator();
@@ -3010,6 +3185,7 @@ const PATCH_KEYS = {
   ft:"fadeTime",
   dt:"delayTime", dfb:"delayFb", dmx:"delayMix",
   bin:"binaural",
+  rvg:"revGated", rvf:"revFreeze", rvm:"revMod", rvs:"revShimmer",
 };
 
 // INPUT GRAIN params travel under their own short keys (saved alongside G)
@@ -3045,7 +3221,8 @@ function decodePatch(str){
     if(p[short] === undefined) continue;
     const k = PATCH_KEYS[short];
     let v = p[short];
-    if(k === "evolveRootWalk" || k === "binaural") v = !!v;
+    if(k === "evolveRootWalk" || k === "binaural" ||
+       k === "revGated" || k === "revFreeze" || k === "revMod" || k === "revShimmer") v = !!v;
     G[k] = v;
     if(knobRefs[k]) knobRefs[k].setValue(v);
   }
@@ -3076,6 +3253,7 @@ function loadPatchFromHash(){
   buildSrcChips();
   buildSrChips();
   buildTransitionChips();
+  buildReverbModeChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshBinauralUI();
@@ -3094,6 +3272,7 @@ function loadPatchFromHash(){
     applyVolume();
     applyEQ();
     applyDelay();
+    applyReverbModes();
   }
   return true;
 }
@@ -3158,6 +3337,7 @@ function applyPatchObj(data){
   buildSrcChips();
   buildSrChips();
   buildTransitionChips();
+  buildReverbModeChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshBinauralUI();
@@ -3176,6 +3356,7 @@ function applyPatchObj(data){
     applyVolume();
     applyEQ();
     applyDelay();
+    applyReverbModes();
   }
 }
 
@@ -3614,6 +3795,7 @@ function init(){
   buildSrcChips();
   buildSrChips();
   buildTransitionChips();
+  buildReverbModeChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshBinauralUI();
