@@ -413,7 +413,7 @@
     <section class="panel">
       <h2>EVOLVE</h2>
       <div class="chips" id="evolveChips" style="margin-top:10px;"></div>
-      <div class="knob-grid cols-1" id="evolveKnobs"></div>
+      <div class="knob-grid cols-2" id="evolveKnobs"></div>
       <div class="row" style="margin-top:6px;"><label>Root Walk</label><span class="chip" id="rootWalkToggle">OFF</span></div>
       <div class="row" style="margin-top:4px;"><label>Next In</label><span class="val" id="nextChangeIn">—</span></div>
       <button id="jumpBtn" style="margin:6px 0 2px; width:100%;">JUMP NOW</button>
@@ -642,6 +642,11 @@ const G = {
   // so the chord morphs continuously instead of changing as a block.
   walkRate:  0,               // 0..100, scales how often each voice walks
   walkRange: 3,               // ±semitones range around chord tone
+
+  // SEAMLESS: how invisible chord transitions should be. Higher values
+  //   - lengthen each voice's glide / crossfade
+  //   - stagger voices so they don't all start moving on the same beat
+  seamless:  50,              // 0..100
 
   // session seed — same seed = same yuragi/voice character
   seed: 0,
@@ -1266,6 +1271,8 @@ function panic(){
   $("status").innerHTML = '<span class="dot"></span>idle';
 }
 
+let _rebuildId = 0;
+
 function rebuildVoices(opts){
   opts = opts || {};
   const iv = intervalsOf(G.chord);
@@ -1275,25 +1282,39 @@ function rebuildVoices(opts){
     .filter(f => f >= 12 && f <= 12000);
   const N = newFreqs.length;
   const expectedOscCount = G.oscVoices * 3; // sine + saw + tri per detune-voice
+  const myId = ++_rebuildId;
+
+  // seamless scaling: morph time, voice stagger window
+  const slow = G.seamless / 100;
+  const morphTime  = 1.5 + slow * 10;   // 1.5s .. 11.5s per voice
+  const staggerWin = slow * 4.5;        // 0 .. 4.5s random delay window
 
   // GLIDE PATH — same voice count, same internal osc count, currently playing.
   // Morph existing oscillators to the new frequencies instead of tearing down so
-  // LFOs / breath / drift keep their phase. Skipped when a knob explicitly asks
-  // for a rebuild (vintage / breath / oscVoices bake LFOs at build time).
+  // LFOs / breath / drift keep their phase. Each voice picks a random delay so
+  // voices don't all start moving at the same instant (key to invisibility).
   if(!opts.force && G.playing && G.voices.length === N && N > 0 &&
      G.voices.every(v => v.oscList.length === expectedOscCount)){
     for(let i=0; i<N; i++){
       const v = G.voices[i];
-      v.chordFreq = newFreqs[i];      // new chord anchor
-      v.walkDelta = 0;                // chord change resets the walk drift
-      v.walkNextAt = 0;               // restart walk scheduler from this voice
-      glideVoice(v, newFreqs[i]);
+      v.walkDelta = 0;          // chord change resets any in-progress walk
+      v.walkNextAt = 0;
+      v.chordFreq = newFreqs[i];
+      const delay = (Math.random() * staggerWin) * 1000;
+      if(delay < 1){
+        glideVoice(v, newFreqs[i], morphTime);
+      } else {
+        setTimeout(()=>{
+          if(_rebuildId !== myId) return; // a newer change has superseded us
+          glideVoice(v, newFreqs[i], morphTime);
+        }, delay);
+      }
     }
     return;
   }
 
   // FULL REBUILD — voice count changes, or not yet playing — long crossfade
-  const fade = G.playing ? 1.8 : 0;
+  const fade = G.playing ? (1.5 + slow * 6) : 0;   // 1.5..7.5s when playing
   const dying = G.voices;
   G.voices = [];
   for(const v of dying) freeVoice(v, fade);
@@ -1842,6 +1863,15 @@ function buildAllKnobs(){
                             if(G.ctx) G.evolveNextAt = G.ctx.currentTime + v;
                           }
                         }, "evolveInterval");
+  addKnob("evolveKnobs", { label:"Seamless", min:0, max:100, value:G.seamless,
+                          fmt:v => {
+                            if(v < 0.5) return "0% (snap)";
+                            const morphT = 1.5 + (v/100) * 10;
+                            return v.toFixed(0) + "% (" + morphT.toFixed(1) + "s)";
+                          },
+                          defaultValue:50,
+                          onInput:v=>{ G.seamless = v; }
+                        }, "seamless");
 
   // VOICE WALK
   addKnob("walkKnobs", { label:"Walk",  min:0, max:100, value:G.walkRate,
@@ -2369,6 +2399,7 @@ const PATCH_KEYS = {
   vt:"vintage", br:"breath", brr:"breathRate", sd:"seed",
   nz:"noise", xm:"xMod", xr:"xRate",
   wk:"walkRate", wkr:"walkRange",
+  sm:"seamless",
 };
 
 function encodePatch(){
