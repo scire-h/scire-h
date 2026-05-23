@@ -159,7 +159,7 @@
   .tracks-strip{
     display:grid;
     grid-template-columns: repeat(6, 1fr);
-    gap: 0;
+    gap: 1px;
     background: #000;
     border-top: 1px solid #000;
     border-bottom: 1px solid #000;
@@ -172,10 +172,8 @@
     padding: 5px 8px 6px;
     background: #fff;
     cursor: pointer;
-    border-right: 1px solid #000;
     border-left: 3px solid var(--c);
   }
-  .strip:last-child{ border-right: 0; }
   .strip.sel{
     background: #000;
     color: #fff;
@@ -720,12 +718,17 @@
   }
   .knob{
     display: flex; flex-direction: column; align-items: center;
-    user-select: none; touch-action: none;
-    cursor: ns-resize;
+    user-select: none;
+    /* touch-action stays default so scrolling through the cell works;
+       only the SVG disc captures drag */
     position: relative;
     padding: 4px 0;
   }
-  .knob svg{ width: 44px; height: 44px; display: block; }
+  .knob svg{
+    width: 44px; height: 44px; display: block;
+    touch-action: none;        /* dragging the disc itself never scrolls */
+    cursor: ns-resize;
+  }
   .knob-track{ fill: none; stroke: rgba(0,0,0,0.18); stroke-width: 2; }
   .knob-fill { fill: none; stroke: #000; stroke-width: 4; stroke-linecap: butt; }
   .knob-pointer line{ stroke: #000; stroke-width: 2.5; stroke-linecap: square; }
@@ -838,16 +841,20 @@
     .visuals{ grid-template-columns: 1fr; }
   }
   @media (max-width: 720px){
-    header{ padding: 10px 14px; }
-    header .brand h1{ font-size: 11px; }
+    header{ padding-left: 8px; padding-right: 8px; padding-top: 14px; }
+    header .brand h1{ font-size: 12px; }
     header .brand .sub{ display: none; }
+    main{ padding: 6px; gap: 6px; }
+    section.panel > *:not(h2){ margin-left: 8px; margin-right: 8px; }
     .tracks-strip{ grid-template-columns: repeat(4, 1fr); }
-    .strip{ padding: 6px 8px 7px; }
+    .strip{ padding: 5px 6px 6px; }
     .strip .meter{ height: 3px; margin-top: 4px; }
-    .strip-head .name{ font-size: 10px; }
-    .strip-head button{ padding: 2px 4px; font-size: 8px; }
-    .knob-grid{ grid-template-columns: repeat(4, 1fr); gap: 12px 2px; }
-    .knob svg{ width: 38px; height: 38px; }
+    .strip-head .name{ font-size: 11px; }
+    .strip-head button{ padding: 1px 5px; font-size: 9px; min-width: 18px; }
+    .knob-grid{ grid-template-columns: repeat(3, 1fr); gap: 14px 6px; }
+    .fx-params{ grid-template-columns: repeat(3, 1fr); }
+    .knob svg{ width: 42px; height: 42px; }
+    .pattern-row{ grid-template-columns: 30px 24px 34px 1fr; gap: 2px; }
     section.panel{ padding: 14px 14px 18px; }
     .stage-block{ padding: 14px 14px; }
     .seq-cell{ min-height: 30px; aspect-ratio: auto; height: 34px; font-size: 10px; }
@@ -2651,9 +2658,29 @@ function setPosFromEvent(e){
 waveCanvas.addEventListener("mousedown", e=>{ dragging=true; setPosFromEvent(e); });
 window.addEventListener("mousemove", e=>{ if(dragging) setPosFromEvent(e); });
 window.addEventListener("mouseup", ()=>{ dragging=false; });
-waveCanvas.addEventListener("touchstart", e=>{ dragging=true; setPosFromEvent(e); e.preventDefault(); }, {passive:false});
-waveCanvas.addEventListener("touchmove",  e=>{ if(dragging) setPosFromEvent(e); }, {passive:true});
-waveCanvas.addEventListener("touchend",   ()=>{ dragging=false; });
+
+// touch: detect intent — vertical drag = page scroll, horizontal = scrub
+let tDown = false, tStartX = 0, tStartY = 0, scrubbing = false;
+waveCanvas.addEventListener("touchstart", e=>{
+  tDown = true; scrubbing = false;
+  tStartX = e.touches[0].clientX;
+  tStartY = e.touches[0].clientY;
+}, {passive: true});
+waveCanvas.addEventListener("touchmove", e=>{
+  if(!tDown) return;
+  const dx = Math.abs(e.touches[0].clientX - tStartX);
+  const dy = Math.abs(e.touches[0].clientY - tStartY);
+  if(!scrubbing){
+    if(dy > dx && dy > 8){ tDown = false; return; }   // user is scrolling, let it scroll
+    if(dx > 8) scrubbing = true;
+  }
+  if(scrubbing){
+    setPosFromEvent(e);
+    e.preventDefault();
+  }
+}, {passive: false});
+waveCanvas.addEventListener("touchend",    ()=>{ tDown = false; scrubbing = false; });
+waveCanvas.addEventListener("touchcancel", ()=>{ tDown = false; scrubbing = false; });
 
 function drawScope(){
   if(!G.ana){
@@ -2838,22 +2865,22 @@ function cycleSliceFor(t, idx){
 }
 
 function attachPatternCellPointer(cell, t){
-  let timer = null, longFired = false, sx=0, sy=0;
+  let timer = null, longFired = false, moved = false, sx=0, sy=0;
   cell.addEventListener("pointerdown", e=>{
-    longFired = false; sx = e.clientX; sy = e.clientY;
-    // long-press only meaningful in slice mode
+    longFired = false; moved = false; sx = e.clientX; sy = e.clientY;
     if(t.seq.mode === "slice"){
       timer = setTimeout(()=>{ longFired = true; cycleSliceFor(t, +cell.dataset.idx); }, 380);
     }
   });
   cell.addEventListener("pointermove", e=>{
-    if(timer && (Math.abs(e.clientX-sx)>6 || Math.abs(e.clientY-sy)>6)){
-      clearTimeout(timer); timer = null;
+    if(Math.abs(e.clientX-sx)>6 || Math.abs(e.clientY-sy)>6){
+      moved = true;
+      if(timer){ clearTimeout(timer); timer = null; }
     }
   });
   cell.addEventListener("pointerup", e=>{
     if(timer){ clearTimeout(timer); timer = null; }
-    if(longFired) return;
+    if(longFired || moved) return;          // skip tap if the gesture was a scroll
     const idx = +cell.dataset.idx;
     if(e.shiftKey){
       t.seq.active[idx] = false;
@@ -3008,6 +3035,7 @@ function makeKnob(opts){
   const fill    = root.querySelector(".knob-fill");
   const pointer = root.querySelector(".knob-pointer");
   const pop     = root.querySelector(".knob-pop");
+  const svg     = root.querySelector("svg");
   const min = opts.min, max = opts.max, log = !!opts.log;
   let val = clamp(opts.value, min, max);
 
@@ -3036,15 +3064,15 @@ function makeKnob(opts){
   render();
 
   let dragging = false, startY = 0, startN = 0;
-  root.addEventListener("pointerdown", e=>{
+  svg.addEventListener("pointerdown", e=>{
     dragging = true;
     startY = e.clientY;
     startN = toNorm(val);
     root.classList.add("active");
-    try{ root.setPointerCapture(e.pointerId); }catch(_){}
+    try{ svg.setPointerCapture(e.pointerId); }catch(_){}
     e.preventDefault();
   });
-  root.addEventListener("pointermove", e=>{
+  svg.addEventListener("pointermove", e=>{
     if(!dragging) return;
     const dy = startY - e.clientY;          // up = increase
     const sens = e.shiftKey ? 600 : 220;    // shift = fine
@@ -3058,13 +3086,13 @@ function makeKnob(opts){
     dragging = false;
     root.classList.remove("active");
   }
-  root.addEventListener("pointerup", endDrag);
-  root.addEventListener("pointercancel", endDrag);
-  root.addEventListener("lostpointercapture", endDrag);
+  svg.addEventListener("pointerup", endDrag);
+  svg.addEventListener("pointercancel", endDrag);
+  svg.addEventListener("lostpointercapture", endDrag);
 
-  // double-tap (>2 clicks within 300ms) resets to default if provided
+  // double-tap on the disc resets to default if provided
   let lastTap = 0;
-  root.addEventListener("pointerup", e=>{
+  svg.addEventListener("pointerup", e=>{
     const now = performance.now();
     if(now - lastTap < 300 && opts.defaultValue !== undefined){
       val = snap(opts.defaultValue);
@@ -3378,9 +3406,9 @@ function buildMemGrid(){
   }
 }
 function attachMemPointer(b, idx){
-  let timer = null, longFired = false, sx=0, sy=0;
+  let timer = null, longFired = false, moved = false, sx=0, sy=0;
   b.addEventListener("pointerdown", e=>{
-    longFired = false; sx = e.clientX; sy = e.clientY;
+    longFired = false; moved = false; sx = e.clientX; sy = e.clientY;
     timer = setTimeout(()=>{
       longFired = true;
       G.memories[idx] = null;
@@ -3393,13 +3421,14 @@ function attachMemPointer(b, idx){
     }, 600);
   });
   b.addEventListener("pointermove", e=>{
-    if(timer && (Math.abs(e.clientX-sx)>6 || Math.abs(e.clientY-sy)>6)){
-      clearTimeout(timer); timer = null;
+    if(Math.abs(e.clientX-sx)>6 || Math.abs(e.clientY-sy)>6){
+      moved = true;
+      if(timer){ clearTimeout(timer); timer = null; }
     }
   });
   b.addEventListener("pointerup", e=>{
     if(timer){ clearTimeout(timer); timer = null; }
-    if(longFired) return;
+    if(longFired || moved) return;
     if(e.altKey){
       G.memories[idx] = null;
       localStorage.removeItem("granular.mem."+idx);
