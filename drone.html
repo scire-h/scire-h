@@ -511,44 +511,44 @@ const G = {
 
   // pitch & chord
   noteIdx: 9,    // 0=C, 9=A
-  octave: 0,
-  chord: "fifthoct",
+  octave: -1,
+  chord: "fifth",
 
   // voice config
-  oscVoices: 3,  // detune voices per note
-  oscDetune: 8,  // cents spread
-  oscTone: 0.35, // 0=sine, 1=saw
-  oscTri:  0.0,  // triangle component (sub)
+  oscVoices: 2,  // detune voices per note
+  oscDetune: 7,  // cents spread
+  oscTone: 0.20, // 0=sine, 1=saw  (sine-leaning, warmer)
+  oscTri:  0.15, // triangle component (sub)
 
   // levels
-  oscLevel:   0.7,
-  grainLevel: 0.45,
+  oscLevel:   0.6,
+  grainLevel: 0.4,
 
   // yuragi
-  drift:     22,    // cents depth
-  driftRate: 0.45,  // 0..1 -> overall LFO speed scaler
-  amDepth:   18,    // 0..100 % amplitude wave
-  amRate:    0.3,   // 0..1 LFO scaler
-  panDepth:  35,    // 0..100 pan motion
+  drift:     20,    // cents depth
+  driftRate: 0.4,   // 0..1 -> overall LFO speed scaler
+  amDepth:   14,    // 0..100 % amplitude wave
+  amRate:    0.25,  // 0..1 LFO scaler
+  panDepth:  30,    // 0..100 pan motion
   jitter:    25,    // 0..100 inter-voice randomness scaler
 
   // filter
-  bright:    2400,  // Hz
-  filtDrift: 35,    // %
-  shimmer:   25,    // % adds slow high-shelf tickle
+  bright:    1400,  // Hz (warmer default)
+  filtDrift: 30,
+  shimmer:   18,
 
   // grain
-  grainSize:  220,  // ms
-  grainRate:  10,   // grains/sec/voice
-  grainJit:   35,   // %
-  grainPosJit: 50,  // % random walk inside buffer
-  grainPos:   0.5,  // slowly drifts on its own
+  grainSize:  260,
+  grainRate:  9,
+  grainJit:   30,
+  grainPosJit: 50,
+  grainPos:   0.5,
 
   // space
-  spread:     60,   // %
-  reverbMix:  45,   // %
+  spread:     55,
+  reverbMix:  45,
   reverbTail: 4.0,
-  vol_db:     -10,
+  vol_db:     -16,
 
   // grain source
   src: "pink", // pink, sine, fm, bell, choir, file
@@ -1113,9 +1113,30 @@ function panic(){
   $("status").innerHTML = '<span class="dot"></span>idle';
 }
 
-function rebuildVoices(){
-  // soft cross-fade: fade out old voices, fade in new ones
-  const fade = G.playing ? 0.6 : 0;
+function rebuildVoices(opts){
+  opts = opts || {};
+  const iv = intervalsOf(G.chord);
+  const rootF = noteFreq(G.noteIdx, G.octave);
+  const newFreqs = iv
+    .map(s => rootF * Math.pow(2, s/12))
+    .filter(f => f >= 12 && f <= 12000);
+  const N = newFreqs.length;
+  const expectedOscCount = G.oscVoices * 3; // sine + saw + tri per detune-voice
+
+  // GLIDE PATH — same voice count, same internal osc count, currently playing.
+  // Morph existing oscillators to the new frequencies instead of tearing down so
+  // LFOs / breath / drift keep their phase. Skipped when a knob explicitly asks
+  // for a rebuild (vintage / breath / oscVoices bake LFOs at build time).
+  if(!opts.force && G.playing && G.voices.length === N && N > 0 &&
+     G.voices.every(v => v.oscList.length === expectedOscCount)){
+    for(let i=0; i<N; i++){
+      glideVoice(G.voices[i], newFreqs[i]);
+    }
+    return;
+  }
+
+  // FULL REBUILD — voice count changes, or not yet playing — long crossfade
+  const fade = G.playing ? 1.8 : 0;
   const dying = G.voices;
   G.voices = [];
   for(const v of dying) freeVoice(v, fade);
@@ -1123,13 +1144,22 @@ function rebuildVoices(){
   // seed the PRNG so every rebuild from the same SEED gives the same yuragi character
   setSeed(G.seed);
 
-  const iv = intervalsOf(G.chord);
-  const rootF = noteFreq(G.noteIdx, G.octave);
-  const N = iv.length;
   for(let i=0; i<N; i++){
-    const f = rootF * Math.pow(2, iv[i]/12);
-    if(f < 12 || f > 12000) continue;
-    G.voices.push(buildVoice(f, i, Math.max(1, N), fade));
+    G.voices.push(buildVoice(newFreqs[i], i, Math.max(1, N), fade));
+  }
+}
+
+function glideVoice(v, newFreq){
+  const ctx = G.ctx;
+  const t = ctx.currentTime;
+  const dur = 1.5;
+  v.freq = newFreq;
+  for(const o of v.oscList){
+    try {
+      o.frequency.cancelScheduledValues(t);
+      o.frequency.setValueAtTime(o.frequency.value, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(1, newFreq), t + dur);
+    } catch(_){}
   }
 }
 
@@ -1439,7 +1469,7 @@ function buildAllKnobs(){
   // OSC STACK
   addKnob("oscKnobs", { label:"Voices",  min:1, max:7, step:1, value:G.oscVoices,
                        fmt:v=>v.toFixed(0), defaultValue:3,
-                       onInput:v=>{ G.oscVoices = v|0; if(G.playing) rebuildVoices(); }
+                       onInput:v=>{ G.oscVoices = v|0; if(G.playing) rebuildVoices({force:true}); }
                      }, "oscVoices");
   addKnob("oscKnobs", { label:"Detune",  min:0, max:40, value:G.oscDetune,
                        fmt:v=>v.toFixed(1)+"¢", defaultValue:8,
@@ -1515,11 +1545,11 @@ function buildAllKnobs(){
   // ANALOG — Sequential-style vintage + Davachi-style breath
   addKnob("analogKnobs", { label:"Vintage", min:0, max:100, value:G.vintage,
                           fmt:v=>v.toFixed(0)+"%", defaultValue:0,
-                          onInput:v=>{ G.vintage = v; if(G.playing) rebuildVoices(); }
+                          onInput:v=>{ G.vintage = v; if(G.playing) rebuildVoices({force:true}); }
                         }, "vintage");
   addKnob("analogKnobs", { label:"Breath",  min:0, max:100, value:G.breath,
                           fmt:v=>v.toFixed(0)+"%", defaultValue:0,
-                          onInput:v=>{ G.breath = v; if(G.playing) rebuildVoices(); }
+                          onInput:v=>{ G.breath = v; if(G.playing) rebuildVoices({force:true}); }
                         }, "breath");
   addKnob("analogKnobs", { label:"B.Rate",  min:0, max:1, value:G.breathRate,
                           fmt:v=> {
@@ -1527,7 +1557,7 @@ function buildAllKnobs(){
                             const m = Math.floor(period/60), s = Math.floor(period%60);
                             return m+":"+(s<10?"0":"")+s;
                           }, defaultValue:0.4,
-                          onInput:v=>{ G.breathRate = v; if(G.playing) rebuildVoices(); }
+                          onInput:v=>{ G.breathRate = v; if(G.playing) rebuildVoices({force:true}); }
                         }, "breathRate");
 
   // GRAIN
@@ -1578,8 +1608,8 @@ function buildAllKnobs(){
                          fmt:v=>v.toFixed(1)+" s", defaultValue:4.0,
                          onInput:v=>{ G.reverbTail = v; if(G.ctx) buildIR(G.reverbTail); }
                        }, "reverbTail");
-  addKnob("spaceKnobs", { label:"Volume", min:-60, max:0, value:G.vol_db,
-                         fmt:v=>v.toFixed(0)+" dB", defaultValue:-10,
+  addKnob("spaceKnobs", { label:"Volume", min:-50, max:-3, value:G.vol_db,
+                         fmt:v=>v.toFixed(0)+" dB", defaultValue:-16,
                          onInput:v=>{ G.vol_db = v; applyVolume(); }
                        }, "vol");
 }
@@ -1689,7 +1719,7 @@ function reseedFromCrypto(){
   // a fresh random seed for "this session"
   G.seed = (Math.random() * 0xFFFFFFFF) >>> 0;
   refreshSeedUI();
-  if(G.playing) rebuildVoices();
+  if(G.playing) rebuildVoices({force:true});
 }
 function buildSrcChips(){
   const box = $("srcChips");
@@ -1869,7 +1899,7 @@ function applyPreset(name){
   // rebuild buffer / voices live
   if(G.ctx){
     rebuildBuffer();
-    if(G.playing) rebuildVoices();
+    if(G.playing) rebuildVoices({force:true});
     buildIR(G.reverbTail);
     applyFilter();
     applyShimmer();
@@ -2119,7 +2149,7 @@ function loadPatchFromHash(){
   $("vSpread").textContent = G.spread.toFixed(0) + " %";
   if(G.ctx){
     rebuildBuffer();
-    if(G.playing) rebuildVoices();
+    if(G.playing) rebuildVoices({force:true});
     buildIR(G.reverbTail);
     applyFilter();
     applyShimmer();
