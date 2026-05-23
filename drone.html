@@ -202,6 +202,12 @@
     box-shadow: 0 0 0 #000;
     transform: translate(1px,1px);
   }
+  .chip.next{
+    background: #ffffe0;
+    color:#000;
+    border:1px dashed #000;
+    box-shadow: 2px 2px 0 #000;
+  }
 
   /* knobs */
   .knob-grid{
@@ -570,6 +576,8 @@ const CHORDS = [
   { id:"low8",     label:"low oct",   iv:[-12, 0] },
   { id:"big",      label:"big",       iv:[-12, 0, 7, 12, 19] },
   { id:"pent",     label:"pent",      iv:[0, 2, 7, 9, 14] },
+  { id:"maj9",     label:"Maj9",      iv:[0, 4, 7, 11, 14] },
+  { id:"six",      label:"6th",       iv:[0, 4, 7, 9] },
 ];
 
 function intervalsOf(id){
@@ -636,13 +644,24 @@ async function ensureAudio(){
   G.shimmerFilt.connect(G.dry).connect(G.master);
   G.shimmerFilt.connect(G.conv).connect(G.wet).connect(G.master);
 
+  // soft tanh limiter so the master never clips, even with all knobs up
+  G.limiter = ctx.createWaveShaper();
+  const N = 4096;
+  const curve = new Float32Array(N);
+  for(let i=0; i<N; i++){
+    const x = (i/(N-1))*2 - 1;
+    curve[i] = Math.tanh(x * 1.4) / Math.tanh(1.4); // normalise so |1|→|1|
+  }
+  G.limiter.curve = curve;
+  G.limiter.oversample = "4x";
+
   G.ana  = ctx.createAnalyser(); G.ana.fftSize  = 2048; G.ana.smoothingTimeConstant = 0.1;
   G.ana2 = ctx.createAnalyser(); G.ana2.fftSize = 4096; G.ana2.smoothingTimeConstant = 0.78;
   G.meterAna = ctx.createAnalyser(); G.meterAna.fftSize = 256;
   G.master.connect(G.ana);
   G.master.connect(G.ana2);
   G.master.connect(G.meterAna);
-  G.master.connect(ctx.destination);
+  G.master.connect(G.limiter).connect(ctx.destination);
 
   // generate initial grain buffer
   rebuildBuffer();
@@ -1070,6 +1089,7 @@ function evolveTick(){
   buildChordChips();
   buildNoteChips();
   renderChordStrip();
+  refreshNextChordIndicator();
   rebuildVoices();
 }
 setInterval(evolveTick, 250);
@@ -1508,8 +1528,21 @@ function buildEvolveChips(){
       box.querySelectorAll(".chip").forEach(el=> el.classList.remove("on"));
       c.classList.add("on");
       evolveReset();
+      refreshNextChordIndicator();
     });
     box.appendChild(c);
+  });
+}
+
+function refreshNextChordIndicator(){
+  document.querySelectorAll("#chordChips .chip.next").forEach(c => c.classList.remove("next"));
+  if(G.evolveMode === "static") return;
+  const prog = evolveProgression();
+  if(!prog || !prog.chords) return;
+  const nextStep = (G.evolveStep + 1) % prog.chords.length;
+  const nextId = prog.chords[nextStep];
+  document.querySelectorAll("#chordChips .chip").forEach(c => {
+    if(c.title === nextId && !c.classList.contains("on")) c.classList.add("next");
   });
 }
 
@@ -1959,6 +1992,7 @@ function init(){
   buildSrcChips();
   renderChordStrip();
   refreshRootWalkUI();
+  refreshNextChordIndicator();
   bootCanvases();
   drawSpec();
   drawScope();
