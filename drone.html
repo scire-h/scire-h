@@ -510,6 +510,11 @@
     </section>
 
     <section class="panel">
+      <h2>EQ</h2>
+      <div class="knob-grid" id="eqKnobs"></div>
+    </section>
+
+    <section class="panel">
       <h2>ANALOG</h2>
       <div class="knob-grid cols-3" id="analogKnobs"></div>
       <div class="row" style="margin-top:6px;"><label>Seed</label><span class="val" id="seedDisplay">—</span></div>
@@ -665,6 +670,12 @@ const G = {
   // Preferred output sample rate; the browser may quietly substitute a
   // different rate. Actual context sampleRate is shown in the header.
   preferredSR: 96000,
+
+  // 3-band master EQ (low-shelf 220Hz / mid-peak / high-shelf 4500Hz)
+  eqLowGain:  0,   // dB, -12..+12
+  eqMidGain:  0,
+  eqMidHz:    900, // Hz, 200..6000 log
+  eqHighGain: 0,
 
   // session seed — same seed = same yuragi/voice character
   seed: 0,
@@ -834,11 +845,40 @@ async function ensureAudio(){
   G.dry.gain.value = 1 - G.reverbMix/100;
   G.wet.gain.value = G.reverbMix/100;
 
-  // chain: preFilter -> postFilter -> shimmer -> [dry, conv->wet] -> master -> ana -> dest
+  // 3-band EQ (low-shelf / mid-peak / high-shelf), in series after the
+  // shimmer high-shelf and before the dry/wet split. All flat at startup.
+  G.eqLow  = ctx.createBiquadFilter();
+  G.eqLow.type  = "lowshelf";
+  G.eqLow.frequency.value = 220;
+  G.eqLow.gain.value = G.eqLowGain;
+
+  G.eqMid  = ctx.createBiquadFilter();
+  G.eqMid.type  = "peaking";
+  G.eqMid.frequency.value = G.eqMidHz;
+  G.eqMid.Q.value = 0.8;
+  G.eqMid.gain.value = G.eqMidGain;
+
+  G.eqHigh = ctx.createBiquadFilter();
+  G.eqHigh.type = "highshelf";
+  G.eqHigh.frequency.value = 4500;
+  G.eqHigh.gain.value = G.eqHighGain;
+
+  // chain: preFilter -> postFilter -> shimmer -> EQ -> [dry, conv->wet] -> master -> comp -> limiter -> dest
   G.preFilter.connect(G.postFilter);
   G.postFilter.connect(G.shimmerFilt);
-  G.shimmerFilt.connect(G.dry).connect(G.master);
-  G.shimmerFilt.connect(G.conv).connect(G.wet).connect(G.master);
+  G.shimmerFilt.connect(G.eqLow);
+  G.eqLow.connect(G.eqMid);
+  G.eqMid.connect(G.eqHigh);
+  G.eqHigh.connect(G.dry).connect(G.master);
+  G.eqHigh.connect(G.conv).connect(G.wet).connect(G.master);
+
+  // peak-catching compressor before the soft-clip limiter
+  G.comp = ctx.createDynamicsCompressor();
+  G.comp.threshold.value = -8;
+  G.comp.knee.value      = 6;
+  G.comp.ratio.value     = 6;
+  G.comp.attack.value    = 0.005;
+  G.comp.release.value   = 0.18;
 
   // soft tanh limiter so the master never clips, even with all knobs up
   G.limiter = ctx.createWaveShaper();
@@ -857,7 +897,7 @@ async function ensureAudio(){
   G.master.connect(G.ana);
   G.master.connect(G.ana2);
   G.master.connect(G.meterAna);
-  G.master.connect(G.limiter).connect(ctx.destination);
+  G.master.connect(G.comp).connect(G.limiter).connect(ctx.destination);
 
   // generate initial grain buffer
   rebuildBuffer();
@@ -1615,6 +1655,17 @@ function applyFilter(){
   G.postFilter.frequency.setTargetAtTime(G.bright, G.ctx.currentTime, 0.05);
   G.filterDriftOut.gain.setTargetAtTime(G.bright * (G.filtDrift/100) * 0.5, G.ctx.currentTime, 0.2);
 }
+function applyEQ(){
+  if(!G.ctx) return;
+  const t = G.ctx.currentTime;
+  if(G.eqLow)  G.eqLow.gain.setTargetAtTime(G.eqLowGain, t, 0.05);
+  if(G.eqMid){
+    G.eqMid.gain.setTargetAtTime(G.eqMidGain, t, 0.05);
+    G.eqMid.frequency.setTargetAtTime(G.eqMidHz, t, 0.1);
+  }
+  if(G.eqHigh) G.eqHigh.gain.setTargetAtTime(G.eqHighGain, t, 0.05);
+}
+
 function applyNoise(){
   if(!G.ctx) return;
   const tgt = (G.noise/100) * 0.3;
@@ -1823,6 +1874,24 @@ function buildAllKnobs(){
                           fmt:v=>v.toFixed(0)+"%", defaultValue:25,
                           onInput:v=>{ G.shimmer = v; applyShimmer(); }
                         }, "shimmer");
+
+  // EQ — low-shelf / mid-peak / high-shelf, all 0 dB by default (flat)
+  addKnob("eqKnobs", { label:"Low",     min:-12, max:12, value:G.eqLowGain,
+                      fmt:v=>(v>=0?"+":"")+v.toFixed(1)+" dB", defaultValue:0,
+                      onInput:v=>{ G.eqLowGain = v; applyEQ(); }
+                    }, "eqLowGain");
+  addKnob("eqKnobs", { label:"Mid",     min:-12, max:12, value:G.eqMidGain,
+                      fmt:v=>(v>=0?"+":"")+v.toFixed(1)+" dB", defaultValue:0,
+                      onInput:v=>{ G.eqMidGain = v; applyEQ(); }
+                    }, "eqMidGain");
+  addKnob("eqKnobs", { label:"Mid Hz",  min:200, max:6000, value:G.eqMidHz,
+                      log:true, fmt:v=>v.toFixed(0)+" Hz", defaultValue:900,
+                      onInput:v=>{ G.eqMidHz = v; applyEQ(); }
+                    }, "eqMidHz");
+  addKnob("eqKnobs", { label:"High",    min:-12, max:12, value:G.eqHighGain,
+                      fmt:v=>(v>=0?"+":"")+v.toFixed(1)+" dB", defaultValue:0,
+                      onInput:v=>{ G.eqHighGain = v; applyEQ(); }
+                    }, "eqHighGain");
 
   // ANALOG — Sequential-style vintage + Davachi-style breath
   addKnob("analogKnobs", { label:"Vintage", min:0, max:100, value:G.vintage,
@@ -2285,6 +2354,7 @@ function applyPreset(name){
     applyShimmer();
     applyReverb();
     applyVolume();
+    applyEQ();
     evolveReset();
   }
   refreshNextChordIndicator();
@@ -2487,6 +2557,7 @@ const PATCH_KEYS = {
   wk:"walkRate", wkr:"walkRange",
   sm:"seamless",
   psr:"preferredSR",
+  eql:"eqLowGain", eqm:"eqMidGain", eqmh:"eqMidHz", eqh:"eqHighGain",
 };
 
 function encodePatch(){
@@ -2541,6 +2612,7 @@ function loadPatchFromHash(){
     applyShimmer();
     applyReverb();
     applyVolume();
+    applyEQ();
   }
   return true;
 }
@@ -2619,6 +2691,7 @@ function applyPatchObj(data){
     applyShimmer();
     applyReverb();
     applyVolume();
+    applyEQ();
   }
 }
 
