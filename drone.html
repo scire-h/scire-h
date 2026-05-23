@@ -355,6 +355,7 @@
     <button id="shareBtn" title="Copy patch URL">SHARE</button>
     <span class="status" id="status"><span class="dot"></span>idle</span>
     <span class="status" id="recStatus" style="display:none;"><span class="dot" style="background:var(--warn);"></span>rec</span>
+    <span class="status" id="sessionTimer" style="font-family:'JetBrains Mono','SF Mono',monospace; min-width:46px;"></span>
   </div>
 </header>
 
@@ -531,6 +532,8 @@ const G = {
 
   voices: [],
   filterLfos: [],
+
+  sessionStart: 0,
 
   // generative chord progression
   evolveMode: "static",       // see EVOLVE_PROGRESSIONS
@@ -967,6 +970,7 @@ function startDrone(){
     G.master.gain.setValueAtTime(G.master.gain.value, t);
     G.master.gain.linearRampToValueAtTime(db2lin(G.vol_db), t + 1.8);
     G.playing = true;
+    G.sessionStart = t;
     evolveReset();
     $("playBtn").classList.add("on");
     $("playBtn").textContent = "■ STOP";
@@ -1878,7 +1882,20 @@ function tickMeter(){
     }
     $("meterFill").style.width = (clamp(peak, 0, 1) * 100).toFixed(1) + "%";
   }
-  setTimeout(tickMeter, 60);
+  // session timer
+  if(G.playing && G.ctx){
+    const sec = Math.max(0, G.ctx.currentTime - G.sessionStart);
+    const h = Math.floor(sec/3600);
+    const m = Math.floor((sec%3600)/60);
+    const s = Math.floor(sec%60);
+    const txt = h > 0
+      ? `${h}:${m<10?"0":""}${m}:${s<10?"0":""}${s}`
+      : `${m}:${s<10?"0":""}${s}`;
+    $("sessionTimer").textContent = txt;
+  } else {
+    $("sessionTimer").textContent = "";
+  }
+  setTimeout(tickMeter, 250);
 }
 
 // ============================================================
