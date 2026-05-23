@@ -420,6 +420,14 @@
     </section>
 
     <section class="panel">
+      <h2>VOICE WALK</h2>
+      <div class="knob-grid cols-2" id="walkKnobs"></div>
+      <div style="font-size:9px; color:var(--ink-dd); margin-top:6px; line-height:1.4;">
+        Rate=0 でオフ。各ボイスが独立して近接音 (今のコードの音階内) を歩く。
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>OSC STACK</h2>
       <div class="knob-grid cols-3" id="oscKnobs"></div>
     </section>
@@ -629,6 +637,12 @@ const G = {
   xMod:      0,               // 0..100 depth (in tens of cents)
   xRate:     5.0,             // Hz (log 0.1..200)
 
+  // Voice Walk: each voice independently steps to a neighbouring scale tone
+  // every now and then. Lets one note at a time drift while the others sustain,
+  // so the chord morphs continuously instead of changing as a block.
+  walkRate:  0,               // 0..100, scales how often each voice walks
+  walkRange: 3,               // ±semitones range around chord tone
+
   // session seed — same seed = same yuragi/voice character
   seed: 0,
 };
@@ -702,6 +716,23 @@ const CHORDS = [
 function intervalsOf(id){
   const c = CHORDS.find(c => c.id === id);
   return c ? c.iv : [0];
+}
+
+// Scale used by Voice Walk for resolving the next step (per chord type)
+function scaleForChord(id){
+  switch(id){
+    case "maj": case "maj7": case "maj9": case "six": case "add9":
+      return [0,2,4,5,7,9,11];          // major
+    case "min": case "min7": case "min9": case "low8":
+      return [0,2,3,5,7,8,10];          // natural minor
+    case "sus2":   return [0,2,5,7,9,10];     // mixolydian-ish
+    case "sus4":   return [0,2,5,7,9,11];     // major without 3rd
+    case "fifth": case "oct": case "fifthoct": case "big":
+      return [0,2,4,5,7,9,11];          // major (open chord defaults to major)
+    case "pent":   return [0,2,4,7,9];        // major pentatonic
+    case "root":
+    default:       return [0,2,4,5,7,9,11];
+  }
 }
 
 // shared white-noise buffer for the per-voice Noise layer (Prophet 5-style)
@@ -981,6 +1012,9 @@ function buildVoice(freq, idx, total, fadeIn){
   const ctx = G.ctx;
   const v = {
     freq, idx, total,
+    chordFreq: freq,   // anchor for Voice Walk (the chord-tone before any walk)
+    walkDelta: 0,      // current Voice Walk offset in semitones
+    walkNextAt: 0,     // ctx.currentTime of next walk event
     oscList: [], lfoList: [],
     sineGain: null, sawGain: null, triGain: null,
     oscSubMix: null, grainSubMix: null,
@@ -1249,7 +1283,11 @@ function rebuildVoices(opts){
   if(!opts.force && G.playing && G.voices.length === N && N > 0 &&
      G.voices.every(v => v.oscList.length === expectedOscCount)){
     for(let i=0; i<N; i++){
-      glideVoice(G.voices[i], newFreqs[i]);
+      const v = G.voices[i];
+      v.chordFreq = newFreqs[i];      // new chord anchor
+      v.walkDelta = 0;                // chord change resets the walk drift
+      v.walkNextAt = 0;               // restart walk scheduler from this voice
+      glideVoice(v, newFreqs[i]);
     }
     return;
   }
@@ -1268,10 +1306,10 @@ function rebuildVoices(opts){
   }
 }
 
-function glideVoice(v, newFreq){
+function glideVoice(v, newFreq, dur){
   const ctx = G.ctx;
   const t = ctx.currentTime;
-  const dur = 1.5;
+  if(dur === undefined) dur = 1.5;
   v.freq = newFreq;
   for(const o of v.oscList){
     try {
@@ -1353,6 +1391,59 @@ function evolveTick(){
   rebuildVoices();
 }
 setInterval(evolveTick, 250);
+
+// ============================================================
+// VOICE WALK — each voice independently steps to a neighbouring
+// scale tone every now and then. The chord morphs one note at a time.
+// ============================================================
+function walkTick(){
+  if(!G.playing || !G.ctx) return;
+  if(G.walkRate < 0.5) return;
+  const now = G.ctx.currentTime;
+  const scale = scaleForChord(G.chord);
+  const range = Math.max(1, G.walkRange | 0);
+  const iv = intervalsOf(G.chord);
+
+  // walkRate 1..100  -> mean period roughly 240s..15s
+  const meanPeriod = 240 * Math.exp(-G.walkRate / 38);
+
+  for(const v of G.voices){
+    if(!v.walkNextAt){
+      // stagger first event so voices don't all move at the same moment
+      v.walkNextAt = now + 4 + Math.random() * meanPeriod;
+      continue;
+    }
+    if(now < v.walkNextAt) continue;
+    v.walkNextAt = now + meanPeriod * (0.6 + Math.random() * 0.8);
+
+    // chord tone of this voice, in semitones above the root
+    const chordToneSemis = iv[v.idx] || 0;
+    const cur = v.walkDelta || 0;
+
+    // Collect candidate steps: within ±range, not the current position, AND the
+    // *resulting absolute scale-degree* (chord tone + delta, mod 12) must be in
+    // the current scale. This keeps walks musical instead of letting voices
+    // wander to out-of-scale notes.
+    const candidates = [];
+    for(let d = -range; d <= range; d++){
+      if(d === cur) continue;
+      const absPos = chordToneSemis + d;
+      const posMod = ((absPos % 12) + 12) % 12;
+      if(scale.includes(posMod)) candidates.push(d);
+    }
+    if(!candidates.length) continue;
+    // prefer small steps from current position
+    candidates.sort((a,b) => Math.abs(a - cur) - Math.abs(b - cur));
+    const pickFrom = candidates.slice(0, Math.min(3, candidates.length));
+    const choice = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+    v.walkDelta = choice;
+
+    // glide just THIS voice (other voices keep sustaining)
+    const target = (v.chordFreq || v.freq) * Math.pow(2, choice/12);
+    glideVoice(v, target, 3.5);
+  }
+}
+setInterval(walkTick, 900);
 
 function fireGrain(v, when){
   const ctx = G.ctx;
@@ -1751,6 +1842,22 @@ function buildAllKnobs(){
                             if(G.ctx) G.evolveNextAt = G.ctx.currentTime + v;
                           }
                         }, "evolveInterval");
+
+  // VOICE WALK
+  addKnob("walkKnobs", { label:"Walk",  min:0, max:100, value:G.walkRate,
+                        fmt:v=>{
+                          if(v < 0.5) return "off";
+                          const period = 240 * Math.exp(-v/38);
+                          if(period < 60) return Math.round(period)+"s avg";
+                          const m = Math.floor(period/60), s = Math.round(period%60);
+                          return m+":"+(s<10?"0":"")+s+" avg";
+                        }, defaultValue:0,
+                        onInput:v=>{ G.walkRate = v; }
+                      }, "walkRate");
+  addKnob("walkKnobs", { label:"Range", min:1, max:7, step:1, value:G.walkRange,
+                        fmt:v=>v.toFixed(0)+" st", defaultValue:3,
+                        onInput:v=>{ G.walkRange = v; }
+                      }, "walkRange");
 
   // SPACE
   addKnob("spaceKnobs", { label:"Spread", min:0, max:100, value:G.spread,
@@ -2261,6 +2368,7 @@ const PATCH_KEYS = {
   src:"src",
   vt:"vintage", br:"breath", brr:"breathRate", sd:"seed",
   nz:"noise", xm:"xMod", xr:"xRate",
+  wk:"walkRate", wkr:"walkRange",
 };
 
 function encodePatch(){
