@@ -1140,7 +1140,18 @@
 
     <div class="block">
       <h2>Record</h2>
-      <div class="rec-status" id="recStatus">idle · 32-bit float WAV</div>
+      <div class="rec-status" id="recStatus">idle · 32-bit float · 96 kHz</div>
+      <div class="row" style="margin-top:8px"><label>Sample Rate</label></div>
+      <div class="seg" id="srRateSeg">
+        <button data-sr="48000">48k</button>
+        <button class="on" data-sr="96000">96k</button>
+        <button data-sr="192000">192k</button>
+      </div>
+      <div class="row" style="margin-top:8px"><label>Bit Depth</label></div>
+      <div class="seg" id="recFmtSeg">
+        <button class="on" data-fmt="f32">32-bit float</button>
+        <button data-fmt="pcm24">24-bit PCM</button>
+      </div>
       <div class="row" style="margin-top:8px"><label>Master Mix</label></div>
       <div class="seg" id="recMasterSeg">
         <button data-armm="0">Off</button>
@@ -1148,7 +1159,7 @@
       </div>
       <div class="meta" style="margin-top: 6px;">
         ● REC in toolbar · per-track arm = strip [R]<br>
-        armed tracks dump as separate WAVs
+        sample rate locks at first ▶ Play — restart page to change
       </div>
     </div>
 
@@ -1236,6 +1247,9 @@ const G = {
     pendingMaster: false,
   },
 
+  requestedSampleRate: 96000,
+  recFormat: "f32",        // "f32" = 32-bit float, "pcm24" = 24-bit PCM
+
   memories: new Array(10).fill(null),
   lastMem: -1,
 };
@@ -1292,7 +1306,19 @@ function CT(){ return tracks[G.curTrack]; }
    ============================================================ */
 async function ensureAudio(){
   if(G.ctx) return;
-  G.ctx = new (window.AudioContext || window.webkitAudioContext)({latencyHint: "interactive"});
+  let ctx = null;
+  try{
+    ctx = new (window.AudioContext || window.webkitAudioContext)({
+      sampleRate: G.requestedSampleRate,
+      latencyHint: "interactive",
+    });
+  } catch(e){
+    ctx = new (window.AudioContext || window.webkitAudioContext)({
+      latencyHint: "interactive",
+    });
+  }
+  G.ctx = ctx;
+  updateRecStatusText();
 
   G.master = G.ctx.createGain();
   G.master.gain.value = db2lin(G.master_db);
@@ -3192,6 +3218,36 @@ document.querySelectorAll("#recMasterSeg button").forEach(b=>{
   });
 });
 
+document.querySelectorAll("#srRateSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#srRateSeg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    G.requestedSampleRate = parseInt(b.dataset.sr);
+    updateRecStatusText();
+  });
+});
+document.querySelectorAll("#recFmtSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#recFmtSeg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    G.recFormat = b.dataset.fmt;
+    updateRecStatusText();
+  });
+});
+
+function updateRecStatusText(){
+  const fmt  = G.recFormat === "pcm24" ? "24-bit PCM" : "32-bit float";
+  const req  = G.requestedSampleRate / 1000;
+  if(G.rec.active) return;             // leave the rec-timer text alone while recording
+  if(!G.ctx){
+    $("recStatus").textContent = `idle · ${fmt} · ${req} kHz (requested)`;
+  } else {
+    const actual = G.ctx.sampleRate / 1000;
+    const note   = (Math.abs(actual - req) > 1) ? `requested ${req}k, got ${actual}k` : `${actual} kHz`;
+    $("recStatus").textContent = `idle · ${fmt} · ${note}`;
+  }
+}
+
 async function startRecording(){
   await ensureAudio();
   if(!G.rec.workletReady){ $("recStatus").textContent = "worklet not ready"; return; }
@@ -3204,8 +3260,10 @@ async function startRecording(){
       t.recNode.port.onmessage = ev => {
         const data = ev.data;
         if(!data || !data.L || !data.L.length) return;
-        const blob = encodeWavFloat32(data.L, data.R, G.ctx.sampleRate);
-        downloadBlob(blob, `granular-${tStamp()}-${t.name}.wav`);
+        const blob = encodeWav(data.L, data.R, G.ctx.sampleRate);
+        const tag  = G.recFormat === "pcm24" ? "24bit" : "32f";
+        const sr   = (G.ctx.sampleRate/1000).toFixed(0)+"k";
+        downloadBlob(blob, `granular-${tStamp()}-${t.name}-${sr}-${tag}.wav`);
       };
       t.panNode.connect(t.recNode);
       t.recNode.port.postMessage("start");
@@ -3219,8 +3277,10 @@ async function startRecording(){
       G.rec.masterRecNode.port.onmessage = ev => {
         const data = ev.data;
         if(!data || !data.L || !data.L.length) return;
-        const blob = encodeWavFloat32(data.L, data.R, G.ctx.sampleRate);
-        downloadBlob(blob, `granular-${tStamp()}-MASTER.wav`);
+        const blob = encodeWav(data.L, data.R, G.ctx.sampleRate);
+        const tag  = G.recFormat === "pcm24" ? "24bit" : "32f";
+        const sr   = (G.ctx.sampleRate/1000).toFixed(0)+"k";
+        downloadBlob(blob, `granular-${tStamp()}-MASTER-${sr}-${tag}.wav`);
       };
       G.master.connect(G.rec.masterRecNode);
       G.rec.masterRecNode.port.postMessage("start");
@@ -3256,7 +3316,7 @@ function stopRecording(){
   $("recind").classList.remove("on");
   $("recStatus").classList.remove("on");
   $("recStatus").textContent = "saving wav…";
-  setTimeout(()=>{ $("recStatus").textContent = "idle · 32-bit float WAV"; }, 1500);
+  setTimeout(()=>{ updateRecStatusText(); }, 1500);
 }
 
 function downloadBlob(blob, filename){
@@ -3272,7 +3332,7 @@ function encodeWavFloat32(LChunks, RChunks, sr){
   let totalLen = 0;
   for(const c of LChunks) totalLen += c.length;
   const interleaved = new Float32Array(totalLen * 2);
-  let iOff = 0, p = 0;
+  let iOff = 0;
   for(let ci=0; ci<LChunks.length; ci++){
     const L = LChunks[ci], R = RChunks[ci] || L;
     for(let i=0;i<L.length;i++){
@@ -3294,6 +3354,45 @@ function encodeWavFloat32(LChunks, RChunks, sr){
   const samples = new Float32Array(buf, 44);
   samples.set(interleaved);
   return new Blob([buf], {type:"audio/wav"});
+}
+
+function encodeWavPCM24(LChunks, RChunks, sr){
+  let totalLen = 0;
+  for(const c of LChunks) totalLen += c.length;
+  const dataSize = totalLen * 2 * 3;     // 2 ch × 3 bytes per sample
+  const buf = new ArrayBuffer(44 + dataSize);
+  const dv = new DataView(buf);
+  let o = 0;
+  const wstr = s => { for(let i=0;i<s.length;i++) dv.setUint8(o++, s.charCodeAt(i)); };
+  const w32 = v => { dv.setUint32(o, v, true); o += 4; };
+  const w16 = v => { dv.setUint16(o, v, true); o += 2; };
+  wstr("RIFF"); w32(36 + dataSize); wstr("WAVE");
+  wstr("fmt "); w32(16); w16(1); w16(2);          // format = PCM
+  w32(sr); w32(sr * 2 * 3); w16(2 * 3); w16(24);
+  wstr("data"); w32(dataSize);
+  let p = o;
+  const writeS24 = (s) => {
+    const v = Math.max(-1, Math.min(1, s));
+    let i = Math.floor(v * 8388607);              // 2^23 - 1
+    if(i < 0) i += 16777216;                      // two's complement
+    dv.setUint8(p++, i & 0xff);
+    dv.setUint8(p++, (i >> 8) & 0xff);
+    dv.setUint8(p++, (i >> 16) & 0xff);
+  };
+  for(let ci=0; ci<LChunks.length; ci++){
+    const L = LChunks[ci], R = RChunks[ci] || L;
+    for(let i=0;i<L.length;i++){
+      writeS24(L[i]);
+      writeS24(R[i]);
+    }
+  }
+  return new Blob([buf], {type:"audio/wav"});
+}
+
+function encodeWav(LChunks, RChunks, sr){
+  return G.recFormat === "pcm24"
+    ? encodeWavPCM24(LChunks, RChunks, sr)
+    : encodeWavFloat32(LChunks, RChunks, sr);
 }
 
 
@@ -3617,6 +3716,7 @@ window.addEventListener("load", ()=>{
   knobifyAll();
   refreshUIForTrack();
   updateBpmDisplay();
+  updateRecStatusText();
   drawWaveform();
   drawScope(); drawSpec();
 });
