@@ -445,6 +445,8 @@
       <h2>EVOLVE</h2>
       <div class="chips" id="evolveChips" style="margin-top:10px;"></div>
       <div class="knob-grid cols-2" id="evolveKnobs"></div>
+      <div class="row" style="margin-top:6px;"><label>Transition</label></div>
+      <div class="chips" id="transitionChips"></div>
       <div class="row" style="margin-top:6px;"><label>Root Walk</label><span class="chip" id="rootWalkToggle">OFF</span></div>
       <div class="row" style="margin-top:4px;"><label>Next In</label><span class="val" id="nextChangeIn">—</span></div>
       <button id="jumpBtn" style="margin:6px 0 2px; width:100%;">JUMP NOW</button>
@@ -717,6 +719,12 @@ const G = {
   //   - lengthen each voice's glide / crossfade
   //   - stagger voices so they don't all start moving on the same beat
   seamless:  50,              // 0..100
+
+  // How a voice that's matched to a different new pitch is moved:
+  //   "glide" : slide oscillator frequency from old to new pitch (audible slide)
+  //   "cross" : old voice fades out, new voice fades in at new pitch (no slide)
+  //   "blend" : sustain if pitches are essentially identical, otherwise crossfade
+  transitionStyle: "blend",
 
   // Preferred output sample rate; the browser may quietly substitute a
   // different rate. Actual context sampleRate is shown in the header.
@@ -1505,51 +1513,57 @@ function rebuildVoices(opts){
       matchOldToNew.set(p.oi, p.ni);
     }
 
-    // 1. GLIDE matched voices (oscillator freq only, gain untouched)
+    const EP_OCT = 0.005; // ~6 cents — within this, treat as identical pitch
+    const newVoiceArr = new Array(N);
+    const scheduleDelayed = (fn) => {
+      const delay = (Math.random() * staggerWin) * 1000;
+      if(delay < 1) fn();
+      else setTimeout(()=>{ if(_rebuildId === myId) fn(); }, delay);
+    };
+
+    // 1. MATCHED pairs — glide / crossfade / sustain depending on transition style
     matchOldToNew.forEach((ni, oi)=>{
       const v = G.voices[oi];
-      v.walkDelta = 0;
-      v.walkNextAt = 0;
-      v.chordFreq = newFreqs[ni];
-      const delay = (Math.random() * staggerWin) * 1000;
-      if(delay < 1){
-        glideVoice(v, newFreqs[ni], morphTime);
+      const newFreq = newFreqs[ni];
+      const dist = Math.abs(Math.log2((v.chordFreq || v.freq) / newFreq));
+      const same = dist < EP_OCT;
+      const useGlide = (G.transitionStyle === "glide") ||
+                       (G.transitionStyle === "blend" && same);
+      if(useGlide){
+        // glide existing voice (no gain touch). For "blend" + same pitch this
+        // is effectively a no-op — voice keeps sustaining untouched.
+        v.walkDelta = 0;
+        v.walkNextAt = 0;
+        v.chordFreq = newFreq;
+        v.idx = ni;
+        scheduleDelayed(()=> glideVoice(v, newFreq, morphTime));
+        newVoiceArr[ni] = v;
       } else {
-        setTimeout(()=>{
-          if(_rebuildId !== myId) return;
-          glideVoice(v, newFreqs[ni], morphTime);
-        }, delay);
+        // crossfade: old voice fades out, new voice at the new pitch fades in.
+        // No audible pitch slide; clean chord change at this position.
+        freeVoice(v, morphTime);
+        const nv = buildVoice(newFreq, ni, Math.max(1, N), 0);
+        newVoiceArr[ni] = nv;
+        scheduleDelayed(()=>{
+          if(G.ctx) rampEqualPower(nv.gainOut.gain, 0.0001, nv.baseGain, G.ctx.currentTime, morphTime);
+        });
       }
     });
 
-    // 2. FADE OUT old voices that didn't get matched (chord became "less wide")
-    const newVoiceArr = [];
+    // 2. FADE OUT unmatched old voices (chord got narrower)
     for(let oi=0; oi<oldN; oi++){
-      if(matchOldToNew.has(oi)){
-        // matched voice stays — but its idx in G.voices may shift; collect in order
-        const newPos = matchOldToNew.get(oi);
-        G.voices[oi].idx = newPos;
-        newVoiceArr[newPos] = G.voices[oi];
-      } else {
-        freeVoice(G.voices[oi], morphTime);
-      }
+      if(matchOldToNew.has(oi)) continue;
+      freeVoice(G.voices[oi], morphTime);
     }
 
-    // 3. FADE IN voices for new pitches that didn't get matched
+    // 3. FADE IN voices for unmatched new pitches (chord got wider)
     for(let ni=0; ni<N; ni++){
       if(usedNew.has(ni)) continue;
-      const delay = (Math.random() * staggerWin) * 1000;
-      // build silent, then ramp up after the delay (so multiple new voices stagger)
       const v = buildVoice(newFreqs[ni], ni, Math.max(1, N), 0);
       newVoiceArr[ni] = v;
-      if(delay < 1){
-        rampEqualPower(v.gainOut.gain, 0.0001, v.baseGain, G.ctx.currentTime, morphTime);
-      } else {
-        setTimeout(()=>{
-          if(_rebuildId !== myId) return;
-          if(G.ctx) rampEqualPower(v.gainOut.gain, 0.0001, v.baseGain, G.ctx.currentTime, morphTime);
-        }, delay);
-      }
+      scheduleDelayed(()=>{
+        if(G.ctx) rampEqualPower(v.gainOut.gain, 0.0001, v.baseGain, G.ctx.currentTime, morphTime);
+      });
     }
 
     G.voices = newVoiceArr;
@@ -2305,6 +2319,31 @@ function refreshRootWalkUI(){
   t.textContent = G.evolveRootWalk ? "ON" : "OFF";
 }
 
+function buildTransitionChips(){
+  const box = $("transitionChips");
+  if(!box) return;
+  box.innerHTML = "";
+  const opts = [
+    { id:"glide", label:"Glide" },
+    { id:"blend", label:"Blend" },
+    { id:"cross", label:"Cross" },
+  ];
+  opts.forEach(o=>{
+    const c = document.createElement("div");
+    c.className = "chip" + (o.id === G.transitionStyle ? " on" : "");
+    c.textContent = o.label;
+    c.title = (o.id === "glide" ? "Slide oscillator frequency from old to new pitch"
+              : o.id === "blend" ? "Sustain identical pitches; crossfade the ones that change"
+              : "Always fade old voice out and new voice in (no pitch slide)");
+    c.addEventListener("click", ()=>{
+      G.transitionStyle = o.id;
+      box.querySelectorAll(".chip").forEach(el=> el.classList.remove("on"));
+      c.classList.add("on");
+    });
+    box.appendChild(c);
+  });
+}
+
 function refreshSeedUI(){
   const el = $("seedDisplay");
   if(el) el.textContent = (G.seed >>> 0).toString(36).toUpperCase().padStart(6,"0");
@@ -2762,6 +2801,7 @@ const PATCH_KEYS = {
   sm:"seamless",
   psr:"preferredSR",
   eql:"eqLowGain", eqm:"eqMidGain", eqmh:"eqMidHz", eqh:"eqHighGain",
+  ts:"transitionStyle",
 };
 
 // INPUT GRAIN params travel under their own short keys (saved alongside G)
@@ -2825,6 +2865,7 @@ function loadPatchFromHash(){
   buildEvolveChips();
   buildSrcChips();
   buildSrChips();
+  buildTransitionChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshNextChordIndicator();
@@ -2904,6 +2945,7 @@ function applyPatchObj(data){
   buildEvolveChips();
   buildSrcChips();
   buildSrChips();
+  buildTransitionChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshNextChordIndicator();
@@ -3319,6 +3361,7 @@ function init(){
   buildEvolveChips();
   buildSrcChips();
   buildSrChips();
+  buildTransitionChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshNextChordIndicator();
