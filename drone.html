@@ -320,6 +320,34 @@
     padding: 6px 10px 18px;
   }
 
+  /* unobtrusive sample-rate switcher at page bottom */
+  .bottom-bar{
+    border-top:1px solid #000;
+    background:#fff;
+    padding: 6px 12px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    font-size:10px;
+    font-family:"Chicago","Geneva","Lucida Grande",sans-serif;
+  }
+  .bottom-bar .bb-label{
+    color: var(--ink-d);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+  }
+  .bottom-bar .chips{ margin: 0; }
+  .bottom-bar .chips .chip{ padding: 1px 8px; font-size: 11px; }
+  .bottom-bar .bb-hint{
+    color: var(--ink-dd);
+    font-size: 9px;
+    margin-left: auto;
+  }
+
+  /* keep session timer + sr display together when the header wraps */
+  .hdr-meta{ display:inline-flex; gap:8px; align-items:center; }
+
   /* preset patches */
   .preset-row{
     display:grid;
@@ -387,8 +415,10 @@
     <button id="shareBtn" title="Copy patch URL">SHARE</button>
     <span class="status" id="status"><span class="dot"></span>idle</span>
     <span class="status" id="recStatus" style="display:none;"><span class="dot" style="background:var(--warn);"></span>rec</span>
-    <span class="status" id="sessionTimer" style="font-family:'JetBrains Mono','SF Mono',monospace; min-width:46px;"></span>
-    <span class="status" id="srDisplay" title="Actual AudioContext sample rate" style="font-family:'JetBrains Mono','SF Mono',monospace;">—</span>
+    <span class="hdr-meta">
+      <span class="status" id="sessionTimer" style="font-family:'JetBrains Mono','SF Mono',monospace;"></span>
+      <span class="status" id="srDisplay" title="Actual AudioContext sample rate" style="font-family:'JetBrains Mono','SF Mono',monospace;">—</span>
+    </span>
   </div>
 </header>
 
@@ -495,6 +525,16 @@
       <h2>MIX</h2>
       <div class="knob-grid cols-3" id="mixKnobs"></div>
     </section>
+
+    <section class="panel">
+      <h2>GRAIN</h2>
+      <div class="knob-grid cols-3" id="grainKnobs"></div>
+    </section>
+
+    <section class="panel">
+      <h2>SPACE</h2>
+      <div class="knob-grid" id="spaceKnobs"></div>
+    </section>
   </div>
 
   <!-- RIGHT COLUMN -->
@@ -511,33 +551,29 @@
 
     <section class="panel">
       <h2>EQ</h2>
-      <div class="knob-grid" id="eqKnobs"></div>
+      <div class="knob-grid cols-2" id="eqKnobs"></div>
     </section>
 
     <section class="panel">
       <h2>ANALOG</h2>
       <div class="knob-grid cols-3" id="analogKnobs"></div>
-      <div class="row" style="margin-top:6px;"><label>Seed</label><span class="val" id="seedDisplay">—</span></div>
-      <button id="reseedBtn" style="margin:4px 0 2px; width:100%;">RE-SEED</button>
-    </section>
-
-    <section class="panel">
-      <h2>GRAIN</h2>
-      <div class="knob-grid cols-3" id="grainKnobs"></div>
-    </section>
-
-    <section class="panel">
-      <h2>SPACE</h2>
-      <div class="knob-grid cols-3" id="spaceKnobs"></div>
-      <div class="row" style="margin-top:8px;"><label>Sample Rate</label></div>
-      <div class="chips" id="srChips"></div>
-      <div style="font-size:9px; color:var(--ink-dd); margin-top:4px; line-height:1.4;">
-        切替は AudioContext 再生成 (一瞬無音)。192k はデバイス次第。
+      <div class="row" style="margin-top:6px;">
+        <label>Seed</label>
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span class="val" id="seedDisplay">—</span>
+          <button id="reseedBtn" style="padding: 1px 8px; font-size:10px;">RE-SEED</button>
+        </span>
       </div>
     </section>
   </div>
 
 </main>
+
+<div class="bottom-bar">
+  <div class="bb-label">SAMPLE RATE</div>
+  <div class="chips" id="srChips"></div>
+  <div class="bb-hint">切替は AudioContext 再生成 (一瞬無音)・192k はデバイス次第</div>
+</div>
 
 <div class="footer-note">
   ▾ HOLD play to drone forever. Every voice drifts on its own internal LFO sum — same chord, never the same moment.
