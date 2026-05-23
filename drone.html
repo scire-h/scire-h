@@ -345,7 +345,9 @@
     <button id="playBtn" class="primary">▶ PLAY</button>
     <button id="panicBtn">PANIC</button>
     <span class="sep"></span>
+    <button id="recBtn">● REC</button>
     <span class="status" id="status"><span class="dot"></span>idle</span>
+    <span class="status" id="recStatus" style="display:none;"><span class="dot" style="background:var(--warn);"></span>rec</span>
   </div>
 </header>
 
@@ -1840,6 +1842,112 @@ function tickMeter(){
 }
 
 // ============================================================
+// WAV RECORDER (AudioWorklet -> 32-bit float WAV)
+// ============================================================
+const RECORDER_WORKLET = `
+class RecP extends AudioWorkletProcessor {
+  constructor(){ super();
+    this.bL = []; this.bR = []; this.rec = false;
+    this.port.onmessage = e => {
+      if(e.data === "start"){ this.bL = []; this.bR = []; this.rec = true; }
+      else if(e.data === "stop"){
+        this.rec = false;
+        this.port.postMessage({ L: this.bL, R: this.bR });
+        this.bL = []; this.bR = [];
+      }
+    };
+  }
+  process(inputs){
+    if(!this.rec) return true;
+    const ch = inputs[0];
+    if(!ch || !ch.length) return true;
+    this.bL.push(new Float32Array(ch[0]));
+    this.bR.push(new Float32Array(ch[1] || ch[0]));
+    return true;
+  }
+}
+registerProcessor("rec-p", RecP);
+`;
+let workletURL = null;
+const REC = { workletReady:false, active:false, node:null, startTime:0 };
+
+async function ensureRecorderWorklet(){
+  if(REC.workletReady) return;
+  if(!workletURL){
+    workletURL = URL.createObjectURL(new Blob([RECORDER_WORKLET], {type:"application/javascript"}));
+  }
+  await G.ctx.audioWorklet.addModule(workletURL);
+  REC.workletReady = true;
+}
+
+async function startRecording(){
+  await ensureAudio();
+  try { await ensureRecorderWorklet(); }
+  catch(e){ console.error("worklet failed", e); return; }
+  if(REC.active) return;
+  REC.node = new AudioWorkletNode(G.ctx, "rec-p", { numberOfInputs:1, numberOfOutputs:0, channelCount:2 });
+  REC.node.port.onmessage = ev => {
+    const d = ev.data;
+    if(!d || !d.L || !d.L.length) return;
+    const blob = encodeWavFloat32(d.L, d.R, G.ctx.sampleRate);
+    downloadBlob(blob, `drone-${tStamp()}.wav`);
+  };
+  G.master.connect(REC.node);
+  REC.node.port.postMessage("start");
+  REC.active = true;
+  REC.startTime = G.ctx.currentTime;
+  $("recBtn").textContent = "■ STOP REC";
+  $("recBtn").classList.add("active");
+  $("recStatus").style.display = "";
+}
+function stopRecording(){
+  if(!REC.active) return;
+  try{ REC.node.port.postMessage("stop"); }catch(_){}
+  const node = REC.node; REC.node = null;
+  setTimeout(()=>{ try{ G.master.disconnect(node); }catch(_){} try{ node.disconnect(); }catch(_){} }, 600);
+  REC.active = false;
+  $("recBtn").textContent = "● REC";
+  $("recBtn").classList.remove("active");
+  $("recStatus").style.display = "none";
+}
+
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 4000);
+}
+function tStamp(){ return new Date().toISOString().replace(/[:.]/g,"-").slice(0,19); }
+
+function encodeWavFloat32(LChunks, RChunks, sr){
+  let totalLen = 0;
+  for(const c of LChunks) totalLen += c.length;
+  const interleaved = new Float32Array(totalLen * 2);
+  let off = 0;
+  for(let ci=0; ci<LChunks.length; ci++){
+    const L = LChunks[ci], R = RChunks[ci] || L;
+    for(let i=0;i<L.length;i++){
+      interleaved[off++] = L[i];
+      interleaved[off++] = R[i];
+    }
+  }
+  const dataSize = interleaved.length * 4;
+  const buf = new ArrayBuffer(44 + dataSize);
+  const dv = new DataView(buf);
+  let o = 0;
+  const wstr = s => { for(let i=0;i<s.length;i++) dv.setUint8(o++, s.charCodeAt(i)); };
+  const w32 = v => { dv.setUint32(o, v, true); o += 4; };
+  const w16 = v => { dv.setUint16(o, v, true); o += 2; };
+  wstr("RIFF"); w32(36 + dataSize); wstr("WAVE");
+  wstr("fmt "); w32(16); w16(3); w16(2);
+  w32(sr); w32(sr * 2 * 4); w16(2 * 4); w16(32);
+  wstr("data"); w32(dataSize);
+  new Float32Array(buf, 44).set(interleaved);
+  return new Blob([buf], {type:"audio/wav"});
+}
+
+// ============================================================
 // INIT
 // ============================================================
 function init(){
@@ -1871,6 +1979,9 @@ function init(){
   $("jumpBtn").addEventListener("click", ()=>{
     if(G.evolveMode === "static" || !G.ctx) return;
     G.evolveNextAt = G.ctx.currentTime; // tick fires on next 250ms cycle
+  });
+  $("recBtn").addEventListener("click", ()=>{
+    if(REC.active) stopRecording(); else startRecording();
   });
 
   // preset buttons
