@@ -388,6 +388,7 @@
     <span class="status" id="status"><span class="dot"></span>idle</span>
     <span class="status" id="recStatus" style="display:none;"><span class="dot" style="background:var(--warn);"></span>rec</span>
     <span class="status" id="sessionTimer" style="font-family:'JetBrains Mono','SF Mono',monospace; min-width:46px;"></span>
+    <span class="status" id="srDisplay" title="Actual AudioContext sample rate" style="font-family:'JetBrains Mono','SF Mono',monospace;">—</span>
   </div>
 </header>
 
@@ -515,6 +516,11 @@
     <section class="panel">
       <h2>SPACE</h2>
       <div class="knob-grid cols-3" id="spaceKnobs"></div>
+      <div class="row" style="margin-top:8px;"><label>Sample Rate</label></div>
+      <div class="chips" id="srChips"></div>
+      <div style="font-size:9px; color:var(--ink-dd); margin-top:4px; line-height:1.4;">
+        切替は AudioContext 再生成 (一瞬無音)。192k はデバイス次第。
+      </div>
     </section>
   </div>
 
@@ -648,6 +654,10 @@ const G = {
   //   - stagger voices so they don't all start moving on the same beat
   seamless:  50,              // 0..100
 
+  // Preferred output sample rate; the browser may quietly substitute a
+  // different rate. Actual context sampleRate is shown in the header.
+  preferredSR: 96000,
+
   // session seed — same seed = same yuragi/voice character
   seed: 0,
 };
@@ -759,8 +769,17 @@ function getNoiseBuf(){
 // ============================================================
 async function ensureAudio(){
   if(G.ctx) return;
-  G.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" });
-  const ctx = G.ctx;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  // try the user's preferred sample rate first; fall back to the browser default
+  // if the hardware / driver won't accept it.
+  let ctx = null;
+  if(G.preferredSR){
+    try { ctx = new AC({ latencyHint: "interactive", sampleRate: G.preferredSR }); }
+    catch(e){ ctx = null; }
+  }
+  if(!ctx) ctx = new AC({ latencyHint: "interactive" });
+  G.ctx = ctx;
+  refreshSrUI();
 
   G.master = ctx.createGain();
   G.master.gain.value = 0;
@@ -2009,6 +2028,65 @@ function refreshSeedUI(){
   const el = $("seedDisplay");
   if(el) el.textContent = (G.seed >>> 0).toString(36).toUpperCase().padStart(6,"0");
 }
+function refreshSrUI(){
+  const el = $("srDisplay");
+  if(!el) return;
+  if(!G.ctx){ el.textContent = G.preferredSR ? (G.preferredSR/1000).toFixed(1)+"k?" : "—"; return; }
+  el.textContent = (G.ctx.sampleRate/1000).toFixed(1)+"k";
+  // update chip on-state to match actual context rate
+  document.querySelectorAll("#srChips .chip").forEach(c=>{
+    c.classList.toggle("on", +c.dataset.sr === G.ctx.sampleRate);
+  });
+}
+
+async function changeSampleRate(sr){
+  G.preferredSR = sr;
+  if(!G.ctx){ refreshSrUI(); return; }
+  if(G.ctx.sampleRate === sr){ refreshSrUI(); return; } // already there
+  const wasPlaying = G.playing;
+  // tear down everything
+  if(wasPlaying){
+    for(const v of G.voices) freeVoice(v, 0);
+    G.voices = [];
+    G.playing = false;
+  }
+  if(REC && REC.active) try { stopRecording(); } catch(_){}
+  try { await G.ctx.close(); } catch(_){}
+  G.ctx = null;
+  _noiseBuf = null;
+  G.buffer = null;
+  G.bufferTag = "";
+  if(REC){ REC.workletReady = false; REC.node = null; REC.active = false; }
+  // re-init context at the new rate
+  await ensureAudio();
+  refreshSrUI();
+  if(wasPlaying){
+    // restart with a tiny delay so anything pending finishes
+    setTimeout(()=> startDrone(), 80);
+  }
+}
+
+function buildSrChips(){
+  const box = $("srChips");
+  if(!box) return;
+  box.innerHTML = "";
+  const rates = [
+    { sr: 44100,  label: "44.1k" },
+    { sr: 48000,  label: "48k" },
+    { sr: 88200,  label: "88.2k" },
+    { sr: 96000,  label: "96k" },
+    { sr: 176400, label: "176k" },
+    { sr: 192000, label: "192k" },
+  ];
+  rates.forEach(r=>{
+    const c = document.createElement("div");
+    c.className = "chip" + (G.preferredSR === r.sr ? " on" : "");
+    c.textContent = r.label;
+    c.dataset.sr = r.sr;
+    c.addEventListener("click", ()=> changeSampleRate(r.sr));
+    box.appendChild(c);
+  });
+}
 function reseedFromCrypto(){
   // a fresh random seed for "this session"
   G.seed = (Math.random() * 0xFFFFFFFF) >>> 0;
@@ -2400,6 +2478,7 @@ const PATCH_KEYS = {
   nz:"noise", xm:"xMod", xr:"xRate",
   wk:"walkRate", wkr:"walkRange",
   sm:"seamless",
+  psr:"preferredSR",
 };
 
 function encodePatch(){
@@ -2438,10 +2517,12 @@ function loadPatchFromHash(){
   buildChordChips();
   buildEvolveChips();
   buildSrcChips();
+  buildSrChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshNextChordIndicator();
   refreshSeedUI();
+  refreshSrUI();
   $("octVal").textContent = (G.octave>=0?"+":"") + G.octave;
   $("vSpread").textContent = G.spread.toFixed(0) + " %";
   if(G.ctx){
@@ -2514,10 +2595,12 @@ function applyPatchObj(data){
   buildChordChips();
   buildEvolveChips();
   buildSrcChips();
+  buildSrChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshNextChordIndicator();
   refreshSeedUI();
+  refreshSrUI();
   $("octVal").textContent = (G.octave>=0?"+":"") + G.octave;
   $("vSpread").textContent = G.spread.toFixed(0) + " %";
   if(G.ctx){
@@ -2699,10 +2782,12 @@ function init(){
   buildChordChips();
   buildEvolveChips();
   buildSrcChips();
+  buildSrChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshNextChordIndicator();
   refreshSeedUI();
+  refreshSrUI();
   bootCanvases();
   drawSpec();
   drawScope();
