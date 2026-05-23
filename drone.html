@@ -547,7 +547,7 @@
       </div>
       <input type="file" id="inputFile" accept="audio/*" style="display:none;">
       <div class="file-name" id="inputName" style="margin-top:6px;">— no source —</div>
-      <div class="knob-grid cols-3" id="inputKnobs"></div>
+      <div class="knob-grid" id="inputKnobs"></div>
       <div style="font-size:9px; color:var(--ink-dd); margin-top:6px; line-height:1.4;">
         MIX=0 で消音。MIC は Mac/Chrome 等で動作 (Safari は HTTPS 必須・許可ダイアログあり)。粒子化してドローンに練り込みます。
       </div>
@@ -750,15 +750,19 @@ const INPUT = {
   mediaSrcNode: null,
   micWorklet: null,
   micSnapTimer: null,
-  mixGain: null,         // single output gain into the master chain
+  mixGain: null,         // INPUT bus -> preFilter
+  dryGain: null,         // raw audio path
+  wetGain: null,         // granular path
+  loopSrc: null,         // BufferSource for file dry path (loop)
   nextGrainTime: 0,
-  mix:    0,             // 0..100  — 0 == effectively OFF
-  size:   300,           // ms
-  rate:   8,             // grains/sec
-  jit:    35,            // %
-  pos:    0.5,           // 0..1 centre of read window
-  posJit: 50,            // %
-  pitch:  0,             // semitones jitter ±
+  mix:         0,        // 0..100  — 0 == effectively OFF
+  grainAmount: 100,      // 0..100  — 0 = pure dry / 100 = pure granular
+  size:        300,      // ms
+  rate:        8,        // grains/sec
+  jit:         35,       // %
+  pos:         0.5,      // 0..1 centre of read window
+  posJit:      50,       // %
+  pitch:       0,        // semitones jitter ±
 };
 
 const EVOLVE_PROGRESSIONS = [
@@ -982,10 +986,17 @@ async function ensureAudio(){
   G.master.connect(G.meterAna);
   G.master.connect(G.comp).connect(G.limiter).connect(ctx.destination);
 
-  // INPUT GRAIN — its own gain node that feeds into the same preFilter, so the
-  // input-grain stream also gets EQ / BRIGHT / shimmer / reverb / comp / limiter.
+  // INPUT GRAIN — dry/wet split so the imported sound can be heard raw, fully
+  // granularised, or any blend. Both feed into mixGain -> preFilter so the
+  // whole input bus shares the master EQ / BRIGHT / shimmer / reverb / comp / limiter.
   INPUT.mixGain = ctx.createGain();
   INPUT.mixGain.gain.value = 0;
+  INPUT.dryGain = ctx.createGain();
+  INPUT.wetGain = ctx.createGain();
+  INPUT.dryGain.gain.value = (100 - INPUT.grainAmount) / 100;
+  INPUT.wetGain.gain.value = INPUT.grainAmount / 100;
+  INPUT.dryGain.connect(INPUT.mixGain);
+  INPUT.wetGain.connect(INPUT.mixGain);
   INPUT.mixGain.connect(G.preFilter);
 
   // generate initial grain buffer
@@ -2195,27 +2206,39 @@ function buildAllKnobs(){
                          onInput:v=>{ G.vol_db = v; applyVolume(); }
                        }, "vol");
 
-  // INPUT GRAIN — mix knob is the master on/off (0 = silent)
-  addKnob("inputKnobs", { label:"Mix",  min:0, max:100, value:INPUT.mix,
+  // INPUT GRAIN — mix is the master on/off (0 = silent); grain is dry/wet
+  addKnob("inputKnobs", { label:"Mix",   min:0, max:100, value:INPUT.mix,
                          fmt:v=>v < 0.5 ? "off" : v.toFixed(0)+"%", defaultValue:0,
                          onInput:v=>{ INPUT.mix = v; applyInputMix(); }
                        }, "inputMix");
-  addKnob("inputKnobs", { label:"Size", min:10, max:1500, value:INPUT.size,
+  addKnob("inputKnobs", { label:"Grain", min:0, max:100, value:INPUT.grainAmount,
+                         fmt:v=>{
+                           if(v < 0.5) return "raw";
+                           if(v > 99.5) return "all grain";
+                           return v.toFixed(0)+"%";
+                         }, defaultValue:100,
+                         onInput:v=>{ INPUT.grainAmount = v; applyInputGrainAmount(); }
+                       }, "inputGrain");
+  addKnob("inputKnobs", { label:"Size",  min:10, max:1500, value:INPUT.size,
                          log:true, fmt:v=>v.toFixed(0)+" ms", defaultValue:300,
                          onInput:v=>{ INPUT.size = v; }
                        }, "inputSize");
-  addKnob("inputKnobs", { label:"Rate", min:0.5, max:40, value:INPUT.rate,
+  addKnob("inputKnobs", { label:"Rate",  min:0.5, max:40, value:INPUT.rate,
                          log:true, fmt:v=>v.toFixed(1)+" /s", defaultValue:8,
                          onInput:v=>{ INPUT.rate = v; }
                        }, "inputRate");
-  addKnob("inputKnobs", { label:"Jit",  min:0, max:100, value:INPUT.jit,
+  addKnob("inputKnobs", { label:"Jit",   min:0, max:100, value:INPUT.jit,
                          fmt:v=>v.toFixed(0)+"%", defaultValue:35,
                          onInput:v=>{ INPUT.jit = v; }
                        }, "inputJit");
-  addKnob("inputKnobs", { label:"Pos",  min:0, max:1, value:INPUT.pos,
+  addKnob("inputKnobs", { label:"Pos",   min:0, max:1, value:INPUT.pos,
                          fmt:v=>(v*100).toFixed(0)+"%", defaultValue:0.5,
                          onInput:v=>{ INPUT.pos = v; }
                        }, "inputPos");
+  addKnob("inputKnobs", { label:"PosJit", min:0, max:100, value:INPUT.posJit,
+                         fmt:v=>v.toFixed(0)+"%", defaultValue:50,
+                         onInput:v=>{ INPUT.posJit = v; }
+                       }, "inputPosJit");
   addKnob("inputKnobs", { label:"Pitch", min:0, max:100, value:INPUT.pitch,
                          fmt:v=>v < 0.5 ? "0¢" : "±" + ((v/100)*1200).toFixed(0)+"¢", defaultValue:0,
                          onInput:v=>{ INPUT.pitch = v; }
@@ -2806,7 +2829,8 @@ const PATCH_KEYS = {
 
 // INPUT GRAIN params travel under their own short keys (saved alongside G)
 const INPUT_PATCH_KEYS = {
-  imix:"mix", isz:"size", irt:"rate", ijt:"jit",
+  imix:"mix", igr:"grainAmount",
+  isz:"size", irt:"rate", ijt:"jit",
   ips:"pos", ipsj:"posJit", ipt:"pitch",
 };
 
@@ -2841,7 +2865,8 @@ function decodePatch(str){
     if(knobRefs[k]) knobRefs[k].setValue(v);
   }
   const inputKnobMap = {
-    mix:"inputMix", size:"inputSize", rate:"inputRate", jit:"inputJit",
+    mix:"inputMix", grainAmount:"inputGrain",
+    size:"inputSize", rate:"inputRate", jit:"inputJit",
     pos:"inputPos", posJit:"inputPosJit", pitch:"inputPitch",
   };
   for(const short in INPUT_PATCH_KEYS){
@@ -2851,7 +2876,7 @@ function decodePatch(str){
     const knobKey = inputKnobMap[k];
     if(knobKey && knobRefs[knobKey]) knobRefs[knobKey].setValue(p[short]);
   }
-  if(G.ctx) applyInputMix();
+  if(G.ctx){ applyInputMix(); applyInputGrainAmount(); }
   return true;
 }
 
@@ -3103,6 +3128,24 @@ async function ensureMicWorklet(){
   _micWorkletReady = true;
 }
 
+function inputDetachDry(){
+  try { INPUT.loopSrc && INPUT.loopSrc.stop(); } catch(_){}
+  try { INPUT.loopSrc && INPUT.loopSrc.disconnect(); } catch(_){}
+  INPUT.loopSrc = null;
+}
+
+function inputAttachFileDry(){
+  // looping BufferSource feeding the dry path so the user can hear the file
+  // un-processed when GRAIN AMOUNT is low.
+  inputDetachDry();
+  if(!INPUT.buffer || !G.ctx || !INPUT.dryGain) return;
+  INPUT.loopSrc = G.ctx.createBufferSource();
+  INPUT.loopSrc.buffer = INPUT.buffer;
+  INPUT.loopSrc.loop = true;
+  INPUT.loopSrc.connect(INPUT.dryGain);
+  INPUT.loopSrc.start();
+}
+
 async function inputLoadFile(file){
   await ensureAudio();
   const ab = await file.arrayBuffer();
@@ -3112,6 +3155,7 @@ async function inputLoadFile(file){
     INPUT.bufferDur = decoded.duration;
     INPUT.source = "file";
     INPUT.fileName = file.name;
+    inputAttachFileDry();
     refreshInputUI();
   } catch(e){
     INPUT.fileName = "load failed: " + e.message;
@@ -3121,6 +3165,8 @@ async function inputLoadFile(file){
 
 async function inputStartMic(){
   await ensureAudio();
+  // stop any existing file-loop dry source — mic replaces it
+  inputDetachDry();
   try{
     await ensureMicWorklet();
     INPUT.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -3146,13 +3192,16 @@ async function inputStartMic(){
         INPUT.bufferDur = buf.duration;
       } catch(_){}
     };
+    // route mic to both: (a) circular buffer worklet for granular reads
+    // and (b) direct dry path so the listener hears live mic when grain<100%
     INPUT.mediaSrcNode.connect(INPUT.micWorklet);
+    INPUT.mediaSrcNode.connect(INPUT.dryGain);
     // periodically snapshot the rolling buffer
     INPUT.micSnapTimer = setInterval(()=>{
       if(INPUT.micWorklet) INPUT.micWorklet.port.postMessage("snapshot");
     }, 250);
     INPUT.source = "mic";
-    INPUT.fileName = "live mic (rolling 4s)";
+    INPUT.fileName = "live mic";
     refreshInputUI();
   } catch(e){
     INPUT.fileName = "mic failed: " + e.message;
@@ -3168,9 +3217,15 @@ function inputStopMic(){
   INPUT.mediaSrcNode = null;
   INPUT.micWorklet = null;
   INPUT.mediaStream = null;
+  // Fully tear down mic when toggled off — both the live stream AND the
+  // granular buffer that was being fed from it. (Previously the buffer
+  // persisted so the granular kept playing the last 4s; that gave the
+  // impression that mic was still recording even after MIC was OFF.)
   if(INPUT.source === "mic"){
-    INPUT.source = INPUT.buffer ? "file" : "none";  // keep buffer if any
-    if(INPUT.source !== "file") INPUT.fileName = "";
+    INPUT.buffer = null;
+    INPUT.bufferDur = 0;
+    INPUT.source = "none";
+    INPUT.fileName = "";
   }
   refreshInputUI();
 }
@@ -3201,7 +3256,7 @@ function fireInputGrain(when){
   const panner = G.ctx.createStereoPanner();
   panner.pan.setValueAtTime(pan, when);
 
-  src.connect(env).connect(panner).connect(INPUT.mixGain);
+  src.connect(env).connect(panner).connect(INPUT.wetGain);
   src.start(when, offset, dur * playbackRate + 0.02);
   src.stop(when + dur + 0.08);
 }
@@ -3222,8 +3277,16 @@ setInterval(inputGrainScheduler, 30);
 
 function applyInputMix(){
   if(!INPUT.mixGain || !G.ctx) return;
-  const tgt = (INPUT.mix / 100) * 1.2; // 0..1.2 gain (slight headroom)
+  const tgt = (INPUT.mix / 100) * 2.0; // 0..2.0 gain — give the input some real headroom
   INPUT.mixGain.gain.setTargetAtTime(tgt, G.ctx.currentTime, 0.1);
+}
+
+function applyInputGrainAmount(){
+  if(!INPUT.dryGain || !INPUT.wetGain || !G.ctx) return;
+  const t = G.ctx.currentTime;
+  // grainAmount 0..100: 0 = pure dry (raw audio), 100 = pure granular
+  INPUT.dryGain.gain.setTargetAtTime((100 - INPUT.grainAmount) / 100, t, 0.05);
+  INPUT.wetGain.gain.setTargetAtTime(INPUT.grainAmount / 100, t, 0.05);
 }
 
 function refreshInputUI(){
@@ -3409,6 +3472,7 @@ function init(){
   });
   $("inputClear").addEventListener("click", ()=>{
     if(INPUT.source === "mic") inputStopMic();
+    inputDetachDry();
     INPUT.buffer = null;
     INPUT.bufferDur = 0;
     INPUT.source = "none";
