@@ -826,6 +826,23 @@
   }
   .fx-slot.bypassed .fx-params{ pointer-events: none; }
   .fx-params:empty{ display: none; }
+  .fx-choice{
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 2px;
+  }
+  .fx-choice-label{
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: var(--ink-d);
+    font-family: "Chicago","Geneva","Lucida Grande",sans-serif;
+    font-weight: 700;
+  }
+  .fx-choice .seg{ margin: 0; }
+  .fx-choice .seg button{ padding: 1px 3px; font-size: 10px; }
 
   /* recording */
   .rec-status{
@@ -1400,7 +1417,14 @@ const FX_TYPES = [
       { key:"q",      min:0.1, max:10,   def:1.0, fmt: v=>v.toFixed(1) },
   ]},
   { id:"delay",   label:"Delay",    params: [
+      { key:"sync",   type:"choice", choices:["free","1/1","1/2","1/4","1/8","1/16"], def:"free" },
       { key:"time",   min:0.01, max:1.0, def:0.25, fmt: v=>(v*1000).toFixed(0)+" ms" },
+      { key:"fb",     min:0,    max:0.95,def:0.55, fmt: v=>(v*100).toFixed(0)+" %" },
+      { key:"mix",    min:0,    max:1,   def:0.5,  fmt: v=>(v*100).toFixed(0)+" %" },
+  ]},
+  { id:"pingpong",label:"Ping-Pong",params: [
+      { key:"sync",   type:"choice", choices:["free","1/1","1/2","1/4","1/8","1/16"], def:"1/4" },
+      { key:"time",   min:0.01, max:1.0, def:0.35, fmt: v=>(v*1000).toFixed(0)+" ms" },
       { key:"fb",     min:0,    max:0.95,def:0.55, fmt: v=>(v*100).toFixed(0)+" %" },
       { key:"mix",    min:0,    max:1,   def:0.5,  fmt: v=>(v*100).toFixed(0)+" %" },
   ]},
@@ -1440,6 +1464,33 @@ function makeDistortionCurve(amount){
     curve[i] = ((3 + k) * x * 0.35) / (1 + k * Math.abs(x) * 0.18);
   }
   return curve;
+}
+
+const SYNC_BEATS = {
+  "1/1": 4, "1/2": 2, "1/4": 1, "1/8": 0.5, "1/16": 0.25,
+};
+function computeFXTime(slot){
+  const s = slot.params.sync;
+  if(!s || s === "free") return slot.params.time;
+  const beats = SYNC_BEATS[s];
+  if(!beats) return slot.params.time;
+  return Math.max(0.005, Math.min(2.0, beats * (60 / G.bpm)));
+}
+
+function updateSyncedDelays(){
+  if(!G.ctx) return;
+  const now = G.ctx.currentTime;
+  for(const t of tracks){
+    for(const slot of (t.fx || [])){
+      if((slot.type === "delay" || slot.type === "pingpong") &&
+         slot.params && slot.params.sync && slot.params.sync !== "free"){
+        const timeSec = computeFXTime(slot);
+        if(slot.refs && slot.refs.delay) slot.refs.delay.delayTime.setTargetAtTime(timeSec, now, 0.05);
+        if(slot.refs && slot.refs.dL)    slot.refs.dL.delayTime.setTargetAtTime(timeSec, now, 0.05);
+        if(slot.refs && slot.refs.dR)    slot.refs.dR.delayTime.setTargetAtTime(timeSec, now, 0.05);
+      }
+    }
+  }
 }
 
 function buildFX(slot){
@@ -1488,7 +1539,7 @@ function buildFX(slot){
       const fb = ctx.createGain();
       const wet = ctx.createGain();
       const dry = ctx.createGain();
-      dl.delayTime.value = slot.params.time;
+      dl.delayTime.value = computeFXTime(slot);
       fb.gain.value = slot.params.fb;
       wet.gain.value = slot.params.mix;
       dry.gain.value = 1 - slot.params.mix;
@@ -1498,6 +1549,32 @@ function buildFX(slot){
       dl.connect(wet).connect(slot.out);
       slot.nodes.push(dl, fb, wet, dry);
       slot.refs = {delay: dl, fb, wet, dry};
+      break;
+    }
+    case "pingpong": {
+      const dL = ctx.createDelay(2.0);
+      const dR = ctx.createDelay(2.0);
+      const fbLR = ctx.createGain();
+      const fbRL = ctx.createGain();
+      const merger = ctx.createChannelMerger(2);
+      const wet = ctx.createGain();
+      const dry = ctx.createGain();
+      const t = computeFXTime(slot);
+      dL.delayTime.value = t;
+      dR.delayTime.value = t;
+      fbLR.gain.value = slot.params.fb;
+      fbRL.gain.value = slot.params.fb;
+      wet.gain.value = slot.params.mix;
+      dry.gain.value = 1 - slot.params.mix;
+      slot.in.connect(dry).connect(slot.out);
+      slot.in.connect(dL);
+      dL.connect(fbLR).connect(dR);
+      dR.connect(fbRL).connect(dL);
+      dL.connect(merger, 0, 0);     // L delay → output L (first echo)
+      dR.connect(merger, 0, 1);     // R delay → output R (bounces back)
+      merger.connect(wet).connect(slot.out);
+      slot.nodes.push(dL, dR, fbLR, fbRL, merger, wet, dry);
+      slot.refs = {dL, dR, fbLR, fbRL, wet, dry};
       break;
     }
     case "reverb": {
@@ -1612,9 +1689,26 @@ function applyFXParam(slot, key, v){
       if(key === "q"      && r.filter) r.filter.Q.setTargetAtTime(v, now, 0.02);
       break;
     case "delay":
-      if(key === "time" && r.delay) r.delay.delayTime.setTargetAtTime(v, now, 0.05);
+      if((key === "time" || key === "sync") && r.delay){
+        r.delay.delayTime.setTargetAtTime(computeFXTime(slot), now, 0.05);
+      }
       if(key === "fb"   && r.fb)    r.fb.gain.setTargetAtTime(v, now, 0.02);
       if(key === "mix"  && r.wet){
+        r.wet.gain.setTargetAtTime(v, now, 0.02);
+        r.dry.gain.setTargetAtTime(1-v, now, 0.02);
+      }
+      break;
+    case "pingpong":
+      if((key === "time" || key === "sync") && r.dL){
+        const tsec = computeFXTime(slot);
+        r.dL.delayTime.setTargetAtTime(tsec, now, 0.05);
+        r.dR.delayTime.setTargetAtTime(tsec, now, 0.05);
+      }
+      if(key === "fb" && r.fbLR){
+        r.fbLR.gain.setTargetAtTime(v, now, 0.02);
+        r.fbRL.gain.setTargetAtTime(v, now, 0.02);
+      }
+      if(key === "mix" && r.wet){
         r.wet.gain.setTargetAtTime(v, now, 0.02);
         r.dry.gain.setTargetAtTime(1-v, now, 0.02);
       }
@@ -1852,7 +1946,7 @@ bindGlobalRange("master",  "master_db", fmtDB);
 bindGlobalRange("lpf",     "lpfHz",     fmtHz);
 bindGlobalRange("rev",     "revMix",    fmtPct);
 bindGlobalRange("revTail", "revTail",   fmtSec);
-bindGlobalRange("bpm",     "bpm",       fmtBPM, updateBpmDisplay);
+bindGlobalRange("bpm",     "bpm",       fmtBPM, v=>{ updateBpmDisplay(); updateSyncedDelays(); });
 
 // per-track Mix knobs (gain / pan) — write directly to current track
 $("trkGain").addEventListener("input", ()=>{
@@ -2053,6 +2147,29 @@ function renderFXSlot(t, slotIdx){
   params.innerHTML = "";
   for(const p of def.params){
     if(slot.params[p.key] === undefined) slot.params[p.key] = p.def;
+    if(p.type === "choice"){
+      const row = document.createElement("div");
+      row.className = "fx-choice";
+      row.innerHTML = `<div class="fx-choice-label">${p.key}</div>`;
+      const seg = document.createElement("div");
+      seg.className = "seg";
+      for(const c of p.choices){
+        const btn = document.createElement("button");
+        btn.dataset.v = c;
+        btn.textContent = c;
+        if(slot.params[p.key] === c) btn.classList.add("on");
+        btn.addEventListener("click", ()=>{
+          seg.querySelectorAll("button").forEach(b=>b.classList.remove("on"));
+          btn.classList.add("on");
+          slot.params[p.key] = c;
+          applyFXParam(slot, p.key, c);
+        });
+        seg.appendChild(btn);
+      }
+      row.appendChild(seg);
+      params.appendChild(row);
+      continue;
+    }
     const v = slot.params[p.key];
     const step = (p.max - p.min) / 200;
     const knob = makeKnob({
@@ -2189,6 +2306,7 @@ function tap(){
   $("bpm").value = bpm.toFixed(1); G.bpm = bpm;
   $("bpmVal").textContent = bpm.toFixed(1)+" BPM";
   updateBpmDisplay();
+  updateSyncedDelays();
 }
 
 
