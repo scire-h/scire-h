@@ -577,6 +577,14 @@ const G = {
   breath:    0,               // 0..100 depth
   breathRate: 0.4,            // 0..1, scales LFO period (slow = small)
 
+  // Prophet-style noise layer (per-voice white noise into the filter)
+  noise:     0,               // 0..100
+
+  // Prophet-style poly-modulation: a per-voice oscillator that modulates main osc detune.
+  // At <5Hz it's vibrato/chorus, at audio rate it's FM/ring-mod-ish color.
+  xMod:      0,               // 0..100 depth (in tens of cents)
+  xRate:     5.0,             // Hz (log 0.1..200)
+
   // session seed — same seed = same yuragi/voice character
   seed: 0,
 };
@@ -623,6 +631,20 @@ const CHORDS = [
 function intervalsOf(id){
   const c = CHORDS.find(c => c.id === id);
   return c ? c.iv : [0];
+}
+
+// shared white-noise buffer for the per-voice Noise layer (Prophet 5-style)
+let _noiseBuf = null;
+function getNoiseBuf(){
+  if(_noiseBuf) return _noiseBuf;
+  if(!G.ctx) return null;
+  const sr = G.ctx.sampleRate;
+  const len = sr * 2;
+  const buf = G.ctx.createBuffer(1, len, sr);
+  const d = buf.getChannelData(0);
+  for(let i=0; i<len; i++) d[i] = (Math.random()*2-1) * 0.5;
+  _noiseBuf = buf;
+  return buf;
 }
 
 // ============================================================
@@ -968,6 +990,30 @@ function buildVoice(freq, idx, total, fadeIn){
     v.lfoList.push(o);
   }
 
+  // ----- Prophet-style poly-modulation oscillator -----
+  // Sub-audio: chorus / vibrato. Audio-rate: FM-like sidebands.
+  v.xModOsc = ctx.createOscillator();
+  v.xModOsc.frequency.value = G.xRate;
+  v.xModGain = ctx.createGain();
+  v.xModGain.gain.value = G.xMod * 2; // 0..200 cents
+  v.xModOsc.connect(v.xModGain);
+  v.xModOsc.start(ctx.currentTime + srand()*0.01);
+  v.lfoList.push(v.xModOsc);
+
+  // ----- Prophet-style noise layer -----
+  v.noiseGain = ctx.createGain();
+  v.noiseGain.gain.value = (G.noise/100) * 0.3;
+  const nbuf = getNoiseBuf();
+  if(nbuf){
+    v.noiseSrc = ctx.createBufferSource();
+    v.noiseSrc.buffer = nbuf;
+    v.noiseSrc.loop = true;
+    v.noiseSrc.playbackRate.value = 0.85 + srand()*0.3; // each voice slightly different noise color
+    v.noiseSrc.connect(v.noiseGain);
+    v.noiseSrc.start(ctx.currentTime + srand()*0.05);
+    v.oscList.push(v.noiseSrc); // so it stops with the others
+  }
+
   // ----- VINTAGE: Sequential-style analog instability -----
   // (a) permanent per-voice tuning error — like a Prophet 5 Rev1-3 that's slightly out
   // (b) extra very slow random-walk LFO summed into driftOut at large amplitude
@@ -1007,6 +1053,7 @@ function buildVoice(freq, idx, total, fadeIn){
       // base detune + tiny per-osc seed jitter + vintage tuning error (constant per voice)
       o.detune.value = detuneOffset + srandSigned(1.5) + v.vintageTuningError;
       v.driftOut.connect(o.detune);
+      v.xModGain.connect(o.detune);
       o.connect(dst);
       o.start(ctx.currentTime + phaseRand);
       v.oscList.push(o);
@@ -1020,6 +1067,7 @@ function buildVoice(freq, idx, total, fadeIn){
   v.sineGain.connect(v.oscSubMix);
   v.sawGain.connect(v.oscSubMix);
   v.triGain.connect(v.oscSubMix);
+  v.noiseGain.connect(v.oscSubMix);
 
   // ----- grain sub-mix -----
   v.grainSubMix = ctx.createGain();
@@ -1357,6 +1405,27 @@ function applyFilter(){
   G.postFilter.frequency.setTargetAtTime(G.bright, G.ctx.currentTime, 0.05);
   G.filterDriftOut.gain.setTargetAtTime(G.bright * (G.filtDrift/100) * 0.5, G.ctx.currentTime, 0.2);
 }
+function applyNoise(){
+  if(!G.ctx) return;
+  const tgt = (G.noise/100) * 0.3;
+  for(const v of G.voices){
+    if(v.noiseGain) v.noiseGain.gain.setTargetAtTime(tgt, G.ctx.currentTime, 0.05);
+  }
+}
+function applyXMod(){
+  if(!G.ctx) return;
+  const tgt = G.xMod * 2;
+  for(const v of G.voices){
+    if(v.xModGain) v.xModGain.gain.setTargetAtTime(tgt, G.ctx.currentTime, 0.05);
+  }
+}
+function applyXRate(){
+  if(!G.ctx) return;
+  for(const v of G.voices){
+    if(v.xModOsc) v.xModOsc.frequency.setTargetAtTime(G.xRate, G.ctx.currentTime, 0.05);
+  }
+}
+
 function applyShimmer(){
   if(!G.ctx) return;
   G.shimmerGain.gain.setTargetAtTime(shimmerDepthDb(), G.ctx.currentTime, 0.2);
@@ -1559,6 +1628,20 @@ function buildAllKnobs(){
                           }, defaultValue:0.4,
                           onInput:v=>{ G.breathRate = v; if(G.playing) rebuildVoices({force:true}); }
                         }, "breathRate");
+  addKnob("analogKnobs", { label:"Noise",   min:0, max:100, value:G.noise,
+                          fmt:v=>v.toFixed(0)+"%", defaultValue:0,
+                          onInput:v=>{ G.noise = v; applyNoise(); }
+                        }, "noise");
+  addKnob("analogKnobs", { label:"X-Mod",   min:0, max:100, value:G.xMod,
+                          fmt:v=>v.toFixed(0)+"%", defaultValue:0,
+                          onInput:v=>{ G.xMod = v; applyXMod(); }
+                        }, "xMod");
+  addKnob("analogKnobs", { label:"X-Rate",  min:0.1, max:200, value:G.xRate,
+                          log:true,
+                          fmt:v=> v < 1 ? v.toFixed(2)+" Hz" : v.toFixed(1)+" Hz",
+                          defaultValue:5.0,
+                          onInput:v=>{ G.xRate = v; applyXRate(); }
+                        }, "xRate");
 
   // GRAIN
   addKnob("grainKnobs", { label:"Size",    min:10, max:1000, value:G.grainSize,
@@ -2103,6 +2186,7 @@ const PATCH_KEYS = {
   sp:"spread", rm:"reverbMix", rt:"reverbTail", vol:"vol_db",
   src:"src",
   vt:"vintage", br:"breath", brr:"breathRate", sd:"seed",
+  nz:"noise", xm:"xMod", xr:"xRate",
 };
 
 function encodePatch(){
