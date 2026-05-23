@@ -211,6 +211,8 @@
     margin: 10px 0 6px;
   }
   .knob-grid.cols-3{ grid-template-columns: repeat(3, 1fr); }
+  .knob-grid.cols-2{ grid-template-columns: repeat(2, 1fr); }
+  .knob-grid.cols-1{ grid-template-columns: 1fr; }
   .knob{
     display:flex; flex-direction:column; align-items:center;
     user-select:none; touch-action:none;
@@ -367,6 +369,15 @@
     </section>
 
     <section class="panel">
+      <h2>EVOLVE</h2>
+      <div class="chips" id="evolveChips" style="margin-top:10px;"></div>
+      <div class="knob-grid cols-1" id="evolveKnobs"></div>
+      <div class="row" style="margin-top:6px;"><label>Root Walk</label><span class="chip" id="rootWalkToggle">OFF</span></div>
+      <div class="row" style="margin-top:4px;"><label>Next In</label><span class="val" id="nextChangeIn">—</span></div>
+      <button id="jumpBtn" style="margin:6px 0 2px; width:100%;">JUMP NOW</button>
+    </section>
+
+    <section class="panel">
       <h2>OSC STACK</h2>
       <div class="knob-grid cols-3" id="oscKnobs"></div>
     </section>
@@ -511,7 +522,26 @@ const G = {
 
   voices: [],
   filterLfos: [],
+
+  // generative chord progression
+  evolveMode: "static",       // see EVOLVE_PROGRESSIONS
+  evolveInterval: 90,         // seconds between auto changes
+  evolveFade: 1.4,            // crossfade time on auto change (seconds)
+  evolveRootWalk: false,      // also shift root through progression
+  evolveStep: -1,             // index into the progression
+  evolveNextAt: 0,            // ctx time of next scheduled change
+  evolveOriginRoot: 9,        // root chosen when evolve started; rootWalk is relative
 };
+
+const EVOLVE_PROGRESSIONS = [
+  { id:"static",  label:"Static",  chords: null, roots: null },
+  { id:"modal",   label:"Modal",   chords:["sus2","fifth","add9","sus4","fifth","sus2"],   roots:[0, 0, 5, 7, 0, 0] },
+  { id:"ambient", label:"Ambient", chords:["fifthoct","add9","sus2","fifth","oct","add9"], roots:[0, 3, 7, 5, 10, 3] },
+  { id:"dorian",  label:"Dorian",  chords:["min","sus4","min7","sus2","min","min7"],       roots:[0, 5, 3, 7, 0, 10] },
+  { id:"lydian",  label:"Lydian",  chords:["maj","sus2","add9","maj7","fifth","add9"],     roots:[0, 7, 2, 9, 0, 5] },
+  { id:"dark",    label:"Dark",    chords:["min","min7","sus4","low8","min9","low8"],      roots:[0, 5, 10, 3, 7, 0] },
+  { id:"pent",    label:"Pent",    chords:["pent","fifth","add9","oct","pent","sus2"],     roots:[0, 7, 5, 2, 9, 0] },
+];
 
 // ----- note frequency: noteIdx (0=C), octave offset from A4 octave -----
 // We use A4 = 440. Octave 0 == C4..B4. So semis from A4: (noteIdx - 9) + octave*12
@@ -915,6 +945,7 @@ function startDrone(){
     G.master.gain.setValueAtTime(G.master.gain.value, t);
     G.master.gain.linearRampToValueAtTime(db2lin(G.vol_db), t + 1.8);
     G.playing = true;
+    evolveReset();
     $("playBtn").classList.add("on");
     $("playBtn").textContent = "■ STOP";
     $("status").classList.add("on");
@@ -997,6 +1028,49 @@ function grainScheduler(){
   }
 }
 setInterval(grainScheduler, 25);
+
+// ============================================================
+// EVOLVE — slow generative chord progression
+// ============================================================
+function evolveProgression(){ return EVOLVE_PROGRESSIONS.find(p => p.id === G.evolveMode); }
+
+function evolveReset(){
+  if(!G.ctx) return;
+  // treat the user's current chord/root as step 0 — first change goes to step 1
+  G.evolveStep = 0;
+  G.evolveOriginRoot = G.noteIdx;
+  G.evolveNextAt = G.ctx.currentTime + G.evolveInterval;
+}
+
+function evolveTick(){
+  if(!G.playing || !G.ctx) return;
+  // countdown UI
+  if(G.evolveMode !== "static" && G.evolveNextAt > 0){
+    const rem = Math.max(0, G.evolveNextAt - G.ctx.currentTime);
+    const m = Math.floor(rem/60), s = Math.floor(rem%60);
+    $("nextChangeIn").textContent = `${m}:${s<10?"0":""}${s}`;
+  } else {
+    $("nextChangeIn").textContent = "—";
+  }
+  if(G.evolveMode === "static") return;
+  const prog = evolveProgression();
+  if(!prog || !prog.chords) return;
+  const now = G.ctx.currentTime;
+  if(now < G.evolveNextAt) return;
+
+  G.evolveStep = (G.evolveStep + 1) % prog.chords.length;
+  G.chord = prog.chords[G.evolveStep];
+  if(G.evolveRootWalk && prog.roots){
+    G.noteIdx = ((G.evolveOriginRoot + prog.roots[G.evolveStep]) % 12 + 12) % 12;
+  }
+  G.evolveNextAt = now + G.evolveInterval;
+
+  buildChordChips();
+  buildNoteChips();
+  renderChordStrip();
+  rebuildVoices();
+}
+setInterval(evolveTick, 250);
 
 function fireGrain(v, when){
   const ctx = G.ctx;
@@ -1326,6 +1400,20 @@ function buildAllKnobs(){
                          }
                        }, "posSpd");
 
+  // EVOLVE
+  addKnob("evolveKnobs", { label:"Interval", min:8, max:300, value:G.evolveInterval,
+                          log:true, fmt:v => {
+                            const t = Math.round(v);
+                            if(t < 60) return t + " s";
+                            const m = Math.floor(t/60), s = t%60;
+                            return m + ":" + (s<10?"0":"") + s;
+                          }, defaultValue:90,
+                          onInput:v=>{
+                            G.evolveInterval = v;
+                            if(G.ctx) G.evolveNextAt = G.ctx.currentTime + v;
+                          }
+                        }, "evolveInterval");
+
   // SPACE
   addKnob("spaceKnobs", { label:"Spread", min:0, max:100, value:G.spread,
                          fmt:v=>v.toFixed(0)+"%", defaultValue:60,
@@ -1357,6 +1445,8 @@ function buildNoteChips(){
     c.textContent = n;
     c.addEventListener("click", ()=>{
       G.noteIdx = i;
+      G.evolveOriginRoot = i;
+      if(G.ctx) G.evolveNextAt = G.ctx.currentTime + G.evolveInterval;
       box.querySelectorAll(".chip").forEach((el,j)=> el.classList.toggle("on", j===i));
       if(G.playing) rebuildVoices();
       renderChordStrip();
@@ -1373,6 +1463,7 @@ function buildOctChips(){
     c.textContent = (o>=0?"+":"") + o;
     c.addEventListener("click", ()=>{
       G.octave = o;
+      if(G.ctx) G.evolveNextAt = G.ctx.currentTime + G.evolveInterval;
       box.querySelectorAll(".chip").forEach(el=> el.classList.remove("on"));
       c.classList.add("on");
       $("octVal").textContent = (o>=0?"+":"") + o;
@@ -1392,6 +1483,7 @@ function buildChordChips(){
     c.title = ch.id;
     c.addEventListener("click", ()=>{
       G.chord = ch.id;
+      if(G.ctx) G.evolveNextAt = G.ctx.currentTime + G.evolveInterval;
       box.querySelectorAll(".chip").forEach(el=> el.classList.remove("on"));
       c.classList.add("on");
       if(G.playing) rebuildVoices();
@@ -1399,6 +1491,30 @@ function buildChordChips(){
     });
     box.appendChild(c);
   });
+}
+
+function buildEvolveChips(){
+  const box = $("evolveChips");
+  box.innerHTML = "";
+  EVOLVE_PROGRESSIONS.forEach(p=>{
+    const c = document.createElement("div");
+    c.className = "chip" + (p.id === G.evolveMode ? " on" : "");
+    c.textContent = p.label;
+    c.title = p.id;
+    c.addEventListener("click", ()=>{
+      G.evolveMode = p.id;
+      box.querySelectorAll(".chip").forEach(el=> el.classList.remove("on"));
+      c.classList.add("on");
+      evolveReset();
+    });
+    box.appendChild(c);
+  });
+}
+
+function refreshRootWalkUI(){
+  const t = $("rootWalkToggle");
+  t.classList.toggle("on", !!G.evolveRootWalk);
+  t.textContent = G.evolveRootWalk ? "ON" : "OFF";
 }
 function buildSrcChips(){
   const box = $("srcChips");
@@ -1440,6 +1556,8 @@ function renderChordStrip(){
     cell.innerHTML = `${NOTE_NAMES[i]}<span class="o">${i===G.noteIdx ? "root" : (litSet.has(i) ? "+" : "")}</span>`;
     cell.addEventListener("click", ()=>{
       G.noteIdx = i;
+      G.evolveOriginRoot = i;
+      if(G.ctx) G.evolveNextAt = G.ctx.currentTime + G.evolveInterval;
       buildNoteChips();
       renderChordStrip();
       if(G.playing) rebuildVoices();
@@ -1537,8 +1655,10 @@ function applyPreset(name){
   buildNoteChips();
   buildOctChips();
   buildChordChips();
+  buildEvolveChips();
   buildSrcChips();
   renderChordStrip();
+  refreshRootWalkUI();
   $("octVal").textContent = (G.octave >=0?"+":"") + G.octave;
   $("vSpread").textContent = G.spread.toFixed(0) + " %";
   // rebuild buffer / voices live
@@ -1727,8 +1847,10 @@ function init(){
   buildNoteChips();
   buildOctChips();
   buildChordChips();
+  buildEvolveChips();
   buildSrcChips();
   renderChordStrip();
+  refreshRootWalkUI();
   bootCanvases();
   drawSpec();
   drawScope();
@@ -1742,6 +1864,14 @@ function init(){
     if(G.playing) stopDrone(); else startDrone();
   });
   $("panicBtn").addEventListener("click", panic);
+  $("rootWalkToggle").addEventListener("click", ()=>{
+    G.evolveRootWalk = !G.evolveRootWalk;
+    refreshRootWalkUI();
+  });
+  $("jumpBtn").addEventListener("click", ()=>{
+    if(G.evolveMode === "static" || !G.ctx) return;
+    G.evolveNextAt = G.ctx.currentTime; // tick fires on next 250ms cycle
+  });
 
   // preset buttons
   document.querySelectorAll(".preset-row button[data-preset]").forEach(b=>{
