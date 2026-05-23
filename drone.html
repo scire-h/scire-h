@@ -536,7 +536,13 @@
 
     <section class="panel">
       <h2>SPACE</h2>
+      <div class="row" style="margin-top:8px;"><label>Binaural (3D)</label><span class="chip" id="binauralToggle">OFF</span></div>
       <div class="knob-grid" id="spaceKnobs"></div>
+    </section>
+
+    <section class="panel">
+      <h2>PING-PONG DELAY</h2>
+      <div class="knob-grid cols-3" id="delayKnobs"></div>
     </section>
 
     <section class="panel">
@@ -733,6 +739,14 @@ const G = {
 
   // Auto-fade-out — slow user-driven fade to silence
   fadeTime: 30,  // seconds (3 .. 600)
+
+  // Ping-pong delay (stereo L↔R bounce)
+  delayTime: 0.38,  // 0.01..1.5 s
+  delayFb:   0.45,  // 0..0.95
+  delayMix:  0.20,  // 0..1
+
+  // Binaural (HRTF panning) mode
+  binaural: false,
 
   // 3-band master EQ (low-shelf 220Hz / mid-peak / high-shelf 4500Hz)
   eqLowGain:  0,   // dB, -12..+12
@@ -951,7 +965,7 @@ async function ensureAudio(){
   G.eqHigh.frequency.value = 4500;
   G.eqHigh.gain.value = G.eqHighGain;
 
-  // chain: preFilter -> EQ -> postFilter (BRIGHT) -> shimmer -> [dry, conv->wet] -> master -> comp -> limiter -> dest
+  // chain: preFilter -> EQ -> postFilter (BRIGHT) -> shimmer -> [dry, conv->wet, delay] -> master -> comp -> limiter -> dest
   // EQ goes BEFORE the LPF so that boosting HIGH/MID actually has material to
   // work on — otherwise BRIGHT had already lopped off the highs before EQ saw them.
   G.preFilter.connect(G.eqLow);
@@ -961,6 +975,31 @@ async function ensureAudio(){
   G.postFilter.connect(G.shimmerFilt);
   G.shimmerFilt.connect(G.dry).connect(G.master);
   G.shimmerFilt.connect(G.conv).connect(G.wet).connect(G.master);
+
+  // ----- Ping-pong stereo delay -----
+  // L → delayL → out L → feedback gain → delayR (crosses to R)
+  // R → delayR → out R → feedback gain → delayL (crosses to L)
+  G.delaySplit = ctx.createChannelSplitter(2);
+  G.delayMerge = ctx.createChannelMerger(2);
+  G.delayL     = ctx.createDelay(2.0);
+  G.delayR     = ctx.createDelay(2.0);
+  G.delayFbL   = ctx.createGain();
+  G.delayFbR   = ctx.createGain();
+  G.delayWet   = ctx.createGain();
+  G.delayL.delayTime.value = G.delayTime;
+  G.delayR.delayTime.value = G.delayTime;
+  G.delayFbL.gain.value = G.delayFb;
+  G.delayFbR.gain.value = G.delayFb;
+  G.delayWet.gain.value = G.delayMix;
+  G.shimmerFilt.connect(G.delaySplit);
+  G.delaySplit.connect(G.delayL, 0);  // L input
+  G.delaySplit.connect(G.delayR, 1);  // R input
+  // cross-feedback (ping-pong)
+  G.delayL.connect(G.delayFbL).connect(G.delayR);
+  G.delayR.connect(G.delayFbR).connect(G.delayL);
+  G.delayL.connect(G.delayMerge, 0, 0);
+  G.delayR.connect(G.delayMerge, 0, 1);
+  G.delayMerge.connect(G.delayWet).connect(G.master);
 
   // mild peak-catching compressor before the soft-clip limiter — only catches
   // genuine peaks so EQ boosts aren't squashed away
@@ -1248,19 +1287,37 @@ function buildVoice(freq, idx, total, fadeIn){
   v.ampMod = ctx.createGain();
   v.ampMod.gain.value = 1;
 
-  v.pan = ctx.createStereoPanner();
-  v.basePan = (total > 1) ? ((idx/(total-1)) - 0.5) * 2 * (G.spread/100) : 0;
-  v.pan.pan.value = v.basePan;
+  if(G.binaural){
+    // Binaural / HRTF mode — each voice is placed at an absolute 3D position
+    // around the listener (head). REC tap captures whatever the HRTF renders,
+    // so a recording made in this mode IS a binaural stereo file.
+    v.pan = ctx.createPanner();
+    v.pan.panningModel  = "HRTF";
+    v.pan.distanceModel = "inverse";
+    v.pan.refDistance   = 1;
+    v.pan.maxDistance   = 100;
+    v.pan.rolloffFactor = 0; // no distance attenuation, just direction
+    const angle = (total > 1) ? ((idx/(total-1)) - 0.5) * Math.PI : 0; // -π/2..π/2
+    v.baseAngle = angle;
+    const radius = 0.3 + (G.spread/100) * 1.4;
+    v.pan.positionX.value = Math.sin(angle) * radius;
+    v.pan.positionY.value = 0;
+    v.pan.positionZ.value = -Math.cos(angle) * radius;
+  } else {
+    v.pan = ctx.createStereoPanner();
+    v.basePan = (total > 1) ? ((idx/(total-1)) - 0.5) * 2 * (G.spread/100) : 0;
+    v.pan.pan.value = v.basePan;
 
-  // pan LFO — seeded
-  const panLfo = ctx.createOscillator();
-  panLfo.frequency.value = 0.05 + srand()*0.12;
-  const panLfoG = ctx.createGain();
-  panLfoG.gain.value = 0.25 * (G.panDepth/100);
-  panLfo.connect(panLfoG).connect(v.pan.pan);
-  panLfo.start();
-  v.panLfo = panLfo; v.panLfoG = panLfoG;
-  v.lfoList.push(panLfo);
+    // pan LFO — only in stereo mode (binaural uses position directly)
+    const panLfo = ctx.createOscillator();
+    panLfo.frequency.value = 0.05 + srand()*0.12;
+    const panLfoG = ctx.createGain();
+    panLfoG.gain.value = 0.25 * (G.panDepth/100);
+    panLfo.connect(panLfoG).connect(v.pan.pan);
+    panLfo.start();
+    v.panLfo = panLfo; v.panLfoG = panLfoG;
+    v.lfoList.push(panLfo);
+  }
 
   // amp LFO — seeded
   const ampLfo = ctx.createOscillator();
@@ -1899,17 +1956,24 @@ function applyAm(){
   }
 }
 function applyPanDepth(){
+  // Only stereo voices have a pan LFO; binaural voices ignore Pan Mv.
   for(const v of G.voices){
-    v.panLfoG.gain.setTargetAtTime(0.25 * (G.panDepth/100), G.ctx.currentTime, 0.1);
+    if(v.panLfoG) v.panLfoG.gain.setTargetAtTime(0.25 * (G.panDepth/100), G.ctx.currentTime, 0.1);
   }
 }
 function applySpread(){
   for(const v of G.voices){
     const total = v.total;
-    v.basePan = (total > 1) ? ((v.idx/(total-1)) - 0.5) * 2 * (G.spread/100) : 0;
-    // pan AudioParam currently being LFO'd; rebind base by setting then re-add LFO via gain
-    // Easiest: shift the base by adjusting the panLfoG offset isn't possible — instead nudge pan param
-    v.pan.pan.setTargetAtTime(v.basePan, G.ctx.currentTime, 0.2);
+    if(G.binaural && v.pan && v.pan.positionX !== undefined){
+      // binaural: spread = ring radius around the listener
+      const radius = 0.3 + (G.spread/100) * 1.4;
+      const angle = v.baseAngle || 0;
+      v.pan.positionX.setTargetAtTime(Math.sin(angle) * radius, G.ctx.currentTime, 0.2);
+      v.pan.positionZ.setTargetAtTime(-Math.cos(angle) * radius, G.ctx.currentTime, 0.2);
+    } else if(v.pan && v.pan.pan){
+      v.basePan = (total > 1) ? ((v.idx/(total-1)) - 0.5) * 2 * (G.spread/100) : 0;
+      v.pan.pan.setTargetAtTime(v.basePan, G.ctx.currentTime, 0.2);
+    }
   }
 }
 function applyFilter(){
@@ -1926,6 +1990,16 @@ function applyEQ(){
     G.eqMid.frequency.setTargetAtTime(G.eqMidHz, t, 0.1);
   }
   if(G.eqHigh) G.eqHigh.gain.setTargetAtTime(G.eqHighGain, t, 0.05);
+}
+
+function applyDelay(){
+  if(!G.ctx || !G.delayL) return;
+  const t = G.ctx.currentTime;
+  G.delayL.delayTime.setTargetAtTime(G.delayTime, t, 0.05);
+  G.delayR.delayTime.setTargetAtTime(G.delayTime, t, 0.05);
+  G.delayFbL.gain.setTargetAtTime(G.delayFb, t, 0.05);
+  G.delayFbR.gain.setTargetAtTime(G.delayFb, t, 0.05);
+  G.delayWet.gain.setTargetAtTime(G.delayMix, t, 0.05);
 }
 
 function applyNoise(){
@@ -2276,6 +2350,21 @@ function buildAllKnobs(){
                          onInput:v=>{ G.fadeTime = v; }
                        }, "fadeTime");
 
+  // PING-PONG DELAY
+  addKnob("delayKnobs", { label:"Time",  min:0.01, max:1.5, value:G.delayTime,
+                         log:true,
+                         fmt:v=>(v*1000).toFixed(0)+" ms", defaultValue:0.38,
+                         onInput:v=>{ G.delayTime = v; applyDelay(); }
+                       }, "delayTime");
+  addKnob("delayKnobs", { label:"Feedback", min:0, max:0.95, value:G.delayFb,
+                         fmt:v=>(v*100).toFixed(0)+"%", defaultValue:0.45,
+                         onInput:v=>{ G.delayFb = v; applyDelay(); }
+                       }, "delayFb");
+  addKnob("delayKnobs", { label:"Mix", min:0, max:1, value:G.delayMix,
+                         fmt:v=>v<0.005?"off":(v*100).toFixed(0)+"%", defaultValue:0.20,
+                         onInput:v=>{ G.delayMix = v; applyDelay(); }
+                       }, "delayMix");
+
   // INPUT GRAIN — mix is the master on/off (0 = silent); grain is dry/wet
   addKnob("inputKnobs", { label:"Mix",   min:0, max:100, value:INPUT.mix,
                          fmt:v=>v < 0.5 ? "off" : v.toFixed(0)+"%", defaultValue:0,
@@ -2410,6 +2499,13 @@ function refreshRootWalkUI(){
   const t = $("rootWalkToggle");
   t.classList.toggle("on", !!G.evolveRootWalk);
   t.textContent = G.evolveRootWalk ? "ON" : "OFF";
+}
+
+function refreshBinauralUI(){
+  const t = $("binauralToggle");
+  if(!t) return;
+  t.classList.toggle("on", !!G.binaural);
+  t.textContent = G.binaural ? "ON" : "OFF";
 }
 
 function buildTransitionChips(){
@@ -2706,6 +2802,7 @@ function applyPreset(name){
     applyReverb();
     applyVolume();
     applyEQ();
+    applyDelay();
     evolveReset();
   }
   refreshNextChordIndicator();
@@ -2911,6 +3008,8 @@ const PATCH_KEYS = {
   eql:"eqLowGain", eqm:"eqMidGain", eqmh:"eqMidHz", eqh:"eqHighGain",
   ts:"transitionStyle",
   ft:"fadeTime",
+  dt:"delayTime", dfb:"delayFb", dmx:"delayMix",
+  bin:"binaural",
 };
 
 // INPUT GRAIN params travel under their own short keys (saved alongside G)
@@ -2946,7 +3045,7 @@ function decodePatch(str){
     if(p[short] === undefined) continue;
     const k = PATCH_KEYS[short];
     let v = p[short];
-    if(k === "evolveRootWalk") v = !!v;
+    if(k === "evolveRootWalk" || k === "binaural") v = !!v;
     G[k] = v;
     if(knobRefs[k]) knobRefs[k].setValue(v);
   }
@@ -2979,6 +3078,7 @@ function loadPatchFromHash(){
   buildTransitionChips();
   renderChordStrip();
   refreshRootWalkUI();
+  refreshBinauralUI();
   refreshNextChordIndicator();
   refreshSeedUI();
   refreshSrUI();
@@ -2993,6 +3093,7 @@ function loadPatchFromHash(){
     applyReverb();
     applyVolume();
     applyEQ();
+    applyDelay();
   }
   return true;
 }
@@ -3059,6 +3160,7 @@ function applyPatchObj(data){
   buildTransitionChips();
   renderChordStrip();
   refreshRootWalkUI();
+  refreshBinauralUI();
   refreshNextChordIndicator();
   refreshSeedUI();
   refreshSrUI();
@@ -3073,6 +3175,7 @@ function applyPatchObj(data){
     applyReverb();
     applyVolume();
     applyEQ();
+    applyDelay();
   }
 }
 
@@ -3513,6 +3616,7 @@ function init(){
   buildTransitionChips();
   renderChordStrip();
   refreshRootWalkUI();
+  refreshBinauralUI();
   refreshNextChordIndicator();
   refreshSeedUI();
   refreshSrUI();
@@ -3532,6 +3636,11 @@ function init(){
   $("fadeBtn").addEventListener("click", ()=>{
     if(_fadeTimer) cancelFadeOut();
     else startFadeOut();
+  });
+  $("binauralToggle").addEventListener("click", ()=>{
+    G.binaural = !G.binaural;
+    refreshBinauralUI();
+    if(G.playing) rebuildVoices({force:true});
   });
   $("rootWalkToggle").addEventListener("click", ()=>{
     G.evolveRootWalk = !G.evolveRootWalk;
