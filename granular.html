@@ -2083,7 +2083,10 @@ function refreshUIForTrack(){
 
   const setSlider = (id, v, fmtFn)=>{
     const el = $(id), val = $(id+"Val");
-    if(el){ el.value = v; }
+    if(el){
+      el.value = v;
+      if(el._knob) el._knob.setValue(v);    // keep knob visual in sync
+    }
     if(val) val.textContent = fmtFn ? fmtFn(v) : v;
   };
   setSlider("freq",    t.freq,    fmtHz);
@@ -2241,7 +2244,7 @@ function advanceGrainTime(t){
   t.nextGrainTime += interval * rateJit;
   if(!t.freeze && t.scan !== 0){
     t.pos = clamp(t.pos + t.scan * interval * 0.1, 0, 1);
-    if(t === CT()){ $("pos").value = t.pos; $("posVal").textContent = t.pos.toFixed(3); }
+    if(t === CT()) setSliderUI("pos", t.pos, fmt3);
   }
 }
 
@@ -2678,7 +2681,7 @@ function setPosFromEvent(e){
   const p = clamp(x/r.width, 0, 1);
   const t = CT();
   t.pos = p;
-  $("pos").value = p; $("posVal").textContent = p.toFixed(3);
+  setSliderUI("pos", p, fmt3);
 }
 waveCanvas.addEventListener("mousedown", e=>{ dragging=true; setPosFromEvent(e); });
 window.addEventListener("mousemove", e=>{ if(dragging) setPosFromEvent(e); });
@@ -3439,6 +3442,8 @@ function applyState(s){
       G.seq.slices = s.G.seq.slices || 16;
       G.seq.rate   = s.G.seq.rate   || 16;
     }
+    // applyState's local setSlider needs to sync the knob, otherwise
+    // recall leaves the knob visual stale and the next drag jumps.
     setSliderUI("bpm", G.bpm, fmtBPM); updateBpmDisplay();
     setSliderUI("master", G.master_db, fmtDB);
     setSliderUI("lpf", G.lpfHz, fmtHz);
@@ -3598,20 +3603,16 @@ function startArrowsLoop(){
   const tick = ()=>{
     const t = CT();
     let any = false;
-    // ↑/↓ → grain size, exponential ramp (musically even from 2ms to 500ms)
     if(arrows.up || arrows.down){
       const factor = arrows.up ? 1.025 : 1/1.025;
       t.size = clamp(t.size * factor, 2, 500);
-      $("size").value = t.size;
-      $("sizeVal").textContent = t.size.toFixed(0)+" ms";
+      setSliderUI("size", t.size, fmtMs);
       any = true;
     }
-    // ←/→ → position scrub
     if(arrows.left || arrows.right){
       const delta = arrows.right ? 0.005 : -0.005;
       t.pos = clamp(t.pos + delta, 0, 1);
-      $("pos").value = t.pos;
-      $("posVal").textContent = t.pos.toFixed(3);
+      setSliderUI("pos", t.pos, fmt3);
       any = true;
     }
     arrowsRAF = any ? requestAnimationFrame(tick) : null;
