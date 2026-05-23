@@ -5,12 +5,11 @@ on:
     branches: ["**"]
     paths:
       - 'ds4-native/**'
-      - '.github/workflows/dsp-tests.yml'
   pull_request:
     branches: ["**"]
     paths:
       - 'ds4-native/**'
-      - '.github/workflows/dsp-tests.yml'
+  workflow_dispatch: {}
 
 jobs:
   test:
