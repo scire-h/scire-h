@@ -1091,6 +1091,48 @@ async function loadFile(file){
 // ============================================================
 // VOICES
 // ============================================================
+// Equal-power crossfade curve generator. Returns a Float32Array of `steps`
+// values rising from 0 to 1 along a sin(u·π/2) curve (sin²+cos²=1 → no dip).
+function epCurveUp(steps){
+  const c = new Float32Array(steps);
+  for(let i=0; i<steps; i++){
+    const u = (steps === 1) ? 1 : i / (steps - 1);
+    c[i] = Math.sin(u * Math.PI / 2);
+  }
+  return c;
+}
+function epCurveDown(steps){
+  const c = new Float32Array(steps);
+  for(let i=0; i<steps; i++){
+    const u = (steps === 1) ? 1 : i / (steps - 1);
+    c[i] = Math.cos(u * Math.PI / 2);
+  }
+  return c;
+}
+// Try setValueCurveAtTime for true equal-power; fall back to linear ramp.
+function rampEqualPower(param, fromVal, toVal, when, dur){
+  try {
+    param.cancelScheduledValues(when);
+    param.setValueAtTime(fromVal, when);
+    const steps = 32;
+    const c = new Float32Array(steps);
+    const up = toVal >= fromVal;
+    for(let i=0; i<steps; i++){
+      const u = i / (steps - 1);
+      const eased = up ? Math.sin(u * Math.PI/2) : Math.cos(u * Math.PI/2);
+      c[i] = up ? (fromVal + (toVal - fromVal) * eased)
+                : (toVal + (fromVal - toVal) * eased);
+    }
+    param.setValueCurveAtTime(c, when, dur);
+  } catch(e){
+    try {
+      param.cancelScheduledValues(when);
+      param.setValueAtTime(fromVal, when);
+      param.linearRampToValueAtTime(toVal, when + dur);
+    } catch(_){}
+  }
+}
+
 function freeVoice(v, fadeTime){
   fadeTime = fadeTime || 0;
   const finish = ()=>{
@@ -1104,11 +1146,7 @@ function freeVoice(v, fadeTime){
   };
   if(fadeTime > 0 && G.ctx && v.gainOut){
     const t = G.ctx.currentTime;
-    try{
-      v.gainOut.gain.cancelScheduledValues(t);
-      v.gainOut.gain.setValueAtTime(v.gainOut.gain.value, t);
-      v.gainOut.gain.linearRampToValueAtTime(0.0001, t + fadeTime);
-    }catch(_){}
+    rampEqualPower(v.gainOut.gain, v.gainOut.gain.value, 0.0001, t, fadeTime);
     setTimeout(finish, fadeTime*1000 + 80);
   } else {
     finish();
@@ -1306,9 +1344,7 @@ function buildVoice(freq, idx, total, fadeIn){
 
   if(fadeIn > 0){
     const t = ctx.currentTime;
-    v.gainOut.gain.cancelScheduledValues(t);
-    v.gainOut.gain.setValueAtTime(0.0001, t);
-    v.gainOut.gain.exponentialRampToValueAtTime(baseGain, t + fadeIn);
+    rampEqualPower(v.gainOut.gain, 0.0001, baseGain, t, fadeIn);
   }
 
   return v;
@@ -1392,32 +1428,93 @@ function rebuildVoices(opts){
   const morphTime  = 1.5 + slow * 10;   // 1.5s .. 11.5s per voice
   const staggerWin = slow * 4.5;        // 0 .. 4.5s random delay window
 
-  // GLIDE PATH — same voice count, same internal osc count, currently playing.
-  // Morph existing oscillators to the new frequencies instead of tearing down so
-  // LFOs / breath / drift keep their phase. Each voice picks a random delay so
-  // voices don't all start moving at the same instant (key to invisibility).
-  if(!opts.force && G.playing && G.voices.length === N && N > 0 &&
-     G.voices.every(v => v.oscList.length === expectedOscCount)){
-    for(let i=0; i<N; i++){
-      const v = G.voices[i];
-      v.walkDelta = 0;          // chord change resets any in-progress walk
+  // SMART MATCH path — used whenever no LFO-baking knob has changed.
+  // Match old voices to new pitches by SMALLEST PITCH DISTANCE (so a 5th that
+  // exists in both chords stays put, even if the chord adds a 3rd and 7th).
+  //   - matched pairs    -> GLIDE oscillator freq only (no gain change at all)
+  //   - unmatched old    -> equal-power FADE OUT only
+  //   - unmatched new    -> equal-power FADE IN  only
+  // The sustained voices never touch their gain, so there's literally no
+  // moment of silence even when the chord changes shape or size.
+  const oldN = G.voices.length;
+  const allStructureMatches = oldN > 0 && G.voices.every(v => v.oscList.length === expectedOscCount);
+
+  if(!opts.force && G.playing && allStructureMatches){
+    // Build all (old, new, distance-in-octaves) pairs, sort ascending, greedily
+    // assign — produces an optimal-enough pairing for chord sizes up to ~6.
+    const pairs = [];
+    for(let oi=0; oi<oldN; oi++){
+      for(let ni=0; ni<N; ni++){
+        const d = Math.abs(Math.log2((G.voices[oi].chordFreq || G.voices[oi].freq) / newFreqs[ni]));
+        pairs.push({oi, ni, d});
+      }
+    }
+    pairs.sort((a,b)=> a.d - b.d);
+    const usedOld = new Set(), usedNew = new Set();
+    const matchOldToNew = new Map();
+    const target = Math.min(oldN, N);
+    for(const p of pairs){
+      if(matchOldToNew.size >= target) break;
+      if(usedOld.has(p.oi) || usedNew.has(p.ni)) continue;
+      usedOld.add(p.oi); usedNew.add(p.ni);
+      matchOldToNew.set(p.oi, p.ni);
+    }
+
+    // 1. GLIDE matched voices (oscillator freq only, gain untouched)
+    matchOldToNew.forEach((ni, oi)=>{
+      const v = G.voices[oi];
+      v.walkDelta = 0;
       v.walkNextAt = 0;
-      v.chordFreq = newFreqs[i];
+      v.chordFreq = newFreqs[ni];
       const delay = (Math.random() * staggerWin) * 1000;
       if(delay < 1){
-        glideVoice(v, newFreqs[i], morphTime);
+        glideVoice(v, newFreqs[ni], morphTime);
       } else {
         setTimeout(()=>{
-          if(_rebuildId !== myId) return; // a newer change has superseded us
-          glideVoice(v, newFreqs[i], morphTime);
+          if(_rebuildId !== myId) return;
+          glideVoice(v, newFreqs[ni], morphTime);
+        }, delay);
+      }
+    });
+
+    // 2. FADE OUT old voices that didn't get matched (chord became "less wide")
+    const newVoiceArr = [];
+    for(let oi=0; oi<oldN; oi++){
+      if(matchOldToNew.has(oi)){
+        // matched voice stays — but its idx in G.voices may shift; collect in order
+        const newPos = matchOldToNew.get(oi);
+        G.voices[oi].idx = newPos;
+        newVoiceArr[newPos] = G.voices[oi];
+      } else {
+        freeVoice(G.voices[oi], morphTime);
+      }
+    }
+
+    // 3. FADE IN voices for new pitches that didn't get matched
+    for(let ni=0; ni<N; ni++){
+      if(usedNew.has(ni)) continue;
+      const delay = (Math.random() * staggerWin) * 1000;
+      // build silent, then ramp up after the delay (so multiple new voices stagger)
+      const v = buildVoice(newFreqs[ni], ni, Math.max(1, N), 0);
+      newVoiceArr[ni] = v;
+      if(delay < 1){
+        rampEqualPower(v.gainOut.gain, 0.0001, v.baseGain, G.ctx.currentTime, morphTime);
+      } else {
+        setTimeout(()=>{
+          if(_rebuildId !== myId) return;
+          if(G.ctx) rampEqualPower(v.gainOut.gain, 0.0001, v.baseGain, G.ctx.currentTime, morphTime);
         }, delay);
       }
     }
+
+    G.voices = newVoiceArr;
     return;
   }
 
-  // FULL REBUILD — voice count changes, or not yet playing — long crossfade
-  const fade = G.playing ? (1.5 + slow * 6) : 0;   // 1.5..7.5s when playing
+  // FORCED REBUILD — knob touched that bakes new LFOs in (vintage / breath /
+  // breathRate / oscVoices / preset / patch load). Have to recreate voices.
+  // Equal-power crossfade keeps the dip below threshold.
+  const fade = G.playing ? (1.5 + slow * 6) : 0;
   const dying = G.voices;
   G.voices = [];
   for(const v of dying) freeVoice(v, fade);
