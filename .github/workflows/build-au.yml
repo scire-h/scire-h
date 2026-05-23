@@ -4,8 +4,14 @@ on:
   push:
     branches: ["**"]
     tags:     ["v*"]
+    paths:
+      - 'ds4-native/**'
+      - '.github/workflows/build-au.yml'
   pull_request:
     branches: ["**"]
+    paths:
+      - 'ds4-native/**'
+      - '.github/workflows/build-au.yml'
   workflow_dispatch: {}
 
 jobs:
