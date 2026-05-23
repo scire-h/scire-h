@@ -777,32 +777,62 @@
   .knob.active .knob-fill{ stroke: var(--warn); }
 
   /* fx slot */
-  .fx-slot select.fx-type{
-    width: 100%; margin-bottom: 8px;
-    padding: 7px 8px;
-    font-size: 11px; letter-spacing: 0.14em;
-    text-transform: uppercase;
-    background: var(--panel); color: var(--ink); border: 1px solid var(--line2);
+  .fx-slot{
+    border: 1px solid var(--bev-shadow);
+    border-top-color: var(--bev-light);
+    border-left-color: var(--bev-light);
+    background: rgba(255,255,255,0.18);
+    padding: 6px;
+    margin-bottom: 8px;
   }
-  .fx-slot.has-fx select.fx-type{ background: var(--panel2); color: var(--acc); border-color: var(--acc-d); }
-  .fx-params{ display: block; }
-  .fx-param{
+  .fx-slot.has-fx{
+    background: rgba(53,101,216,0.18);
+    border-color: var(--acc-d);
+    border-top-color: var(--acc);
+    border-left-color: var(--acc);
+  }
+  .fx-slot.bypassed{
+    opacity: 0.55;
+  }
+  .fx-slot.bypassed.has-fx{ background: rgba(255,255,255,0.18); }
+  .fx-head{
     display: grid;
-    grid-template-columns: 64px 1fr 56px;
-    gap: 8px;
-    align-items: center;
-    margin: 4px 0;
+    grid-template-columns: 30px 1fr;
+    gap: 6px;
+    margin-bottom: 6px;
   }
-  .fx-param .lbl{
-    font-size: 10px; color: var(--ink-d);
-    text-transform: uppercase; letter-spacing: 0.12em;
+  .fx-bypass{
+    background: var(--grad-btn);
+    border: 1px solid var(--bev-shadow);
+    border-top-color: var(--bev-light);
+    border-left-color: var(--bev-light);
+    color: var(--ink-dd);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    border-radius: 0;
+    font-family: "Geneva","Lucida Grande",sans-serif;
   }
-  .fx-param input[type=range]{ margin: 0; }
-  .fx-param .val{
-    font-family: "JetBrains Mono","SF Mono",monospace;
-    font-size: 10px; color: var(--ink);
-    text-align: right;
+  .fx-bypass.on{
+    background: var(--grad-btn-down);
+    border-color: var(--bev-light);
+    border-top-color: var(--bev-shadow);
+    border-left-color: var(--bev-shadow);
+    color: var(--acc);
   }
+  .fx-slot select.fx-type{
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+  .fx-params{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px 4px;
+    margin-top: 4px;
+  }
+  .fx-slot.bypassed .fx-params{ pointer-events: none; }
+  .fx-params:empty{ display: none; }
 
   /* recording */
   .rec-status{
@@ -965,7 +995,9 @@
     <div class="block">
       <h2>FX 1</h2>
       <div class="fx-slot" data-slot="0">
-        <select class="fx-type"></select>
+        <div class="fx-head">
+          <select class="fx-type"></select>
+        </div>
         <div class="fx-params"></div>
       </div>
     </div>
@@ -1337,30 +1369,30 @@ function buildIR(tailSec){
 const FX_TYPES = [
   { id:"none",    label:"— off —", params: [] },
   { id:"lpf",     label:"LPF",      params: [
-      { key:"cutoff", min:80, max:18000, def:5000, fmt: v=>v.toFixed(0)+" Hz" },
-      { key:"q",      min:0.1, max:10,   def:0.7, fmt: v=>v.toFixed(1) },
+      { key:"cutoff", min:80, max:18000, def:1800, fmt: v=>v.toFixed(0)+" Hz" },
+      { key:"q",      min:0.1, max:10,   def:1.2, fmt: v=>v.toFixed(1) },
   ]},
   { id:"hpf",     label:"HPF",      params: [
-      { key:"cutoff", min:20, max:6000,  def:200, fmt: v=>v.toFixed(0)+" Hz" },
-      { key:"q",      min:0.1, max:10,   def:0.7, fmt: v=>v.toFixed(1) },
+      { key:"cutoff", min:20, max:6000,  def:600, fmt: v=>v.toFixed(0)+" Hz" },
+      { key:"q",      min:0.1, max:10,   def:1.0, fmt: v=>v.toFixed(1) },
   ]},
   { id:"delay",   label:"Delay",    params: [
       { key:"time",   min:0.01, max:1.0, def:0.25, fmt: v=>(v*1000).toFixed(0)+" ms" },
-      { key:"fb",     min:0,    max:0.95,def:0.4,  fmt: v=>(v*100).toFixed(0)+" %" },
-      { key:"mix",    min:0,    max:1,   def:0.3,  fmt: v=>(v*100).toFixed(0)+" %" },
+      { key:"fb",     min:0,    max:0.95,def:0.55, fmt: v=>(v*100).toFixed(0)+" %" },
+      { key:"mix",    min:0,    max:1,   def:0.5,  fmt: v=>(v*100).toFixed(0)+" %" },
   ]},
   { id:"reverb",  label:"Reverb",   params: [
-      { key:"tail",   min:0.2, max:6.0,  def:2.0,  fmt: v=>v.toFixed(1)+" s" },
-      { key:"mix",    min:0,   max:1,    def:0.3,  fmt: v=>(v*100).toFixed(0)+" %" },
+      { key:"tail",   min:0.2, max:6.0,  def:2.5,  fmt: v=>v.toFixed(1)+" s" },
+      { key:"mix",    min:0,   max:1,    def:0.45, fmt: v=>(v*100).toFixed(0)+" %" },
   ]},
   { id:"bitcrush",label:"BitCrush", params: [
-      { key:"bits",   min:1,   max:16,   def:6,    fmt: v=>v.toFixed(0)+" bit" },
+      { key:"bits",   min:1,   max:16,   def:4,    fmt: v=>v.toFixed(0)+" bit" },
       { key:"mix",    min:0,   max:1,    def:1.0,  fmt: v=>(v*100).toFixed(0)+" %" },
   ]},
   { id:"distort", label:"Dist",     params: [
-      { key:"drive",  min:1,   max:50,   def:5,    fmt: v=>v.toFixed(1)+"×" },
-      { key:"tone",   min:200, max:18000,def:5000, fmt: v=>v.toFixed(0)+" Hz" },
-      { key:"mix",    min:0,   max:1,    def:0.5,  fmt: v=>(v*100).toFixed(0)+" %" },
+      { key:"drive",  min:1,   max:50,   def:12,   fmt: v=>v.toFixed(1)+"×" },
+      { key:"tone",   min:200, max:18000,def:4000, fmt: v=>v.toFixed(0)+" Hz" },
+      { key:"mix",    min:0,   max:1,    def:0.7,  fmt: v=>(v*100).toFixed(0)+" %" },
   ]},
   { id:"comp",    label:"Comp",     params: [
       { key:"thr",    min:-60, max:0,    def:-24,  fmt: v=>v.toFixed(0)+" dB" },
@@ -1405,6 +1437,14 @@ function buildFX(slot){
 
   slot.in  = ctx.createGain();
   slot.out = ctx.createGain();
+
+  // bypass short-circuits the slot regardless of type
+  if(slot.bypass || slot.type === "none"){
+    slot.in.connect(slot.out);
+    if(slot.type === "none") return;
+    // for non-none types we still want params populated, but no audio routed through:
+    return;
+  }
 
   switch(slot.type){
     case "none":
@@ -1962,30 +2002,48 @@ function renderFXSlot(t, slotIdx){
   const def  = FX_BY_ID[slot.type] || FX_BY_ID.none;
   const sel  = root.querySelector("select.fx-type");
   sel.value = slot.type;
-  root.classList.toggle("has-fx", slot.type !== "none");
+  const active = slot.type !== "none" && !slot.bypass;
+  root.classList.toggle("has-fx", active);
+  root.classList.toggle("bypassed", !!slot.bypass);
+
+  // bypass toggle
+  let byp = root.querySelector(".fx-bypass");
+  if(!byp){
+    byp = document.createElement("button");
+    byp.className = "fx-bypass";
+    byp.title = "bypass (A/B compare)";
+    byp.addEventListener("click", ()=>{
+      // resolve to the currently-selected track at click-time, not the closure's t
+      const tNow = CT();
+      const sNow = tNow.fx[slotIdx];
+      sNow.bypass = !sNow.bypass;
+      if(G.ctx){ buildFX(sNow); reconnectTrackForSlot(sNow); }
+      renderFXSlot(tNow, slotIdx);
+    });
+    const head = root.querySelector(".fx-head");
+    if(head) head.insertBefore(byp, head.firstChild);
+  }
+  byp.classList.toggle("on", !slot.bypass && slot.type !== "none");
+  byp.textContent = slot.type === "none" ? "—" : (slot.bypass ? "○" : "●");
 
   const params = root.querySelector(".fx-params");
   params.innerHTML = "";
   for(const p of def.params){
     if(slot.params[p.key] === undefined) slot.params[p.key] = p.def;
     const v = slot.params[p.key];
-    const row = document.createElement("div");
-    row.className = "fx-param";
-    const step = (p.max - p.min) / 100;
-    row.innerHTML = `
-      <span class="lbl">${p.key}</span>
-      <input type="range" min="${p.min}" max="${p.max}" step="${step}" value="${v}" />
-      <span class="val">${p.fmt(v)}</span>
-    `;
-    const inp = row.querySelector("input");
-    const valEl = row.querySelector(".val");
-    inp.addEventListener("input", ()=>{
-      const newV = parseFloat(inp.value);
-      slot.params[p.key] = newV;
-      valEl.textContent = p.fmt(newV);
-      applyFXParam(slot, p.key, newV);
+    const step = (p.max - p.min) / 200;
+    const knob = makeKnob({
+      label: p.key,
+      min: p.min, max: p.max, value: v,
+      step,
+      fmt: p.fmt,
+      defaultValue: p.def,
+      onInput: newV => {
+        slot.params[p.key] = newV;
+        applyFXParam(slot, p.key, newV);
+      },
     });
-    params.appendChild(row);
+    params.appendChild(knob.el);
   }
 }
 
@@ -3256,7 +3314,7 @@ function snapshotState(){
         active: t.seq.active.slice(),
         sliceMap: t.seq.sliceMap.slice(),
       },
-      fx: t.fx.map(s => ({ type: s.type, params: {...s.params} })),
+      fx: t.fx.map(s => ({ type: s.type, params: {...s.params}, bypass: !!s.bypass })),
     })),
   };
 }
@@ -3308,6 +3366,7 @@ function applyState(s){
           const src = ts.fx[k] || {type:"none", params:{}};
           t.fx[k].type   = src.type || "none";
           t.fx[k].params = {...(src.params || {})};
+          t.fx[k].bypass = !!src.bypass;
           if(G.ctx){ buildFX(t.fx[k]); }
         }
         if(G.ctx) reconnectTrackChain(t);
