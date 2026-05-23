@@ -8,7 +8,7 @@
 <title>GRANULAR // 4-track signal + buffer granulator</title>
 <style>
   :root{
-    /* —— 1-bit Macintosh nostalgia —— */
+    /* —— 1-bit Macintosh nostalgia · Graphite × Grape —— */
     --bg:        #ffffff;
     --bg2:       #ffffff;
     --panel:     #ffffff;
@@ -18,24 +18,24 @@
     --ink:       #000000;
     --ink-d:     #000000;
     --ink-dd:    #6a6a6a;
-    --acc:       #000000;
-    --acc-d:     #000000;
-    --warn:      #d12020;
-    --ok:        #1a8a1a;
+    --acc:       #5a3d8e;   /* "grape" — only saturated highlight */
+    --acc-d:     #3e2a66;
+    --warn:      #c43030;   /* reserved for REC — the only red */
+    --ok:        #6a6a78;   /* muted graphite */
 
-    /* track colours — used as small left stripes only */
-    --t1:  #2b6dd9;
-    --t2:  #d99a1f;
-    --t3:  #c64191;
-    --t4:  #4caf50;
-    --t5:  #e64a1f;
-    --t6:  #ee9520;
-    --t7:  #b8a01a;
-    --t8:  #6da81a;
-    --t9:  #1fa872;
-    --t10: #1e9bc4;
-    --t11: #2856d6;
-    --t12: #8442c6;
+    /* track colours — desaturated purple / gray spectrum only */
+    --t1:  #6e5a8c;
+    --t2:  #807a90;
+    --t3:  #8868a4;
+    --t4:  #5d5d6e;
+    --t5:  #7e4d9a;
+    --t6:  #6d6582;
+    --t7:  #7a6090;
+    --t8:  #555568;
+    --t9:  #9078a8;
+    --t10: #4c4a60;
+    --t11: #5a4778;
+    --t12: #8a8896;
 
     --bev-light: #ffffff;
     --bev-dark:  #000000;
@@ -45,7 +45,6 @@
     --grad-panel:    #ffffff;
     --grad-title:    #000000;
 
-    /* 50 % dither for backgrounds */
     --dither:        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='2' height='2'><rect width='1' height='1' fill='%23000'/><rect x='1' y='1' width='1' height='1' fill='%23000'/></svg>");
   }
   *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -97,7 +96,7 @@
   }
   header .brand .mark{
     width: 12px; height: 12px;
-    background: #fff;
+    background: var(--acc);
     border: 1px solid #000;
     box-shadow: 1px 1px 0 #000;
     flex-shrink: 0;
@@ -134,7 +133,7 @@
     border-radius: 50%;
   }
   header .status.on span.dot{
-    background: var(--ok);
+    background: var(--acc);
     border-color: #000;
   }
   header .recind{ display: none; }
@@ -585,7 +584,7 @@
     color: #fff;
     font-weight: 700;
   }
-  .seq-cell.cur{ box-shadow: 0 0 0 2px var(--warn) inset; }
+  .seq-cell.cur{ box-shadow: 0 0 0 2px var(--acc) inset; }
   .seq-cell.beat{ position: relative; }
   .seq-cell.beat::before{
     content:""; position:absolute; top:-3px; left:0; right:0; height:2px;
@@ -655,8 +654,8 @@
   }
   .pattern-row .modet{ font-size: 9px; }
   .pattern-row .modet.slice{
-    background: var(--warn); color: #fff;
-    border-color: var(--warn);
+    background: var(--acc); color: #fff;
+    border-color: var(--acc);
   }
   .pattern-row .cells{ display: grid; gap: 2px; }
   .p-cell{
@@ -679,7 +678,7 @@
     color: #fff;
     border-color: #000;
   }
-  .p-cell.cur{ box-shadow: 0 0 0 2px var(--ink) inset; }
+  .p-cell.cur{ box-shadow: 0 0 0 2px var(--acc) inset; }
   .p-cell.beat::before{
     content:""; position:absolute; top:-4px; left:0; right:0; height:2px;
     background: var(--acc-d); opacity: 0.7;
@@ -732,7 +731,7 @@
   .knob-track{ fill: none; stroke: rgba(0,0,0,0.18); stroke-width: 2; }
   .knob-fill { fill: none; stroke: #000; stroke-width: 4; stroke-linecap: butt; }
   .knob-pointer line{ stroke: #000; stroke-width: 2.5; stroke-linecap: square; }
-  .knob.active .knob-fill{ stroke: var(--warn); }
+  .knob.active .knob-fill{ stroke: var(--acc); }
   .knob-label{
     font-family: "Chicago","Geneva","Lucida Grande",sans-serif;
     text-transform: none;
@@ -775,7 +774,7 @@
     letter-spacing: 0.04em;
   }
   .knob.active .knob-pop{ opacity: 1; }
-  .knob.active .knob-fill{ stroke: var(--warn); }
+  .knob.active .knob-fill{ stroke: var(--acc); }
 
   /* fx slot */
   .fx-slot{
@@ -786,7 +785,7 @@
   }
   .fx-slot.has-fx{
     background: #fff;
-    box-shadow: inset 3px 0 0 #000;
+    box-shadow: inset 3px 0 0 var(--acc);
   }
   .fx-slot.bypassed{ opacity: 0.45; }
   .fx-slot.bypassed.has-fx{ box-shadow: none; }
