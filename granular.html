@@ -207,7 +207,7 @@
   .strip.sel{ border-top-color: var(--c); }
   .strip .meter .bar{ background: var(--c); }
   .strip-head .swatch{ display:inline-block; width:8px; height:8px; margin-right:6px; transform: translateY(1px); }
-  .strip-head .ctl{ display:flex; gap: 4px; }
+  .strip-head .ctl{ display:flex; gap: 3px; flex-wrap: wrap; }
   .strip-head button{
     padding: 0 4px; font-size: 10px; letter-spacing: 0;
     background: #fff;
@@ -870,8 +870,10 @@
     .tracks-strip{ grid-template-columns: repeat(4, 1fr); }
     .strip{ padding: 5px 6px 6px; }
     .strip .meter{ height: 3px; margin-top: 4px; }
-    .strip-head .name{ font-size: 11px; }
-    .strip-head button{ padding: 1px 5px; font-size: 9px; min-width: 18px; }
+    .strip-head{ flex-direction: column; align-items: stretch; gap: 3px; }
+    .strip-head .name{ font-size: 11px; text-align: left; }
+    .strip-head .ctl{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
+    .strip-head button{ padding: 1px 2px; font-size: 9px; min-width: 0; }
     .knob-grid{ grid-template-columns: repeat(3, 1fr); gap: 14px 6px; }
     .fx-params{ grid-template-columns: repeat(3, 1fr); }
     .knob svg{ width: 42px; height: 42px; }
