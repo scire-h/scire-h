@@ -551,6 +551,15 @@
     </section>
 
     <section class="panel">
+      <h2>REC TRACKS</h2>
+      <div class="chips" id="recTrackChips" style="margin-top:10px;"></div>
+      <div style="font-size:9px; color:var(--ink-dd); margin-top:6px; line-height:1.4;">
+        ● REC で選択中のトラックがそれぞれ別 WAV ファイルとして同時録音。<br>
+        Master=最終ミックス / Voices=ドライ / Reverb・Delay=送り単体 / Input=INPUT のみ
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>INPUT GRAIN</h2>
       <div class="chips" style="margin-top:10px;">
         <span class="chip" id="inputFileBtn">↓ FILE</span>
@@ -916,8 +925,13 @@ async function ensureAudio(){
   G.master = ctx.createGain();
   G.master.gain.value = 0;
 
-  G.preFilter  = ctx.createGain(); // sum of all voice taps
+  G.preFilter  = ctx.createGain(); // sum of all voice taps + input
   G.preFilter.gain.value = 1;
+  // Dedicated voices bus so REC can tap voices alone (pre-EQ / pre-FX) without
+  // including the INPUT GRAIN bus. INPUT joins at preFilter directly.
+  G.voicesBus  = ctx.createGain();
+  G.voicesBus.gain.value = 1;
+  G.voicesBus.connect(G.preFilter);
 
   G.postFilter = ctx.createBiquadFilter();
   G.postFilter.type = "lowpass";
@@ -1536,7 +1550,7 @@ function buildVoice(freq, idx, total, fadeIn){
             .connect(v.breathGain)
             .connect(v.ampMod)
             .connect(v.pan)
-            .connect(G.preFilter);
+            .connect(G.voicesBus);
 
   if(fadeIn > 0){
     const t = ctx.currentTime;
@@ -2659,6 +2673,29 @@ function refreshBinauralUI(){
   t.textContent = G.binaural ? "ON" : "OFF";
 }
 
+function buildRecTrackChips(){
+  const box = $("recTrackChips");
+  if(!box) return;
+  box.innerHTML = "";
+  const items = [
+    { id:"master", label:"Master" },
+    { id:"voices", label:"Voices" },
+    { id:"reverb", label:"Reverb" },
+    { id:"delay",  label:"Delay"  },
+    { id:"input",  label:"Input"  },
+  ];
+  items.forEach(it=>{
+    const c = document.createElement("div");
+    c.className = "chip" + (REC.tracks[it.id] ? " on" : "");
+    c.textContent = it.label;
+    c.addEventListener("click", ()=>{
+      REC.tracks[it.id] = !REC.tracks[it.id];
+      c.classList.toggle("on", REC.tracks[it.id]);
+    });
+    box.appendChild(c);
+  });
+}
+
 function buildReverbModeChips(){
   const box = $("reverbModeChips");
   if(!box) return;
@@ -3254,6 +3291,7 @@ function loadPatchFromHash(){
   buildSrChips();
   buildTransitionChips();
   buildReverbModeChips();
+  buildRecTrackChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshBinauralUI();
@@ -3338,6 +3376,7 @@ function applyPatchObj(data){
   buildSrChips();
   buildTransitionChips();
   buildReverbModeChips();
+  buildRecTrackChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshBinauralUI();
@@ -3701,7 +3740,33 @@ class RecP extends AudioWorkletProcessor {
 registerProcessor("rec-p", RecP);
 `;
 let workletURL = null;
-const REC = { workletReady:false, active:false, node:null, startTime:0 };
+const REC = {
+  workletReady: false,
+  active: false,
+  startTime: 0,
+  // Per-track AudioWorkletNodes once recording is in flight
+  nodes: {},
+  // Which tracks the user wants captured (toggled in the REC TRACKS panel)
+  tracks: {
+    master: true,
+    voices: false,
+    reverb: false,
+    delay:  false,
+    input:  false,
+  },
+};
+
+// Tap points for each track — resolved lazily because they only exist once
+// ensureAudio() has built the graph.
+function recTaps(){
+  return {
+    master: G.limiter,    // post-comp / post-limiter — exactly what you hear
+    voices: G.voicesBus,  // voices alone, pre-EQ, pre-FX
+    reverb: G.wet,        // reverb wet bus only
+    delay:  G.delayWet,   // delay wet bus only
+    input:  INPUT.mixGain,// INPUT GRAIN bus
+  };
+}
 
 async function ensureRecorderWorklet(){
   if(REC.workletReady) return;
@@ -3717,26 +3782,52 @@ async function startRecording(){
   try { await ensureRecorderWorklet(); }
   catch(e){ console.error("worklet failed", e); return; }
   if(REC.active) return;
-  REC.node = new AudioWorkletNode(G.ctx, "rec-p", { numberOfInputs:1, numberOfOutputs:0, channelCount:2 });
-  REC.node.port.onmessage = ev => {
-    const d = ev.data;
-    if(!d || !d.L || !d.L.length) return;
-    const blob = encodeWavFloat32(d.L, d.R, G.ctx.sampleRate);
-    downloadBlob(blob, `drone-${tStamp()}.wav`);
-  };
-  G.master.connect(REC.node);
-  REC.node.port.postMessage("start");
+  const taps = recTaps();
+  REC.nodes = {};
+  for(const id in REC.tracks){
+    if(!REC.tracks[id]) continue;
+    const src = taps[id];
+    if(!src) continue;
+    try {
+      const node = new AudioWorkletNode(G.ctx, "rec-p", {
+        numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2,
+      });
+      node.port.onmessage = ev => {
+        const d = ev.data;
+        if(!d || !d.L || !d.L.length) return;
+        const blob = encodeWavFloat32(d.L, d.R, G.ctx.sampleRate);
+        downloadBlob(blob, `drone-${tStamp()}-${id}.wav`);
+      };
+      src.connect(node);
+      node.port.postMessage("start");
+      REC.nodes[id] = { node, src };
+    } catch(e){
+      console.error("rec failed for " + id, e);
+    }
+  }
+  if(!Object.keys(REC.nodes).length){
+    console.warn("no tracks armed");
+    return;
+  }
   REC.active = true;
   REC.startTime = G.ctx.currentTime;
   $("recBtn").textContent = "■ STOP REC";
   $("recBtn").classList.add("active");
   $("recStatus").style.display = "";
 }
+
 function stopRecording(){
   if(!REC.active) return;
-  try{ REC.node.port.postMessage("stop"); }catch(_){}
-  const node = REC.node; REC.node = null;
-  setTimeout(()=>{ try{ G.master.disconnect(node); }catch(_){} try{ node.disconnect(); }catch(_){} }, 600);
+  const toClean = REC.nodes;
+  REC.nodes = {};
+  for(const id in toClean){
+    const { node, src } = toClean[id];
+    try { node.port.postMessage("stop"); } catch(_){}
+    setTimeout(()=>{
+      try { src.disconnect(node); } catch(_){}
+      try { node.disconnect(); } catch(_){}
+    }, 700);
+  }
   REC.active = false;
   $("recBtn").textContent = "● REC";
   $("recBtn").classList.remove("active");
@@ -3796,6 +3887,7 @@ function init(){
   buildSrChips();
   buildTransitionChips();
   buildReverbModeChips();
+  buildRecTrackChips();
   renderChordStrip();
   refreshRootWalkUI();
   refreshBinauralUI();
