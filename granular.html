@@ -234,6 +234,11 @@
     border-color: var(--warn);
     animation: os9-rec-blink 0.9s steps(2,end) infinite;
   }
+  .strip-head button.evolve.on{
+    background: var(--acc);
+    color: #fff;
+    border-color: var(--acc);
+  }
   @keyframes os9-rec-blink{ 50% { opacity: 0.45; } }
   .strip .meter{
     height: 4px;
@@ -1112,7 +1117,6 @@
           <button id="seqFill">Fill T</button>
           <button id="seqClear">Clear T</button>
           <button id="seqClearAll">Clear All</button>
-          <button id="seqEvolve">Evolve</button>
         </div>
       </div>
       <div class="pattern-grid" id="patternGrid"></div>
@@ -1255,12 +1259,6 @@ const G = {
     rate: 16,
   },
 
-  // generative pattern evolution
-  evolve: {
-    enabled: false,
-    lastBar: -1,
-  },
-
   // recording
   rec: {
     active: false,
@@ -1285,6 +1283,7 @@ function makeTrack(idx){
   return {
     idx, name: p.name,
     mute: false, solo: false, armed: true,
+    evolve: false,
     gain_db: isDrum ? -6 : -8,
     pan: p.pan ?? 0,
 
@@ -2122,9 +2121,10 @@ function buildStrip(){
       <div class="strip-head">
         <span><span class="swatch"></span><span class="name">${t.name}</span></span>
         <span class="ctl">
-          <button class="mute ${t.mute?"on":""}" title="mute">M</button>
-          <button class="solo ${t.solo?"on":""}" title="solo">S</button>
-          <button class="arm  ${t.armed?"on":""}" title="record arm">R</button>
+          <button class="mute   ${t.mute  ?"on":""}" title="mute">M</button>
+          <button class="solo   ${t.solo  ?"on":""}" title="solo">S</button>
+          <button class="arm    ${t.armed ?"on":""}" title="record arm">R</button>
+          <button class="evolve ${t.evolve?"on":""}" title="auto-evolve pattern">E</button>
         </span>
       </div>
       <div class="meter"><div class="bar"></div></div>
@@ -2158,6 +2158,10 @@ function buildStrip(){
         } else if(btn.classList.contains("arm")){
           t.armed = !t.armed;
           btn.classList.toggle("on", t.armed);
+        } else if(btn.classList.contains("evolve")){
+          t.evolve = !t.evolve;
+          btn.classList.toggle("on", t.evolve);
+          return;
         }
         applyTrackMix(t);
       });
@@ -3215,21 +3219,13 @@ $("seqClearAll").addEventListener("click", ()=>{
   buildPatternGrid();
 });
 
-$("seqEvolve").addEventListener("click", ()=>{
-  G.evolve.enabled = !G.evolve.enabled;
-  G.evolve.lastBar = G.bar;     // skip current bar so the user hears one pass first
-  $("seqEvolve").classList.toggle("active", G.evolve.enabled);
-});
-
-// Once per bar, gently mutate every track that has its sequencer enabled.
-// Voice / FX / parameters stay put — only seq.active and seq.sliceMap drift.
+// Once per bar, gently mutate every track that has its per-strip 'E'
+// (evolve) toggle on. Voice / FX / knobs stay put — only seq.active
+// and seq.sliceMap drift, so the kit identity is preserved.
 function maybeEvolve(){
-  if(!G.evolve.enabled) return;
-  if(G.bar === G.evolve.lastBar) return;
-  G.evolve.lastBar = G.bar;
   let mutated = false;
   for(const t of tracks){
-    if(!t.seq.enabled) continue;
+    if(!t.evolve) continue;
     mutatePattern(t);
     mutated = true;
   }
@@ -3697,7 +3693,7 @@ function snapshotState(){
     },
     tracks: tracks.map(t=>({
       name: t.name,
-      mute: t.mute, solo: t.solo, armed: t.armed,
+      mute: t.mute, solo: t.solo, armed: t.armed, evolve: !!t.evolve,
       gain_db: t.gain_db, pan: t.pan,
       voice: t.voice || "granular",
       srcType: t.srcType, freq: t.freq, blen: t.blen,
@@ -3743,7 +3739,7 @@ function applyState(s){
       if(i >= NUM_TRACKS) return;
       const t = tracks[i];
       Object.assign(t, {
-        mute: !!ts.mute, solo: !!ts.solo, armed: !!ts.armed,
+        mute: !!ts.mute, solo: !!ts.solo, armed: !!ts.armed, evolve: !!ts.evolve,
         gain_db: ts.gain_db, pan: ts.pan,
         // voice intentionally not restored — it's fixed per track index by preset
         srcType: ts.srcType, freq: ts.freq, blen: ts.blen,
