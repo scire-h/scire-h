@@ -3805,6 +3805,9 @@ function snapshotState(){
       master_db: G.master_db, lpfHz: G.lpfHz, revMix: G.revMix, revTail: G.revTail,
       curTrack: G.curTrack,
       seq: { steps: G.seq.steps, slices: G.seq.slices, rate: G.seq.rate },
+      rec: { masterArmed: !!G.rec.masterArmed },
+      recFormat: G.recFormat,
+      requestedSampleRate: G.requestedSampleRate,
     },
     tracks: tracks.map(t=>({
       name: t.name,
@@ -3812,6 +3815,7 @@ function snapshotState(){
       gain_db: t.gain_db, pan: t.pan,
       voice: t.voice || "granular",
       srcType: t.srcType, freq: t.freq, blen: t.blen,
+      bufferTag: t.bufferTag,             // remembers filename for file-source tracks (audio data not embedded)
       size: t.size, rate: t.rate, perbeat: t.perbeat, rJit: t.rJit,
       pos: t.pos, pJit: t.pJit, scan: t.scan, freeze: t.freeze,
       pit: t.pit, pitJit: t.pitJit, revProb: t.revProb, spread: t.spread,
@@ -3821,6 +3825,7 @@ function snapshotState(){
         mode: t.seq.mode || "hit",
         active: t.seq.active.slice(),
         sliceMap: t.seq.sliceMap.slice(),
+        euclidIdx: t.seq.euclidIdx || 0,
       },
       fx: t.fx.map(s => ({ type: s.type, params: {...s.params}, bypass: !!s.bypass })),
     })),
@@ -3838,8 +3843,28 @@ function applyState(s){
       G.seq.slices = s.G.seq.slices || 16;
       G.seq.rate   = s.G.seq.rate   || 16;
     }
-    // applyState's local setSlider needs to sync the knob, otherwise
-    // recall leaves the knob visual stale and the next drag jumps.
+    // recording settings — masterArmed, requestedSampleRate, recFormat
+    if(s.G.rec && typeof s.G.rec.masterArmed === "boolean"){
+      G.rec.masterArmed = s.G.rec.masterArmed;
+      document.querySelectorAll("#recMasterSeg button").forEach(b=>{
+        b.classList.toggle("on", (b.dataset.armm === "1") === G.rec.masterArmed);
+      });
+    }
+    if(s.G.recFormat){
+      G.recFormat = s.G.recFormat;
+      document.querySelectorAll("#recFmtSeg button").forEach(b=>{
+        b.classList.toggle("on", b.dataset.fmt === G.recFormat);
+      });
+    }
+    if(s.G.requestedSampleRate){
+      G.requestedSampleRate = s.G.requestedSampleRate;
+      document.querySelectorAll("#srRateSeg button").forEach(b=>{
+        b.classList.toggle("on", parseInt(b.dataset.sr) === G.requestedSampleRate);
+      });
+    }
+    updateRecStatusText();
+
+    // sync UI to restored values (knob + slider + val text)
     setSliderUI("bpm", G.bpm, fmtBPM); updateBpmDisplay();
     setSliderUI("master", G.master_db, fmtDB);
     setSliderUI("lpf", G.lpfHz, fmtHz);
@@ -3848,6 +3873,21 @@ function applyState(s){
     document.querySelectorAll("#syncSeg button").forEach(b=>{
       b.classList.toggle("on", (b.dataset.sync==="1") === G.sync);
     });
+
+    // push restored master / reverb / lpf to live audio nodes right away
+    // (otherwise they only take effect on the next ▶ Play schedTick cycle)
+    if(G.ctx){
+      const now = G.ctx.currentTime;
+      G.master.gain.setTargetAtTime(db2lin(G.master_db), now, 0.02);
+      G.lpf.frequency.setTargetAtTime(G.lpfHz, now, 0.02);
+      G.dry.gain.setTargetAtTime(1 - G.revMix/100, now, 0.05);
+      G.wet.gain.setTargetAtTime(G.revMix/100, now, 0.05);
+      if(G.conv && G.conv.buffer && Math.abs(G.conv.buffer.duration - G.revTail) > 0.25){
+        buildIR(G.revTail);
+      }
+    }
+    // bpm change might be re-syncing delays
+    updateSyncedDelays();
   }
   if(s.tracks){
     s.tracks.forEach((ts, i)=>{
@@ -3863,12 +3903,17 @@ function applyState(s){
         pit: ts.pit, pitJit: ts.pitJit, revProb: ts.revProb, spread: ts.spread,
         env: ts.env, grainGain: ts.grainGain,
       });
+      // bufferTag is informational for file tracks — actual audio data
+      // can't be embedded in JSON, so the user has to reload the file,
+      // but at least the name they had is preserved.
+      if(ts.bufferTag) t.bufferTag = ts.bufferTag;
       if(ts.seq){
-        t.seq.enabled = !!ts.seq.enabled;
-        t.seq.mode    = ts.seq.mode || "hit";
-        t.seq.active  = (ts.seq.active||[]).slice(0,64);
+        t.seq.enabled    = !!ts.seq.enabled;
+        t.seq.mode       = ts.seq.mode || "hit";
+        t.seq.euclidIdx  = ts.seq.euclidIdx || 0;
+        t.seq.active     = (ts.seq.active||[]).slice(0,64);
         while(t.seq.active.length<64) t.seq.active.push(false);
-        t.seq.sliceMap = (ts.seq.sliceMap||[]).slice(0,64);
+        t.seq.sliceMap   = (ts.seq.sliceMap||[]).slice(0,64);
         while(t.seq.sliceMap.length<64) t.seq.sliceMap.push(0);
       }
       if(ts.fx){
