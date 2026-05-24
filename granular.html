@@ -1112,6 +1112,7 @@
           <button id="seqFill">Fill T</button>
           <button id="seqClear">Clear T</button>
           <button id="seqClearAll">Clear All</button>
+          <button id="seqEvolve">Evolve</button>
         </div>
       </div>
       <div class="pattern-grid" id="patternGrid"></div>
@@ -1252,6 +1253,12 @@ const G = {
     steps: 16,
     slices: 16,
     rate: 16,
+  },
+
+  // generative pattern evolution
+  evolve: {
+    enabled: false,
+    lastBar: -1,
   },
 
   // recording
@@ -3000,7 +3007,11 @@ function updateBeat(){
   if(now - G.lastBeat >= spb){
     G.lastBeat += spb;
     G.beat += 1;
-    if(G.beat>4){ G.beat=1; G.bar+=1; }
+    if(G.beat>4){
+      G.beat = 1;
+      G.bar += 1;
+      maybeEvolve();
+    }
     $("beatLabel").textContent = "BEAT "+G.bar+"."+G.beat;
     $("pulse").classList.add("on");
     setTimeout(()=> $("pulse").classList.remove("on"), 80);
@@ -3203,6 +3214,79 @@ $("seqClearAll").addEventListener("click", ()=>{
   }
   buildPatternGrid();
 });
+
+$("seqEvolve").addEventListener("click", ()=>{
+  G.evolve.enabled = !G.evolve.enabled;
+  G.evolve.lastBar = G.bar;     // skip current bar so the user hears one pass first
+  $("seqEvolve").classList.toggle("active", G.evolve.enabled);
+});
+
+// Once per bar, gently mutate every track that has its sequencer enabled.
+// Voice / FX / parameters stay put — only seq.active and seq.sliceMap drift.
+function maybeEvolve(){
+  if(!G.evolve.enabled) return;
+  if(G.bar === G.evolve.lastBar) return;
+  G.evolve.lastBar = G.bar;
+  let mutated = false;
+  for(const t of tracks){
+    if(!t.seq.enabled) continue;
+    mutatePattern(t);
+    mutated = true;
+  }
+  if(mutated) buildPatternGrid();
+}
+
+function mutatePattern(t){
+  const N = G.seq.steps;
+  const moves = ["flip", "shift", "swap"];
+  if(t.seq.mode === "slice") moves.push("reslice");
+  const move = moves[Math.floor(Math.random()*moves.length)];
+
+  switch(move){
+    case "flip": {
+      // toggle 1 cell (70 %) or 2 cells (30 %)
+      const count = Math.random() < 0.7 ? 1 : 2;
+      for(let k=0; k<count; k++){
+        const idx = Math.floor(Math.random()*N);
+        t.seq.active[idx] = !t.seq.active[idx];
+        if(t.seq.active[idx] && t.seq.mode === "slice"){
+          t.seq.sliceMap[idx] = Math.floor(Math.random()*G.seq.slices);
+        }
+      }
+      break;
+    }
+    case "shift": {
+      // rotate the pattern by ±1 step
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const act = t.seq.active.slice(0, N);
+      const slc = t.seq.sliceMap.slice(0, N);
+      for(let i=0; i<N; i++){
+        const j = ((i - dir) % N + N) % N;
+        t.seq.active[i]   = act[j];
+        t.seq.sliceMap[i] = slc[j];
+      }
+      break;
+    }
+    case "swap": {
+      // swap two random cells
+      const i = Math.floor(Math.random()*N);
+      const j = Math.floor(Math.random()*N);
+      [t.seq.active[i],   t.seq.active[j]]   = [t.seq.active[j],   t.seq.active[i]];
+      [t.seq.sliceMap[i], t.seq.sliceMap[j]] = [t.seq.sliceMap[j], t.seq.sliceMap[i]];
+      break;
+    }
+    case "reslice": {
+      // (slice mode only) re-roll one active cell's slice index
+      const onIdx = [];
+      for(let i=0; i<N; i++) if(t.seq.active[i]) onIdx.push(i);
+      if(onIdx.length){
+        const idx = onIdx[Math.floor(Math.random()*onIdx.length)];
+        t.seq.sliceMap[idx] = Math.floor(Math.random()*G.seq.slices);
+      }
+      break;
+    }
+  }
+}
 
 function shuffleSlices(){
   const t = CT();
