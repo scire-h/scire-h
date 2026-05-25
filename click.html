@@ -325,14 +325,31 @@ function ensureSilentBed() {
   silentSrc.connect(actx.destination);
 }
 
+/* tanh soft-clipper at master out -- lets users push the levels up
+   without crackly hard-clipping at the DAC.  Cheap WaveShaper with
+   2x oversampling. */
+function makeSaturator(ctx) {
+  const ws = ctx.createWaveShaper();
+  const n = 1024;
+  const c = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    c[i] = Math.tanh(x * 1.4);
+  }
+  ws.curve = c;
+  ws.oversample = "2x";
+  return ws;
+}
+
 function ensureAudio() {
   if (actx) return;
   actx = new AudioCtx();
   master = actx.createGain();
   master.gain.value = state.volume;
+  const sat = makeSaturator(actx);
   panner = actx.createStereoPanner();
   panner.pan.value = state.pan;
-  master.connect(panner).connect(actx.destination);
+  master.connect(sat).connect(panner).connect(actx.destination);
   noiseBuf = makeNoiseBuffer(actx, 0.5);
   ensureSilentBed();
 }
@@ -445,9 +462,14 @@ function playVoice(when, f, a, d, rel, kind) {
 function playClick(when, kind) {
   const baseOct = (kind === "accent" ? 7 : 6) + state.octave;
   const f = noteFreq(state.key, baseOct);
-  /* square / wood are louder per-unit than sine -- trim them. */
-  const trim = (state.voice === "square") ? 0.45 : (state.voice === "wood") ? 0.7 : 1.0;
-  const a = (kind === "accent" ? 0.85 : 0.55) * trim;
+  /* per-voice level compensation:
+     - WOOD is a high-Q bandpass on noise -> very narrow band -> quiet
+     - SQUARE is hot; trim back so it doesn't dominate
+     - SINE / TRI sit at neutral 1.0 */
+  const trim = (state.voice === "square") ? 0.70
+             : (state.voice === "wood")   ? 2.40
+             : 1.20;
+  const a = (kind === "accent" ? 1.30 : 0.95) * trim;
   playVoice(when, f, a, state.decay, state.release, kind);
 }
 
