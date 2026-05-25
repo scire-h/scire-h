@@ -2,811 +2,481 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=1180" />
-<title>ULT-SOUND DS-4M (Web Clone)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a0a" />
+<title>ULT-SOUND DS-4M</title>
 <style>
   :root {
-    --cyan:    #5dc6c8;
-    --cyan-d:  #3da4a6;
-    --cyan-l:  #82d8da;
-    --yellow:  #c4c248;
-    --yellow-d:#a3a23a;
-    --ink:     #0a0a0a;
-    --line:    #050505;
-    --panel:   #111;
-    --case:    #1e1e1e;
-    --metal-l: #f5f5f5;
-    --metal:   #cfcfcf;
-    --metal-d: #6a6a6a;
-    --pad-blue:#1b3fb5;
-    --pad-blue-d:#0d2a8a;
-    --red:     #d92020;
+    --bg:        #0a0a0a;
+    --panel:    #161616;
+    --panel-2:  #1f1f1f;
+    --border:   #2a2a2a;
+    --text:     #eaeaea;
+    --text-dim: #888;
+    --cyan:     #5dc6c8;
+    --yellow:   #c4c248;
+    --red:      #d92020;
+    --pad:      #1f4ad6;
+    --pad-dark: #0d2a8a;
+    --accent:   #5dc6c8;
   }
-  * { box-sizing: border-box; }
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
   html, body {
     margin: 0; padding: 0;
-    background: #1c1c1c;
-    color: #eaeaea;
-    font-family: "Helvetica Neue", "Arial Narrow", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    font-size: 16px;
+    overscroll-behavior: none;
     -webkit-font-smoothing: antialiased;
-    user-select: none;
   }
-  header {
-    text-align: center;
-    padding: 14px 0 4px;
-    font-size: 13px;
-    letter-spacing: 0.08em;
-    color: #aaa;
-  }
-  header strong { color: #fff; letter-spacing: 0.18em; }
-
-  .stage {
-    display: flex; flex-direction: column; align-items: center;
-    padding: 14px 14px 30px;
-    gap: 18px;
-  }
-  /* Scale down on smaller viewports so the 1100 px panel still fits. */
-  @media (max-width: 1180px) {
-    .stage { transform: scale(0.92); transform-origin: top center; }
-  }
-  @media (max-width: 1050px) {
-    .stage { transform: scale(0.80); }
-  }
-  @media (max-width: 900px) {
-    .stage { transform: scale(0.66); }
-  }
-  @media (max-width: 720px) {
-    .stage { transform: scale(0.50); }
-  }
-  @media (max-width: 560px) {
-    .stage { transform: scale(0.40); }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
-  /* =================  CASE  ================= */
-  .case {
-    width: 1100px;
-    background: linear-gradient(#262626,#1a1a1a);
-    border: 2px solid #050505;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow:
-      0 18px 40px rgba(0,0,0,0.6),
-      inset 0 0 0 2px #2a2a2a,
-      inset 0 0 0 4px #0a0a0a;
-    position: relative;
-  }
-  .case::before, .case::after {
-    /* corner screws */
-    content: "";
-    position: absolute;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #eee, #888 50%, #222);
-    box-shadow: 0 0 0 1px #000;
-  }
-  .case::before { left: 6px; top: 6px; }
-  .case::after  { right: 6px; top: 6px; }
-
-  .panel {
-    background: var(--panel);
-    border: 2px solid #000;
-    padding: 6px;
-    border-radius: 3px;
-    position: relative;
-  }
-  .panel::before, .panel::after {
-    /* bottom corner screws */
-    content: "";
-    position: absolute;
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #ddd, #777 50%, #111);
-    bottom: 4px;
-  }
-  .panel::before { left: 4px; }
-  .panel::after  { right: 4px; }
-  .maker {
-    position: absolute;
-    right: 14px; bottom: 4px;
-    font-size: 8px; letter-spacing: 0.12em;
-    color: #555;
-    font-family: "Arial Narrow", Arial, sans-serif;
-  }
-
-  /* =================  GRID  ================= */
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 100px;
-    grid-template-rows: 1fr 1fr;
-    gap: 3px;
-  }
-  .grid > .master {
-    grid-row: 1 / span 2;
-    grid-column: 3;
-  }
-
-  /* =================  CHANNEL STRIP  ================= */
-  .strip {
-    display: grid;
-    grid-template-columns: 64px 110px 92px 92px 92px;
-    border: 1.5px solid #000;
-    border-radius: 2px;
-    overflow: hidden;
-    background: var(--cyan);
-    height: 280px;
-  }
-  .col {
-    position: relative;
-    padding: 5px 4px 6px;
-    display: flex; flex-direction: column; align-items: center;
-    color: #000;
-    border-right: 1px solid rgba(0,0,0,0.35);
-  }
-  .col:last-child { border-right: none; }
-  .col.vco {
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.06)),
-      var(--cyan);
-  }
-  .col.attack, .col.lfo, .col.output {
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.06)),
-      var(--yellow);
-  }
-  .col.sense  { background: var(--cyan); padding: 4px; }
-
-  .pill {
-    font-size: 9px;
-    letter-spacing: 0.08em;
-    border: 1.2px solid #000;
-    border-radius: 10px;
-    padding: 1px 8px;
-    margin-bottom: 3px;
-    background: rgba(255,255,255,0.18);
-    font-weight: 700;
-    color: #000;
-  }
-  .lbl   { font-size: 8px; letter-spacing: 0.08em; color: #000; line-height: 1.1; text-align: center; }
-  .lbl.s { font-size: 7px; }
-
-  /* =================  SENSE BLOCK  =================
-     One sense column actually holds 2 channels stacked.
-     The .strip's first .col is just a spacer; the real SENSE
-     block is placed via grid as a tall column on the left of
-     each row.
-  ================================================== */
-  .row-wrap {
-    display: grid;
-    grid-template-columns: 64px 1fr 1fr;
-    gap: 3px;
-  }
-  .row-wrap.top    { grid-column: 1 / span 2; }
-  .row-wrap.bottom { grid-column: 1 / span 2; }
-  .sense-col {
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.06)),
-      var(--cyan);
-    border: 1.5px solid #000;
-    border-radius: 2px;
+  /* ------- top-level layout ------- */
+  .app {
     display: flex; flex-direction: column;
-    padding: 4px 4px 6px;
-    color: #000;
-    height: 280px;
+    min-height: 100vh; min-height: 100dvh;
+    max-width: 600px;
+    margin: 0 auto;
   }
-  .sense-col .top-tag {
-    font-size: 7px; letter-spacing: 0.06em;
-    text-align: center;
-    border: 1px solid #000;
-    background: rgba(255,255,255,0.18);
-    padding: 1px 2px;
-    border-radius: 8px;
-    margin-bottom: 4px;
+  .header {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px;
+    background: #050505;
+    border-bottom: 1px solid var(--border);
   }
-  .sense-cell {
-    flex: 1;
-    display: flex; flex-direction: column; align-items: center;
-    border-top: 1px dashed rgba(0,0,0,0.35);
-    padding-top: 4px;
-    gap: 2px;
+  .header .brand {
+    font-size: 14px; letter-spacing: 0.14em; color: var(--cyan); font-weight: 800;
   }
-  .sense-cell:first-of-type { border-top: none; padding-top: 0; }
-  .sense-cell .ch-tag {
-    font-size: 10px; font-weight: 800; align-self: flex-start;
-  }
-  .sense-cell .pull {
-    font-size: 7px; align-self: flex-start; line-height: 1;
-    margin-top: -2px;
-  }
-  .sense-cell .pull .arrow { font-size: 9px; }
-  .sense-cell .multi {
-    font-size: 6.5px; align-self: flex-start;
-    line-height: 1;
-  }
-  .sense-cell .lbl { margin-top: 2px; }
-
-  /* MULTI VCO 2-way pull switch at very top */
-  .multi-switch {
-    display: flex; flex-direction: column; align-items: center;
-    margin-bottom: 4px;
-  }
-  .multi-switch .sw-h {
-    width: 26px; height: 12px;
-    background: #1a1a1a; border: 1px solid #000; border-radius: 6px;
-    position: relative; cursor: pointer;
-  }
-  .multi-switch .sw-h .lev {
-    position: absolute;
-    width: 10px; height: 8px; top: 1px;
-    left: calc(var(--p, 0) * (100% - 12px) + 1px);
-    background: linear-gradient(#bbb,#555); border: 1px solid #000;
-    border-radius: 2px; transition: left 90ms;
-  }
-
-  /* =================  KNOBS  ================= */
-  .knob-wrap {
-    position: relative;
-    width: 64px; height: 64px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .knob-wrap.s { width: 46px; height: 46px; }
-  .knob {
-    width: 42px; height: 42px;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 35% 28%, #fff, #d2d2d2 50%, #7a7a7a 100%);
-    border: 2px solid #000;
-    position: relative;
-    cursor: ns-resize;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.5),
-                inset 0 -2px 4px rgba(0,0,0,0.35);
-  }
-  .knob.s { width: 30px; height: 30px; }
-  .knob::after { /* center dimple */
-    content:""; position: absolute; left:50%; top:50%;
-    width: 12px; height: 12px; border-radius:50%;
-    background: radial-gradient(circle at 35% 30%, #fafafa, #b0b0b0);
-    transform: translate(-50%,-50%);
-    border: 1px solid rgba(0,0,0,0.2);
-  }
-  .knob::before { /* indicator: pivots around knob centre */
-    content: "";
-    position: absolute;
-    left: 50%; top: 3px;
-    width: 3px; height: 10px;
-    background: #111;
-    transform: translateX(-50%) rotate(var(--rot, -135deg));
-    /* knob 42, indicator y3..y13 -> origin at y=21 -> 100%+8px */
-    transform-origin: 50% calc(100% + 8px);
-    border-radius: 2px;
-    z-index: 1;
-  }
-  .knob.s::before {
-    /* knob 30, indicator y2..y10 -> origin at y=15 -> 100%+5px */
-    top: 2px; height: 8px;
-    transform-origin: 50% calc(100% + 5px);
-  }
-
-  /* note-ring SVG for the VCO knob */
-  .note-ring {
-    position: absolute;
-    width: 64px; height: 64px;
-    pointer-events: none;
-    font-size: 5.5px;
-  }
-
-  /* tick row under a knob (MIN MAX etc) */
-  .ticks {
-    width: 60px;
-    display: flex; justify-content: space-between;
-    font-size: 7px; color: #000;
-    margin-top: -2px; margin-bottom: 2px;
-  }
-
-  /* =================  SLIDERS  ================= */
-  .slider-wrap {
-    display: flex; align-items: stretch; justify-content: center;
-    gap: 1px;
-    margin-top: 2px;
-  }
-  .slider-scale {
-    display: flex; flex-direction: column; justify-content: space-between;
-    height: 86px; font-size: 6.5px; color: #000;
-    line-height: 1; padding: 1px 1px;
-    text-align: right;
-  }
-  .slider-scale.left  { text-align: right;  padding-right: 2px; }
-  .slider-scale.right { text-align: left;   padding-left: 2px; }
-  .slider {
-    width: 20px; height: 86px;
-    background:
-      linear-gradient(to bottom, rgba(0,0,0,0.30), rgba(0,0,0,0.10));
-    border: 1px solid rgba(0,0,0,0.55);
-    border-radius: 2px;
-    position: relative;
-    cursor: ns-resize;
-  }
-  .slider::before {
-    content:""; position:absolute;
-    left:50%; top:4px; bottom:4px; width:2px;
-    background: rgba(0,0,0,0.65);
-    transform: translateX(-50%);
-  }
-  .slider .cap {
-    position: absolute; left: -6px; right: -6px;
-    height: 14px;
-    background: linear-gradient(#444,#0e0e0e);
-    border: 1px solid #000; border-radius: 2px;
-    top: calc(var(--pos, 0.5) * (100% - 14px));
-    box-shadow: 0 1px 2px rgba(0,0,0,0.7);
-  }
-  .slider .cap::after {
-    content:""; position:absolute; left:3px; right:3px;
-    top: 50%; height: 1px; background: #888;
-    transform: translateY(-50%);
-  }
-  .scale {
-    height: 86px; position: relative;
-    font-size: 6.5px; color: #000;
-    display: flex; flex-direction: column; justify-content: space-between;
-    padding: 0 2px;
-    text-align: center;
-  }
-
-  /* =================  SWITCHES  ================= */
-  /* vertical mini-switch (1, 2 or 3 positions) */
-  .sw-group {
-    display: flex; align-items: center; gap: 3px;
-    margin: 2px 0 1px;
-  }
-  .sw-group .sw-labels {
-    display: flex; flex-direction: column; justify-content: space-between;
-    height: 30px;
-    font-size: 7px; color: #000; line-height: 1;
-  }
-  .sw-group.tall .sw-labels  { height: 38px; }
-  .sw-group.tall4 .sw-labels { height: 56px; }
-  .vsw {
-    width: 18px; height: 30px;
-    background: #1a1a1a;
-    border: 1px solid #000;
-    border-radius: 2px;
-    position: relative;
-    cursor: pointer;
-  }
-  .vsw .lever {
-    position: absolute;
-    left: 50%; width: 7px; height: 10px;
-    background: linear-gradient(#cfcfcf,#555);
-    border: 1px solid #000;
-    border-radius: 2px;
-    transform: translateX(-50%);
-    top: calc(var(--p, 0) * (100% - 12px) + 1px);
-    transition: top 90ms;
-  }
-  .vsw.tall  { height: 38px; }
-  .vsw.tall  .lever { height: 12px; top: calc(var(--p, 0) * (100% - 14px) + 1px); }
-  .vsw.tall4 { height: 56px; }
-  .vsw.tall4 .lever { height: 10px; top: calc(var(--p, 0) * (100% - 12px) + 1px); }
-  .sw-group .sw-labels div { line-height: 1; }
-  .sw-group.tall4 .sw-labels {
-    font-family: "Arial", sans-serif;
-    font-size: 9px; font-weight: 700;
-  }
-
-  /* horizontal 5-position slide switch (octave) */
-  .slide5 {
-    width: 56px; height: 14px;
-    background: #1a1a1a;
-    border: 1px solid #000;
-    border-radius: 3px;
-    position: relative;
-    cursor: pointer;
-    margin: 2px 0 1px;
-  }
-  .slide5 .lev {
-    position: absolute;
-    top: 1px;
-    width: 10px; height: 10px;
-    background: linear-gradient(#cfcfcf,#555);
-    border: 1px solid #000;
-    border-radius: 2px;
-    left: calc(var(--p, 0.5) * (100% - 12px) + 1px);
-    transition: left 90ms;
-  }
-  .slide5 .gutter {
-    position: absolute;
-    top: 50%; left: 4px; right: 4px;
-    height: 1px;
-    background: rgba(255,255,255,0.15);
-    transform: translateY(-50%);
-  }
-  .slide5-marks {
-    width: 56px;
-    display: flex; justify-content: space-between;
-    font-size: 6.5px; color: #000;
-    padding: 0 1px;
-    margin-top: 0;
-  }
-
-  /* horizontal beat-sense switch */
-  .hsw {
-    width: 28px; height: 14px;
-    background: #1a1a1a; border: 1px solid #000;
-    border-radius: 7px; position: relative; cursor: pointer;
-  }
-  .hsw .lev {
-    position: absolute; top: 1px;
-    width: 11px; height: 10px;
-    background: linear-gradient(#cfcfcf,#555); border: 1px solid #000;
-    border-radius: 4px;
-    left: calc(var(--p, 0) * (100% - 13px) + 1px);
-    transition: left 90ms;
-  }
-
-  /* LED */
-  .led {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #3a0a0a; border: 1px solid #000;
-    box-shadow: inset 0 0 2px rgba(0,0,0,0.6);
-  }
-  .led.on { background: #ff3a3a; box-shadow: 0 0 8px #ff3a3a, inset 0 0 2px rgba(0,0,0,0.4); }
-
-  /* =================  MASTER STRIP  ================= */
-  .master {
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.06)),
-      var(--cyan);
-    border: 1.5px solid #000;
-    border-radius: 2px;
-    display: flex; flex-direction: column;
-    align-items: center;
-    padding: 8px 6px 10px;
-    color: #000;
-    height: 563px;
-    gap: 4px;
-  }
-  .master .brand {
-    font-family: "Arial Narrow", "Helvetica Condensed", Arial, sans-serif;
-    font-weight: 900; font-size: 14px;
-    letter-spacing: 0.04em;
-    transform: scaleY(1.15);
-    color: #000;
-    line-height: 1;
-    padding: 2px 4px;
-  }
-  .master .brand i {
-    font-style: normal;
-    font-size: 11px;
-    vertical-align: top;
-    color: #000;
-  }
-  .master .model {
-    font-size: 16px; font-weight: 900; letter-spacing: 0.04em;
-    transform: scaleY(1.05);
-    margin-top: 2px;
-  }
-  .master .custom {
-    font-size: 8px; letter-spacing: 0.22em;
-    border: 1px solid #000;
-    border-radius: 8px;
-    padding: 1px 5px;
-    background: rgba(255,255,255,0.18);
-    font-weight: 700;
-  }
-
-  .jack {
-    width: 22px; height: 22px;
-    background:
-      radial-gradient(circle at 50% 50%, #000 32%, #5e5e5e 36%, #aaaaaa 60%, #4d4d4d 100%);
-    border-radius: 50%;
-    border: 2px solid #000;
-  }
-  .jack-pill {
-    font-size: 7.5px;
-    letter-spacing: 0.1em;
-    border: 1px solid #000;
-    border-radius: 8px;
-    padding: 1px 6px;
-    background: rgba(255,255,255,0.18);
-  }
-  .mv-slider {
-    width: 22px; height: 130px;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.30), rgba(0,0,0,0.10));
-    border: 1px solid rgba(0,0,0,0.55);
-    border-radius: 2px;
-    position: relative; cursor: ns-resize;
-    margin-top: 2px;
-  }
-  .mv-slider::before {
-    content:""; position:absolute;
-    left:50%; top:4px; bottom:4px; width:2px;
-    background: rgba(0,0,0,0.65);
-    transform: translateX(-50%);
-  }
-  .mv-slider .cap {
-    position: absolute; left: -6px; right: -6px;
-    height: 14px;
-    background: linear-gradient(#444,#0e0e0e);
-    border: 1px solid #000; border-radius: 2px;
-    top: calc(var(--pos, 0.3) * (100% - 14px));
-  }
-  .min-max {
-    width: 30px; display: flex; justify-content: space-between;
-    font-size: 7px;
-  }
-  .power-wrap {
-    border: 1px solid #000; border-radius: 4px;
-    padding: 4px 6px;
-    background: rgba(255,255,255,0.08);
-    display: flex; flex-direction: column; align-items: center;
-    gap: 4px;
-    margin-top: 4px;
-  }
-  .power-led {
+  .header .led {
     width: 8px; height: 8px; border-radius: 50%;
-    background: #c81818; border: 1px solid #000;
-    box-shadow: 0 0 6px #ff2828;
+    background: #3a0a0a; transition: background 90ms, box-shadow 90ms;
   }
-  .power-led.off { background: #3a0a0a; box-shadow: none; }
-  .power-sw {
-    width: 30px; height: 40px;
-    background:
-      linear-gradient(180deg,#222 0%, #050505 50%, #1a1a1a 50%, #2a2a2a 100%);
-    border: 1px solid #000; border-radius: 3px;
-    position: relative; cursor: pointer;
-    box-shadow: inset 0 0 0 1px #2c2c2c;
-    overflow: hidden;
-  }
-  .power-sw::before, .power-sw::after {
-    position: absolute; left: 0; right: 0;
-    text-align: center;
-    color: #e0e0e0;
-    font-size: 10px; font-weight: 700;
-    font-family: "Arial Narrow", Arial, sans-serif;
-    transition: opacity 90ms;
-  }
-  .power-sw::before { content: "I"; top: 2px; }
-  .power-sw::after  { content: "O"; bottom: 2px; }
-  .power-sw.on::before  { color:#fff; text-shadow: 0 0 4px rgba(255,80,80,0.5); }
-  .power-sw.on::after   { color:#666; }
-  .power-sw.off::before { color:#666; }
-  .power-sw.off::after  { color:#fff; }
-  .power-sw .rock {
-    position: absolute;
-    left: 3px; right: 3px;
-    height: 18px;
-    background: linear-gradient(#e0e0e0,#888 60%,#555);
-    border: 1px solid #000;
-    border-radius: 2px;
-    top: var(--top, 3px);
-    transition: top 120ms ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.6);
-  }
+  .header .led.on { background: var(--red); box-shadow: 0 0 8px var(--red); }
 
-  /* =================  DRUM PADS (below) ================= */
+  /* ------- pads ------- */
   .pads {
-    width: 1100px;
+    flex: 0 0 auto;
+    padding: 12px;
+    background: linear-gradient(180deg, #050505, var(--bg));
+  }
+  .pad-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 28px;
-    padding: 6px 24px;
+    gap: 10px;
   }
   .pad {
+    position: relative;
     aspect-ratio: 1 / 1;
     border-radius: 50%;
-    background:
-      radial-gradient(circle at 50% 32%, #6a82e8 0%, #2e4dd6 30%, #11258a 65%, #050f4a 100%);
-    border: 8px solid #cfcfcf;
+    background: radial-gradient(circle at 35% 30%, #5a78ea 0%, var(--pad) 35%, var(--pad-dark) 70%, #050d3f 100%);
+    border: 5px solid #c2c2c2;
     box-shadow:
-      inset 0 -6px 16px rgba(0,0,0,0.55),
-      inset 0 4px 10px rgba(255,255,255,0.10),
-      0 8px 18px rgba(0,0,0,0.5);
-    cursor: pointer;
-    position: relative;
-    transition: transform 80ms ease, box-shadow 80ms ease;
-    display: flex; align-items: center; justify-content: center;
-    flex-direction: column;
+      inset 0 -8px 18px rgba(0,0,0,0.6),
+      inset 0 4px 12px rgba(255,255,255,0.08),
+      0 4px 10px rgba(0,0,0,0.55);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
     color: #fff;
-  }
-  .pad::before {
-    /* dark inner ring */
-    content: "";
-    position: absolute;
-    inset: 14px;
-    border-radius: 50%;
-    border: 2px solid rgba(0,0,0,0.35);
-    pointer-events: none;
-  }
-  .pad svg.ring {
-    position: absolute;
-    inset: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-  }
-  .pad svg.ring text {
-    fill: #ff3030;
-    font-family: "Arial Narrow", Arial, sans-serif;
-    font-weight: 900;
-    font-size: 12px;
-    letter-spacing: 2px;
-  }
-  .pad .felt {
-    width: 48%; height: 48%; border-radius: 50%;
-    background: radial-gradient(circle at 40% 35%, #efd8a2, #b8975a 70%, #8a6e34);
-    border: 1px solid rgba(0,0,0,0.4);
-    box-shadow: inset 0 -3px 8px rgba(0,0,0,0.35);
+    cursor: pointer;
+    transition: transform 60ms cubic-bezier(.2,1,.4,1), box-shadow 60ms;
   }
   .pad .num {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%,-50%);
     font-size: 28px; font-weight: 900;
-    color: rgba(0,0,0,0.65);
-    text-shadow: 0 1px 0 rgba(255,255,255,0.2);
-    z-index: 2;
+    color: rgba(0,0,0,0.7);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.15);
+    line-height: 1;
   }
+  .pad .role {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    margin-top: 2px;
+    color: rgba(0,0,0,0.55);
+  }
+  .pad:active,
   .pad.hit {
-    transform: scale(0.95);
+    transform: scale(0.94);
     box-shadow:
-      inset 0 0 30px rgba(255,80,80,0.55),
-      0 4px 10px rgba(0,0,0,0.5);
+      inset 0 0 24px rgba(255,80,80,0.6),
+      0 1px 3px rgba(0,0,0,0.5);
   }
-  .pad-label {
-    text-align: center;
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    color: #aaa;
-    margin-top: 6px;
-  }
-  .pad-label b { color:#fff; }
 
-  /* =================  UTILITY (demo + scope) ================= */
-  .utility {
-    width: 1100px;
-    display: flex; align-items: center; justify-content: center;
-    gap: 16px;
-    padding: 4px 24px 0;
+  /* ------- tab row (channel selector) ------- */
+  .tabs {
+    flex: 0 0 auto;
+    padding: 0 12px 8px;
   }
-  .demo-btn {
-    background: linear-gradient(#3a3a3a, #1a1a1a);
-    color: #eee;
-    border: 1px solid #000;
-    border-radius: 4px;
-    padding: 7px 16px;
-    font-size: 12px;
-    letter-spacing: 0.12em;
+  .tab-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .tab {
+    padding: 12px 4px;
+    background: var(--panel);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.05em;
     cursor: pointer;
-    font-family: inherit;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.5),
-                inset 0 1px 0 rgba(255,255,255,0.05);
+    text-align: center;
   }
-  .demo-btn:hover { background: linear-gradient(#4a4a4a, #222); }
-  .demo-btn.ghost { color: #aaa; }
-  select.demo-btn { appearance: none; padding-right: 24px; min-width: 150px; }
-  select.demo-btn option { background: #1a1a1a; color: #eee; }
-  #scope {
-    border: 1px solid #000;
-    border-radius: 3px;
-    background: #050a05;
-    box-shadow: inset 0 0 12px rgba(0,255,160,0.08);
+  .tab .role {
+    display: block;
+    font-size: 9px;
+    margin-top: 2px;
+    opacity: 0.7;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+  }
+  .tab.active {
+    background: var(--cyan);
+    color: #000;
+    border-color: var(--cyan);
   }
 
-  /* =================  HELP  ================= */
-  .help {
-    max-width: 1100px; margin: 0 auto 24px;
-    font-size: 12px; color: #aaa; line-height: 1.7;
-    padding: 0 18px;
+  /* ------- params (scrollable) ------- */
+  .params {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 12px 96px;
   }
-  .help kbd {
-    background: #2a2a2a; border: 1px solid #444; border-radius: 3px;
-    padding: 1px 5px; font-family: monospace; color: #eee; font-size: 11px;
+  .section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
   }
-  .help b { color: #eee; }
-  .help h3 { margin: 4px 0 4px; font-size: 13px; color:#eee; letter-spacing:0.04em; }
+  .section h3 {
+    margin: 0 0 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.18em;
+    font-weight: 700;
+  }
+  .section h3 .right {
+    float: right;
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+  }
+
+  /* slider row: label | range | value */
+  .row {
+    display: grid;
+    grid-template-columns: 86px 1fr 74px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .row:last-child { margin-bottom: 0; }
+  .row .lbl { font-size: 13px; color: #ccc; }
+  .row .val {
+    text-align: right;
+    font-size: 13px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .row input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 36px;
+    background: transparent;
+    width: 100%;
+    margin: 0;
+  }
+  .row input[type=range]::-webkit-slider-runnable-track {
+    height: 6px;
+    background: linear-gradient(90deg, var(--cyan) 0%, var(--cyan) var(--p,50%), #2a2a2a var(--p,50%));
+    border-radius: 3px;
+  }
+  .row input[type=range]::-moz-range-track {
+    height: 6px;
+    background: #2a2a2a;
+    border-radius: 3px;
+  }
+  .row input[type=range]::-moz-range-progress {
+    height: 6px;
+    background: var(--cyan);
+    border-radius: 3px;
+  }
+  .row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #000;
+    margin-top: -11px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    cursor: pointer;
+  }
+  .row input[type=range]::-moz-range-thumb {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #000;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    cursor: pointer;
+  }
+
+  /* radio button row (3-way / 3-way) */
+  .seg {
+    display: grid;
+    grid-template-columns: repeat(var(--cols, 3), 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .seg button {
+    padding: 14px 6px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .seg button.on {
+    background: var(--yellow);
+    color: #000;
+    border-color: var(--yellow);
+  }
+  .seg.cyan button.on {
+    background: var(--cyan);
+    color: #000;
+    border-color: var(--cyan);
+  }
+
+  /* toggle button (LFO ON, MULTI VCO) */
+  .toggle {
+    display: inline-block;
+    padding: 12px 18px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    margin-right: 6px;
+  }
+  .toggle.on {
+    background: var(--cyan);
+    color: #000;
+    border-color: var(--cyan);
+  }
+
+  /* stepper for OCTAVE 1..5 */
+  .stepper {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+  .stepper button {
+    padding: 14px 0;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .stepper button.on {
+    background: var(--cyan);
+    color: #000;
+    border-color: var(--cyan);
+  }
+
+  /* footer (sticky bottom) */
+  .footer {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    padding: 8px 12px;
+    background: rgba(5,5,5,0.95);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-top: 1px solid var(--border);
+    z-index: 100;
+  }
+  .footer-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .footer select,
+  .footer button {
+    padding: 12px 14px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .footer select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, #888 50%), linear-gradient(135deg, #888 50%, transparent 50%);
+    background-position: calc(100% - 16px) 50%, calc(100% - 12px) 50%;
+    background-size: 4px 4px;
+    background-repeat: no-repeat;
+    padding-right: 28px;
+  }
+  .footer button.demo { background: var(--cyan); color: #000; border-color: var(--cyan); font-weight: 700; }
+  .footer button.stop { background: var(--panel); }
+
+  /* master volume row */
+  .master-row {
+    display: grid;
+    grid-template-columns: 56px 1fr 50px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .master-row .lbl { font-size: 11px; color: var(--text-dim); letter-spacing: 0.1em; }
+  .master-row .val { text-align: right; font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .master-row input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    height: 28px; width: 100%; background: transparent; margin: 0;
+  }
+  .master-row input[type=range]::-webkit-slider-runnable-track {
+    height: 4px; background: #2a2a2a; border-radius: 2px;
+  }
+  .master-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); border: 2px solid #000;
+    margin-top: -9px;
+  }
+
+  /* simple text "info" caption under sections */
+  .info {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 4px 0 0;
+    line-height: 1.5;
+  }
+
+  /* "unlock audio" splash */
+  .splash {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.93);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 9999;
+    color: #fff; text-align: center;
+    padding: 24px;
+  }
+  .splash h1 {
+    font-size: 28px; letter-spacing: 0.1em;
+    color: var(--cyan);
+    margin: 0 0 12px;
+  }
+  .splash p { font-size: 15px; line-height: 1.6; max-width: 320px; color: #ccc; }
+  .splash button {
+    margin-top: 24px;
+    padding: 16px 32px;
+    background: var(--cyan); color: #000;
+    border: none; border-radius: 10px;
+    font-size: 17px; font-weight: 700; letter-spacing: 0.05em;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
-  <header><strong>ULT&middot;SOUND&nbsp; DS-4M</strong> &nbsp;&middot;&nbsp; CUSTOM &nbsp;&middot;&nbsp; Web Clone</header>
 
-  <div class="stage">
-    <div class="case">
-      <div class="panel">
-        <div class="grid" id="grid"></div>
-        <div class="maker">TOYO GAKKI CO.,LTD.</div>
+<div class="splash" id="splash">
+  <h1>ULT&middot;SOUND DS-4M</h1>
+  <p>分析的アナログドラムシンセ<br/>Mobile UI &mdash; タップで開始</p>
+  <button id="splashBtn">START</button>
+</div>
+
+<div class="app" id="app" hidden>
+  <div class="header">
+    <span class="brand">ULT&middot;SOUND DS-4M</span>
+    <span class="led" id="masterLed"></span>
+  </div>
+
+  <div class="pads">
+    <div class="pad-row" id="pads"></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab-row" id="tabs"></div>
+  </div>
+
+  <div class="params" id="params"></div>
+
+  <div class="footer">
+    <div class="footer-row">
+      <div class="master-row" style="grid-column:1/2;">
+        <span class="lbl">MASTER</span>
+        <input type="range" id="masterVol" min="0" max="1" step="0.001" value="0.55"/>
+        <span class="val" id="masterVolVal">55%</span>
       </div>
-    </div>
-
-    <div class="pads" id="pads"></div>
-
-    <div class="utility">
-      <button id="demo"  class="demo-btn">▶ DEMO PATTERN</button>
-      <button id="stop"  class="demo-btn ghost">■ STOP</button>
-      <button id="reset" class="demo-btn ghost">↻ INIT</button>
-      <select id="preset" class="demo-btn">
-        <option value="">— PRESET —</option>
-        <option value="syndrum">Syndrum Pew</option>
-        <option value="toms">Big Toms</option>
-        <option value="snare">Tight Snare</option>
-        <option value="hat">Closed Hat</option>
-        <option value="cosmic">Cosmic Up-Sweep</option>
+      <select id="preset" aria-label="Preset">
+        <option value="">— Preset —</option>
       </select>
-      <canvas id="scope" width="380" height="60"></canvas>
+      <button class="demo" id="demoBtn">▶ DEMO</button>
     </div>
   </div>
-
-  <div class="help">
-    <h3>使い方</h3>
-    下段の青いドラムパッドをクリック、または <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd>
-    キーでチャンネルをトリガー。
-    ノブ／フェーダーは縦ドラッグ（ダブルクリックで中央値）、スイッチはクリックでトグル（3 ポジションは循環）。
-    OCTAVE スライダーはドラッグかクリック位置でスナップ。
-    最初のクリックでオーディオが起動します。
-    <br><br>
-    <b>VCO TUNING</b>（音名 C…B のノブ）／ <b>BEAT TUNE</b> 0-200cent 上方デチューン ／
-    <b>OCTAVE 1-5</b> オクターブシフト ／
-    <b>ATTACK</b> 1〜350ms 立ち上がり ／ <b>SUSTAIN</b> 30ms〜4.5s 減衰時間 ／
-    <b>ソース 3 択 CYMBAL / PULSE / SIN</b> (クリックで循環) — 排他選択。CYMBAL = 広帯域 LP ノイズ単独 (VCO 停止)、PULSE = bandlimited 矩形波単独、SIN = 純粋サイン波単独 ／
-    <b>LFO LEVEL</b>（ノブ：振幅 20-200cent）／ <b>LFO FREQUENCY</b>（フェーダー：0.8〜23Hz、∿/OFF で有効化）／
-    <b>SWEEP WIDTH 0-6 OCT</b> ピッチエンベロープ幅（<b>UP/OFF/DOWN</b> で方向、RC 時間定数 45ms 固定）／
-    <b>OUTPUT</b> 出力 ／ <b>SENSE LEVEL</b> パッド感度 ／
-    <b>MULTI VCO</b> 隣接 ch を 7cent デチューンで 4 オシレーター・ユニゾン化。
-    <br>
-    内部は VCO+Noise → 共鳴 LPF(VCF) → 飽和付き VCA の正統な減算合成構成。各 VCO に ±3cent のヒット毎ドリフト
-    + 0.15-0.4Hz の連続揺らぎを加え、毎回鳴り方が微妙に違うアナログ的な挙動になります。
-    <br>
-    左下 <b>BEAT SENSE</b> ON でパッドのクリック位置（中央寄り = 強打）が音量に反映。
-    <b>DEMO PATTERN</b> は 112 BPM の 4 ch ドラムビート、
-    <b>PRESET</b> で 5 種類のパッチに一括変更、<b>INIT</b> で工場出荷値に戻ります。
-  </div>
+</div>
 
 <script>
-/* =========================================================
-   ULT-SOUND DS-4M  ―  Web Audio clone (v2: full reproduction)
-   ========================================================= */
+/* ===================================================================
+   ULT-SOUND DS-4M — Mobile UI
+   Same audio engine as the panel-style index-panel.html, but with a
+   touch-first interface: native range sliders, big segmented buttons,
+   a 4-tab channel selector, and a sticky bottom bar with master /
+   preset / demo.
+   =================================================================== */
 
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
-let actx = null, master = null, masterComp = null;
-let analyser = null;
+let actx = null, master = null, masterComp = null, analyser = null;
+
 function ensureAudio() {
   if (actx) return;
   actx = new AudioCtx();
   masterComp = actx.createDynamicsCompressor();
   masterComp.threshold.value = -10;
-  masterComp.knee.value = 18;
-  masterComp.ratio.value = 6;
-  masterComp.attack.value = 0.003;
-  masterComp.release.value = 0.15;
+  masterComp.knee.value      = 18;
+  masterComp.ratio.value     = 6;
+  masterComp.attack.value    = 0.003;
+  masterComp.release.value   = 0.15;
   master = actx.createGain();
   master.gain.value = state.masterVolume;
   analyser = actx.createAnalyser();
   analyser.fftSize = 1024;
   master.connect(masterComp).connect(analyser).connect(actx.destination);
-  startScope();
 }
 
-function startScope() {
-  const cv = document.getElementById("scope");
-  if (!cv || !analyser) return;
-  const ctx = cv.getContext("2d");
-  const data = new Uint8Array(analyser.fftSize);
-  const w = cv.width, h = cv.height;
-  function tick() {
-    requestAnimationFrame(tick);
-    analyser.getByteTimeDomainData(data);
-    ctx.fillStyle = "rgba(5,12,8,0.55)";
-    ctx.fillRect(0,0,w,h);
-    ctx.strokeStyle = "#3df48a";
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    const step = data.length / w;
-    for (let x=0; x<w; x++) {
-      const v = data[Math.floor(x*step)] / 128 - 1;
-      const y = h/2 + v * (h/2 - 4);
-      if (x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-    }
-    ctx.stroke();
-  }
-  tick();
-}
 let noiseBuf = null;
 function getNoiseBuf() {
   if (noiseBuf) return noiseBuf;
@@ -817,81 +487,7 @@ function getNoiseBuf() {
   return noiseBuf;
 }
 
-/* =========================================================
-   STATE
-   ========================================================= */
-function vcoFreq(knob01, octaveStep, beatTune01) {
-  // knob01 = TUNING (C..B around the ring) -> -12..+12 semitones
-  // octaveStep 1..5 -> octave shift centred on 3
-  // beatTune 0..1 -> 0..+200 cents (chorus/beat detune)
-  const semis = (knob01 - 0.5) * 24;
-  const oct = (octaveStep - 3) * 12;
-  const cents = beatTune01 * 200;
-  return 220 * Math.pow(2, (semis + oct + cents / 100) / 12);
-}
-function makeChannel(idx, label) {
-  return {
-    idx, label,
-    senseLevel: 0.75,
-    multiVCO:   false,        // PULL switch (Ch1 pulls Ch4, Ch2 pulls Ch1, etc)
-    vco:        0.5,
-    beatTune:   0.5,
-    octave:     3,
-    attack:     0.0,
-    sustain:    0.45,
-    waveform:   "sin",        // cymbal | pulse | sin   (3-way mutually exclusive, SDS-2002 reference)
-    noiseOn:    false,        // legacy -- ignored by the new voice (CYMBAL mode covers the noise path)
-    lfoRate:    0.3,
-    lfoDepth:   0.5,
-    lfoOn:      false,
-    sweep:      0.65,
-    sweepDir:   "down",       // up | off | down
-    output:     0.8,
-    /* runtime refs */
-    _pad: null, _led: null,
-  };
-}
-const state = {
-  masterVolume: 0.55,
-  power:    true,
-  beatSense: false,
-  channels: [
-    makeChannel(1, "CYMBAL"),
-    makeChannel(2, "CYMBAL"),
-    makeChannel(3, "SNARE"),
-    makeChannel(4, "NOISE"),
-  ],
-};
-/* sensible defaults that match each labeled voice */
-/* Per-channel defaults. Source picks one of three mutually exclusive
-   modes (CYMBAL / PULSE / SIN), matching the SDS-2002 reference. */
-Object.assign(state.channels[0], { vco: 0.85, octave: 4, sweep: 0.55, sweepDir:"down", waveform:"sin",    sustain:0.18, attack:0.0, lfoRate:0.3 });
-Object.assign(state.channels[1], { vco: 0.65, octave: 4, sweep: 0.55, sweepDir:"down", waveform:"sin",    sustain:0.22, attack:0.0, lfoRate:0.3 });
-Object.assign(state.channels[2], { vco: 0.45, octave: 3, sweep: 0.30, sweepDir:"down", waveform:"pulse",  sustain:0.18, attack:0.0, lfoRate:0.3 });
-Object.assign(state.channels[3], { vco: 0.25, octave: 2, sweep: 0.55, sweepDir:"down", waveform:"sin",    sustain:0.32, attack:0.0, lfoRate:0.3 });
-
-/* =========================================================
-   VOICE
-   ========================================================= */
-/* =========================================================
-   VOICE  --  subtractive arch:  VCO + Noise -> VCF -> VCA
-   Adds per-channel analog drift, waveform selection, resonant
-   filter with envelope, and a soft-saturation stage in the VCA.
-   ========================================================= */
-
-/* Persistent random walk per channel for "VCO drift" — analog
-   oscillators wander a few cents over time, no two hits identical. */
-const driftState = {};
-function chDriftCents(chIdx) {
-  let s = driftState[chIdx];
-  if (!s) { s = driftState[chIdx] = { v: 0 }; }
-  s.v += (Math.random() - 0.5) * 0.6;
-  if (s.v >  3) s.v =  3;
-  if (s.v < -3) s.v = -3;
-  return s.v;
-}
-
-/* One-time soft saturation curve for the VCA stage (transistor-like) */
+/* one-time analog-VCA saturation curve */
 let SAT_CURVE = null;
 function getSatCurve() {
   if (SAT_CURVE) return SAT_CURVE;
@@ -904,29 +500,86 @@ function getSatCurve() {
   return SAT_CURVE;
 }
 
+/* per-channel slow drift state */
+const driftState = {};
+function chDriftCents(chIdx) {
+  let s = driftState[chIdx];
+  if (!s) s = driftState[chIdx] = { v: 0 };
+  s.v += (Math.random() - 0.5) * 0.6;
+  if (s.v >  3) s.v =  3;
+  if (s.v < -3) s.v = -3;
+  return s.v;
+}
+
+/* TUNING knob picks a note within an octave (C..B); OCTAVE selector
+   picks which octave. C3 = MIDI 48 = 130.81 Hz. BEAT TUNE is
+   0..5 OCT additive upward detune (matches the panel's silk-screen). */
+function vcoFreq(tuning01, octave, beatTune01) {
+  const noteSemis = Math.max(0, Math.min(12, tuning01 * 12));
+  const octShift  = (octave - 3) * 12;
+  const beatSemis = beatTune01 * 60;
+  const midi = 48 + noteSemis + octShift + beatSemis;
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+/* =========================================================
+   STATE
+   ========================================================= */
+function makeChannel(idx, label) {
+  return {
+    idx, label,
+    senseLevel: 0.75,
+    multiVCO:   false,
+    vco:        0.5,    // TUNING 0..1 -> C..B within one octave
+    beatTune:   0.0,    // 0..1 -> 0..5 OCT (panel scale)
+    octave:     3,      // 1..5
+    attack:     0.0,    // 0..1 -> 1 ms .. 350 ms
+    sustain:    0.4,    // 0..1 -> 30 ms .. 3.5 s
+    waveform:   "sin",  // "cymbal" | "pulse" | "sin"
+    lfoRate:    0.3,
+    lfoDepth:   0.5,
+    lfoOn:      false,
+    sweep:      0.5,    // 0..1 -> 0..6 OCT WIDTH
+    sweepDir:   "down", // "up" | "off" | "down"
+    output:     0.8,
+  };
+}
+
+const state = {
+  masterVolume: 0.55,
+  power:        true,
+  beatSense:    false,
+  activeCh:     0,
+  channels: [
+    makeChannel(0, "CYMBAL"),
+    makeChannel(1, "CYMBAL"),
+    makeChannel(2, "SNARE"),
+    makeChannel(3, "NOISE"),
+  ],
+};
+/* sensible default voicings, one per channel */
+Object.assign(state.channels[0], { vco:0.85, octave:4, sweep:0.55, sweepDir:"down", waveform:"sin",    sustain:0.18 });
+Object.assign(state.channels[1], { vco:0.65, octave:4, sweep:0.55, sweepDir:"down", waveform:"sin",    sustain:0.22 });
+Object.assign(state.channels[2], { vco:0.45, octave:3, sweep:0.30, sweepDir:"down", waveform:"pulse",  sustain:0.18 });
+Object.assign(state.channels[3], { vco:0.25, octave:2, sweep:0.55, sweepDir:"down", waveform:"sin",    sustain:0.32 });
+
+/* =========================================================
+   VOICE (same engine as the panel-style HTML; not the UI)
+   ========================================================= */
 function playChannel(ch, velocity=1) {
   if (!state.power) return;
   ensureAudio();
   if (actx.state === "suspended") actx.resume();
 
-  const now      = actx.currentTime;
-  const base     = vcoFreq(ch.vco, ch.octave, ch.beatTune);
-  const atk      = 0.001 + Math.pow(ch.attack, 1.4) * 0.35;
-  /* Reference measurement (default SUSTAIN, broadband LPF on hit
-     amplitude envelope) gave tau = 659 ms. Map slider 0..1 to that
-     range so 0.5 sits near the reference default. */
-  const decay    = 0.03 + Math.pow(ch.sustain, 1.4) * 3.5;       // 30 ms .. 3.5 s
-  const sense    = state.beatSense ? Math.max(0.15, velocity) : 1.0;
-  const peak     = (0.05 + ch.output * 0.95) *
-                   (0.25 + ch.senseLevel * 0.75) * sense;
-  /* RC time constant for the pitch-sweep envelope is fixed on the
-     real device -- only the start frequency moves with WIDTH. */
-  const sweepT   = 0.045;
+  const now    = actx.currentTime;
+  const base   = vcoFreq(ch.vco, ch.octave, ch.beatTune);
+  const atk    = 0.001 + Math.pow(ch.attack, 1.4) * 0.35;
+  const decay  = 0.03  + Math.pow(ch.sustain, 1.4) * 3.5;
+  const sense  = state.beatSense ? Math.max(0.15, velocity) : 1.0;
+  const peak   = (0.05 + ch.output * 0.95) *
+                 (0.25 + ch.senseLevel * 0.75) * sense;
+  const sweepT = 0.045;
 
-  /* ---------- VCA (with soft saturation) ----------
-     Linear attack, exponential decay -- analog RC behaviour. The
-     DS-4 has no VCF on the VCO path, so the VCA is the only stage
-     between the source and the master bus. */
   const vca = actx.createGain();
   vca.gain.setValueAtTime(0, now);
   vca.gain.linearRampToValueAtTime(peak, now + atk);
@@ -937,10 +590,6 @@ function playChannel(ch, velocity=1) {
   sat.oversample = "2x";
   vca.connect(sat).connect(master);
 
-  /* ---------- attack click (only when CYMBAL or PULSE, very short
-                 ATTACK) -- provides the stick transient. SIN at low
-                 ATTACK doesn't get a click since the reference
-                 measurement showed a clean rise-to-peak in 1 ms. */
   if (ch.waveform !== "sin" && ch.attack < 0.05) {
     const click = actx.createBufferSource();
     const len   = Math.floor(actx.sampleRate * 0.012);
@@ -960,10 +609,6 @@ function playChannel(ch, velocity=1) {
     click.stop(now + 0.02);
   }
 
-  /* ---------- source selection (3-way mutually exclusive) ----------
-     SDS-2002 reference architecture: at any one time the channel
-     emits exactly one of CYMBAL noise, PULSE square, or SIN. There
-     is no VCO + noise mixing on a single channel. */
   if (ch.waveform === "cymbal") {
     spawnNoise(base, sweepT, ch, vca, decay);
   } else {
@@ -981,26 +626,20 @@ function playChannel(ch, velocity=1) {
 function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
   const now = actx.currentTime;
   const osc = actx.createOscillator();
-  /* SDS-2002 reference: PULSE measures as a bandlimited 50% duty
-     square (H1 + odd harmonics 1/n), SIN as a mathematically pure
-     sine (H2 floor at -118 dB). Web Audio's native types match. */
   osc.type = (ch.waveform === "pulse") ? "square" : "sine";
 
-  /* per-channel analog drift -- new value every hit */
   const hitDrift  = (Math.random() - 0.5) * 6;
   const slowDrift = chDriftCents(ch.idx);
   osc.detune.value = hitDrift + slowDrift + (extraCents || 0);
 
-  /* pitch sweep (0-6 oct WIDTH, fixed RC time) */
   const w = 6 * ch.sweep;
   let f0 = base, f1 = base;
-  if (ch.sweepDir === "down")     { f0 = base * Math.pow(2, w); f1 = base; }
-  else if (ch.sweepDir === "up")  { f0 = base; f1 = base * Math.pow(2, w); }
+  if (ch.sweepDir === "down")    { f0 = base * Math.pow(2, w); f1 = base; }
+  else if (ch.sweepDir === "up") { f0 = base; f1 = base * Math.pow(2, w); }
   osc.frequency.setValueAtTime(Math.max(20, f0), now);
   osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), now + sweepTime);
 
-  /* slow continuous drift -- analog VCO instability wobble */
-  const wobble = actx.createOscillator();
+  const wobble  = actx.createOscillator();
   wobble.type = "sine";
   wobble.frequency.value = 0.15 + Math.random() * 0.25;
   const wobbleG = actx.createGain();
@@ -1020,8 +659,6 @@ function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
     lfo.stop(now + decay + 0.2);
   }
 
-  /* Source-relative level: square is much louder than sine of the
-     same peak amplitude due to its harmonic content. */
   const lev = actx.createGain();
   lev.gain.value = (ch.waveform === "pulse") ? 0.45 : 1.0;
   osc.connect(lev).connect(dest);
@@ -1029,18 +666,10 @@ function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
   osc.stop(now + decay + 0.1);
 }
 
-/* Per-channel noise voicings driven by direct spectral measurements
-   of the SDS-2002 reference (LFO off, SWEEP off):
-
-   CYMBAL: 1/3-octave averaged spectrum is FLAT within +/-1 dB from
-           100 Hz to ~10 kHz, then drops 22 dB by 14 kHz. It's
-           broadband white noise lowpassed near 10 kHz -- not a
-           narrow band-pass.
-   SNARE/NOISE: not yet measured; sensible defaults for now. */
 const NOISE_VOICE = {
-  CYMBAL: { mode: "lowpass",  cutLo:  9000, cutHi: 11000, q: 0.7, bodyGain: 0.0,  bodyFollow: 0.0 },
-  SNARE:  { mode: "bandpass", cutLo:   600, cutHi:  4200, q: 2.4, bodyGain: 0.35, bodyFollow: 1.0 },
-  NOISE:  { mode: "lowpass",  cutLo:  3000, cutHi: 10000, q: 0.7, bodyGain: 0.12, bodyFollow: 0.0 },
+  CYMBAL: { mode:"lowpass",  cutLo: 9000, cutHi:11000, q:0.7, bodyGain:0.0,  bodyFollow:0.0 },
+  SNARE:  { mode:"bandpass", cutLo:  600, cutHi: 4200, q:2.4, bodyGain:0.35, bodyFollow:1.0 },
+  NOISE:  { mode:"lowpass",  cutLo: 3000, cutHi:10000, q:0.7, bodyGain:0.12, bodyFollow:0.0 },
 };
 
 function spawnNoise(base, sweepTime, ch, dest, decay) {
@@ -1051,18 +680,10 @@ function spawnNoise(base, sweepTime, ch, dest, decay) {
   n.buffer = getNoiseBuf();
   n.loop = true;
 
-  /* Single filter: LP for broadband CYMBAL/NOISE characters, BP for
-     SNARE's body resonance. The peaking-emphasis BP we had before
-     was unjustified by the reference spectrum and added noticeable
-     resonance that didn't belong. */
   const filter = actx.createBiquadFilter();
   filter.type = v.mode;
   filter.Q.value = v.q;
 
-  /* TUNING positions the filter centre between cutLo and cutHi.
-     For broadband CYMBAL this only nudges the LP corner; for SNARE
-     it moves the BP body resonance. SWEEP WIDTH expands the range
-     on either side. */
   const w = Math.pow(2, 6 * ch.sweep * 0.5);
   const center = v.cutLo + (v.cutHi - v.cutLo) * ch.vco;
   let c0 = center, c1 = center;
@@ -1071,8 +692,6 @@ function spawnNoise(base, sweepTime, ch, dest, decay) {
   filter.frequency.setValueAtTime(Math.max(60, c0), now);
   filter.frequency.exponentialRampToValueAtTime(Math.max(60, c1), now + sweepTime);
 
-  /* Body tone underneath (only for SNARE / NOISE; CYMBAL is pure
-     noise per the reference). */
   if (v.bodyGain > 0.0) {
     const osc = actx.createOscillator();
     osc.type = "triangle";
@@ -1091,520 +710,319 @@ function spawnNoise(base, sweepTime, ch, dest, decay) {
 }
 
 /* =========================================================
-   UI HELPERS
+   VALUE FORMATTERS (for the val readouts beside each slider)
+   ========================================================= */
+const NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const fmt = {
+  note      : v => NOTES[Math.min(11, Math.max(0, Math.round(v * 11)))],
+  beatTune  : v => (v * 5).toFixed(2) + " OCT",
+  attack    : v => {
+    const ms = 1 + Math.pow(v, 1.4) * 349;
+    return ms < 10 ? ms.toFixed(2) + " ms" : (ms < 100 ? ms.toFixed(1) + " ms" : Math.round(ms) + " ms");
+  },
+  sustain   : v => {
+    const sec = 0.03 + Math.pow(v, 1.4) * 3.47;
+    return sec < 1 ? Math.round(sec * 1000) + " ms" : sec.toFixed(2) + " s";
+  },
+  lfoRate   : v => {
+    const hz = 0.8 * Math.pow(22 / 0.8, v);
+    return hz < 1 ? hz.toFixed(2) + " Hz" : (hz < 10 ? hz.toFixed(1) + " Hz" : Math.round(hz) + " Hz");
+  },
+  sweep     : v => (v * 6).toFixed(1) + " OCT",
+  pct       : v => Math.round(v * 100) + "%",
+};
+
+/* =========================================================
+   UI BUILDING
    ========================================================= */
 function el(tag, cls, html) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
-  if (html !== undefined) e.innerHTML = html;
+  if (html != null) e.innerHTML = html;
   return e;
 }
 
-/* ---- Knob ---- */
-function knob(ch, key, { small=false, range=[0,1], renderRot } = {}) {
-  const wrap = el("div", "knob-wrap" + (small ? " s" : ""));
-  const k = el("div", "knob" + (small ? " s" : ""));
-  wrap.appendChild(k);
-  const [min, max] = range;
-  const render = () => {
-    const v = (ch[key] - min) / (max - min);
-    k.style.setProperty("--rot", (-135 + v * 270) + "deg");
-    if (renderRot) renderRot(v);
-  };
-  render();
-  k._render = render;
-  installDragValue(k, () => ch[key], v => { ch[key] = v; render(); }, min, max, 140);
-  k.addEventListener("dblclick", () => { ch[key] = (min+max)/2; render(); });
-  return wrap;
-}
-
-/* shared pointer-event drag helper for knobs and sliders */
-function installDragValue(target, get, set, min, max, sensitivity) {
-  let drag = false, sy = 0, sv = 0, ptr = null;
-  target.addEventListener("pointerdown", e => {
-    drag = true; sy = e.clientY; sv = get(); ptr = e.pointerId;
-    target.setPointerCapture && target.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  });
-  target.addEventListener("pointermove", e => {
-    if (!drag || e.pointerId !== ptr) return;
-    const dy = sy - e.clientY;
-    const r = max - min;
-    set(Math.max(min, Math.min(max, sv + (dy/sensitivity) * r)));
-  });
-  const end = () => { drag = false; };
-  target.addEventListener("pointerup", end);
-  target.addEventListener("pointercancel", end);
-}
-
-/* ---- VCO knob with note ring (C..B) ---- */
-function vcoKnob(ch) {
-  const wrap = knob(ch, "vco");
-  // overlay an SVG ring of note names
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "note-ring");
-  svg.setAttribute("viewBox", "0 0 64 64");
-  const notes = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-  notes.forEach((n, i) => {
-    const a = (-135 + (i/11) * 270) * Math.PI / 180;
-    const cx = 32 + Math.cos(a - Math.PI/2) * 27;
-    const cy = 32 + Math.sin(a - Math.PI/2) * 27;
-    const t = document.createElementNS(NS, "text");
-    t.setAttribute("x", cx);
-    t.setAttribute("y", cy + 2);
-    t.setAttribute("text-anchor", "middle");
-    t.setAttribute("fill", "#000");
-    t.setAttribute("font-size", "5.8");
-    t.setAttribute("font-weight", "700");
-    t.textContent = n;
-    svg.appendChild(t);
-    /* tick */
-    const x1 = 32 + Math.cos(a - Math.PI/2) * 22;
-    const y1 = 32 + Math.sin(a - Math.PI/2) * 22;
-    const x2 = 32 + Math.cos(a - Math.PI/2) * 24;
-    const y2 = 32 + Math.sin(a - Math.PI/2) * 24;
-    const ln = document.createElementNS(NS, "line");
-    ln.setAttribute("x1", x1); ln.setAttribute("y1", y1);
-    ln.setAttribute("x2", x2); ln.setAttribute("y2", y2);
-    ln.setAttribute("stroke", "#000"); ln.setAttribute("stroke-width", "0.6");
-    svg.appendChild(ln);
-  });
-  wrap.appendChild(svg);
-  return wrap;
-}
-
-/* ---- Slider ---- */
-function slider(ch, key, opts = {}) {
-  const s = el("div", "slider");
-  const cap = el("div", "cap");
-  s.appendChild(cap);
-  const min = opts.min ?? 0, max = opts.max ?? 1;
-  const render = () => {
-    const v = (ch[key] - min) / (max - min);
-    s.style.setProperty("--pos", (1 - v).toFixed(3));
-  };
-  render();
-  s._render = render;
-  installDragValue(s, () => ch[key], v => { ch[key] = v; render(); }, min, max, 100);
-  s.addEventListener("dblclick", () => { ch[key] = (min+max)/2; render(); });
-  return s;
-}
-
-function sliderGroup(ch, key, opts={}) {
-  /* slider with optional numeric scales on one or both sides */
-  const wrap = el("div", "slider-wrap");
-  if (opts.scale) {
-    const s = el("div", "slider-scale left");
-    const vals = opts.scale; // array of strings (top to bottom)
-    vals.forEach(v => s.appendChild(el("div", null, v)));
-    wrap.appendChild(s);
-  }
-  wrap.appendChild(slider(ch, key, opts));
-  if (opts.scaleR) {
-    const s = el("div", "slider-scale right");
-    opts.scaleR.forEach(v => s.appendChild(el("div", null, v)));
-    wrap.appendChild(s);
-  }
-  return wrap;
-}
-
-/* ---- Vertical 2/3-way switch ---- */
-function vSwitch(ch, key, values, opts={}) {
-  const klass = "vsw" + (opts.tall4 ? " tall4" : opts.tall ? " tall" : "");
-  const sw = el("div", klass);
-  const lev = el("div", "lever");
-  sw.appendChild(lev);
-  const render = () => {
-    const i = Math.max(0, values.indexOf(ch[key]));
-    sw.style.setProperty("--p", (i/(values.length-1)).toFixed(3));
-  };
-  render();
-  sw._render = render;
-  /* click cycles forward, right-click cycles back */
-  sw.addEventListener("click", () => {
-    const i = Math.max(0, values.indexOf(ch[key]));
-    ch[key] = values[(i+1) % values.length];
-    render();
-  });
-  sw.addEventListener("contextmenu", e => {
-    e.preventDefault();
-    const i = Math.max(0, values.indexOf(ch[key]));
-    ch[key] = values[(i - 1 + values.length) % values.length];
-    render();
-  });
-  if (opts.labels) {
-    const g = el("div", "sw-group" + (opts.tall4 ? " tall4" : opts.tall ? " tall" : ""));
-    const lbl = el("div", "sw-labels");
-    opts.labels.forEach(s => lbl.appendChild(el("div", null, s)));
-    g.appendChild(sw);
-    g.appendChild(lbl);
-    g._render = render;
-    return g;
-  }
-  return sw;
-}
-
-/* ---- Horizontal beat-sense / multi-vco switch ---- */
-function hSwitch(getter, setter) {
-  const sw = el("div", "hsw");
-  const lev = el("div", "lev");
-  sw.appendChild(lev);
-  const render = () => sw.style.setProperty("--p", getter() ? 1 : 0);
-  render();
-  sw._render = render;
-  sw.addEventListener("click", () => { setter(!getter()); render(); });
-  return sw;
-}
-
-/* ---- Octave 1..5 horizontal slide switch ---- */
-function octaveSelector(ch) {
-  const wrap = document.createElement("div");
-  wrap.style.display = "flex";
-  wrap.style.flexDirection = "column";
-  wrap.style.alignItems = "center";
-
-  const marks = el("div", "slide5-marks");
-  for (let i=1; i<=5; i++) marks.appendChild(el("span", null, String(i)));
-  wrap.appendChild(marks);
-
-  const sw = el("div", "slide5");
-  sw.appendChild(el("div", "gutter"));
-  const lev = el("div", "lev");
-  sw.appendChild(lev);
-  const render = () => sw.style.setProperty("--p", ((ch.octave - 1) / 4).toFixed(3));
-  render();
-  sw._render = render;
-  ch._octRender = render;
-  sw.addEventListener("click", (e) => {
-    const rect = sw.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    ch.octave = 1 + Math.round(x * 4);
-    render();
-  });
-  installDragHorizontal(sw, () => (ch.octave - 1)/4, p => {
-    ch.octave = 1 + Math.round(p * 4);
-    render();
-  });
-  wrap.appendChild(sw);
-  return wrap;
-}
-
-function installDragHorizontal(target, get, set) {
-  let drag = false, sx = 0, sv = 0, ptr = null;
-  target.addEventListener("pointerdown", e => {
-    drag = true; sx = e.clientX; sv = get(); ptr = e.pointerId;
-    target.setPointerCapture && target.setPointerCapture(e.pointerId);
-  });
-  target.addEventListener("pointermove", e => {
-    if (!drag || e.pointerId !== ptr) return;
-    const rect = target.getBoundingClientRect();
-    set(Math.max(0, Math.min(1, sv + (e.clientX - sx)/rect.width)));
-  });
-  const end = () => drag = false;
-  target.addEventListener("pointerup", end);
-  target.addEventListener("pointercancel", end);
-}
-
-/* =========================================================
-   COLUMNS
-   ========================================================= */
-const SCALE_6 = ["6","5","4","3","2","1","0"];
-const SCALE_5 = ["5","4","3","2","1","0"];
-
-function colVCO(ch) {
-  const c = el("div", "col vco");
-  c.appendChild(el("div", "pill", "VCO"));
-  c.appendChild(vcoKnob(ch));
-  c.appendChild(el("div", "lbl s", "TUNING"));
-  c.appendChild(sliderGroup(ch, "beatTune", { scaleR: SCALE_5 }));
-  c.appendChild(el("div", "lbl s", "BEAT&nbsp;TUNE"));
-  c.appendChild(octaveSelector(ch));
-  c.appendChild(el("div", "lbl s", "OCTAVE"));
-  return c;
-}
-function colAttack(ch) {
-  const c = el("div", "col attack");
-  c.appendChild(el("div", "pill", "ATTACK"));
-  c.appendChild(knob(ch, "attack"));
-  c.appendChild(el("div", "ticks", "<span>MIN</span><span>MAX</span>"));
-  c.appendChild(el("div", "pill", "SUSTAIN"));
-  c.appendChild(sliderGroup(ch, "sustain", { scale: ["LONG","","","","","","SHORT"] }));
-  c.appendChild(el("div", "pill", ch.label || ""));
-  /* 3-way source selector matching the SDS-2002 reference panel:
-     CYMBAL = broadband-LP noise (no VCO), PULSE = bandlimited
-     50% square (no noise), SIN = pure sine. Mutually exclusive,
-     replacing the previous 4-way sine/tri/sqr/saw + noise toggle. */
-  c.appendChild(vSwitch(ch, "waveform",
-    ["cymbal","pulse","sin"],
-    { tall: true, labels: ["CYMBAL","PULSE","SIN"] }));
-  return c;
-}
-function colLFO(ch) {
-  const c = el("div", "col lfo");
-  c.appendChild(el("div", "pill", "LFO"));
-  c.appendChild(knob(ch, "lfoDepth"));
-  c.appendChild(el("div", "ticks", "<span>MIN</span><span>MAX</span>"));
-  c.appendChild(el("div", "lbl s", "LEVEL"));
-  c.appendChild(sliderGroup(ch, "lfoRate", { scale: ["HIGH","","","","","","LOW"] }));
-  c.appendChild(el("div", "lbl s", "FREQUENCY"));
-  c.appendChild(vSwitch(ch, "lfoOn", [true, false], { labels: ["∿","OFF"] }));
-  return c;
-}
-function colOutput(ch) {
-  const c = el("div", "col output");
-  c.appendChild(el("div", "pill", "OUTPUT"));
-  c.appendChild(knob(ch, "output"));
-  c.appendChild(el("div", "ticks", "<span>MIN</span><span>MAX</span>"));
-  c.appendChild(el("div", "pill", "SWEEP"));
-  c.appendChild(sliderGroup(ch, "sweep", { scaleR: SCALE_6 }));
-  c.appendChild(el("div", "lbl s", "WIDTH&nbsp;&nbsp;OCT"));
-  c.appendChild(vSwitch(ch, "sweepDir", ["up","off","down"], { tall:true, labels:["UP","OFF","DOWN"] }));
-  return c;
-}
-
-/* =========================================================
-   SENSE COLUMN (one column = 2 channels stacked)
-   ========================================================= */
-function senseColumn(chTop, chBot, showHeader=false, showBeatSense=false) {
-  const col = el("div", "sense-col");
-  if (showHeader) {
-    col.appendChild(el("div", "top-tag", "SENSE<br>PULL<br>MULTI VCO"));
-  } else {
-    col.appendChild(el("div", "top-tag", "&nbsp;"));
-  }
-
-  [chTop, chBot].forEach((ch, i) => {
-    const cell = el("div", "sense-cell");
-
-    const head = el("div");
-    head.style.display = "flex";
-    head.style.flexDirection = "column";
-    head.style.alignSelf = "stretch";
-    head.appendChild(el("div", "ch-tag", "Ch" + ch.idx));
-    const neighbor = "Ch" + (((ch.idx - 2 + 4) % 4) + 1);
-    head.appendChild(el("div", "pull", `<span class="arrow">PULL&blacktriangleright;</span>${neighbor}`));
-    cell.appendChild(head);
-
-    // MULTI VCO horizontal switch (pull simulated)
-    const m = hSwitch(() => ch.multiVCO, v => ch.multiVCO = v);
-    cell.appendChild(m);
-    /* (NOISE on/off toggle removed -- with the new 3-way source
-       selector, CYMBAL waveform IS the noise path, so a separate
-       toggle is redundant. The noiseOn state is kept in ch for
-       legacy preset compatibility but the voice ignores it.) */
-    cell.appendChild(el("div", "lbl s", "SENSE LEVEL"));
-    cell.appendChild(knob(ch, "senseLevel", { small: true }));
-    cell.appendChild(el("div", "ticks", "<span>LOW</span><span>HIGH</span>"));
-    const led = el("div", "led");
-    cell.appendChild(led);
-    ch._led = led;
-
-    col.appendChild(cell);
-  });
-
-  if (showBeatSense) {
-    const bs = el("div");
-    bs.style.display = "flex";
-    bs.style.flexDirection = "column";
-    bs.style.alignItems = "center";
-    bs.style.marginTop = "4px";
-    bs.style.borderTop = "1px dashed rgba(0,0,0,0.35)";
-    bs.style.paddingTop = "2px";
-    bs.appendChild(el("div", "lbl s", "BEAT SENSE"));
-    bs.appendChild(hSwitch(() => state.beatSense, v => state.beatSense = v));
-    bs.appendChild(el("div", "ticks", "<span>OFF</span><span>ON</span>"));
-    col.appendChild(bs);
-  }
-  return col;
-}
-
-/* =========================================================
-   STRIP
-   ========================================================= */
-function strip(ch) {
-  const s = el("div", "strip");
-  s.appendChild(colVCO(ch));
-  s.appendChild(colAttack(ch));
-  s.appendChild(colLFO(ch));
-  s.appendChild(colOutput(ch));
-  s.style.gridTemplateColumns = "1.18fr 1fr 1fr 1fr";
-  ch._strip = s;
-  return s;
-}
-
-/* =========================================================
-   MASTER
-   ========================================================= */
-function masterCol() {
-  const m = el("div", "master");
-  const brand = el("div", "brand");
-  brand.innerHTML = `ULT<i>'</i>SOUND`;
-  m.appendChild(brand);
-  m.appendChild(el("div", "model", "DS-4M"));
-  m.appendChild(el("div", "custom", "CUSTOM"));
-
-  /* phones jack with caption */
-  const jackWrap = el("div");
-  jackWrap.style.display = "flex";
-  jackWrap.style.flexDirection = "column";
-  jackWrap.style.alignItems = "center";
-  jackWrap.style.gap = "3px";
-  jackWrap.style.marginTop = "6px";
-  jackWrap.appendChild(el("div", "jack"));
-  jackWrap.appendChild(el("div", "jack-pill", "PHONES"));
-  m.appendChild(jackWrap);
-
-  m.appendChild(el("div", "jack-pill", "MASTER VOLUME"));
-
-  const mv = el("div", "mv-slider");
-  const cap = el("div", "cap");
-  mv.appendChild(cap);
-  const renderMV = () => {
-    mv.style.setProperty("--pos", (1 - state.masterVolume).toFixed(3));
-    if (master) master.gain.value = state.masterVolume * (state.power ? 1 : 0);
-  };
-  renderMV();
-  installDragValue(mv, () => state.masterVolume,
-    v => { state.masterVolume = v; renderMV(); }, 0, 1, 160);
-  m.appendChild(mv);
-  m.appendChild(el("div", "min-max", "<span>MIN</span><span>MAX</span>"));
-
-  /* POWER block */
-  const pw = el("div", "power-wrap");
-  pw.appendChild(el("div", "lbl s", "POWER"));
-  const led = el("div", "power-led");
-  pw.appendChild(led);
-  const psw = el("div", "power-sw on");
-  const rock = el("div", "rock");
-  psw.appendChild(rock);
-  psw.style.setProperty("--top", "3px");
-  psw.addEventListener("click", () => {
-    state.power = !state.power;
-    psw.style.setProperty("--top", state.power ? "3px" : "19px");
-    psw.classList.toggle("on", state.power);
-    psw.classList.toggle("off", !state.power);
-    led.classList.toggle("off", !state.power);
-    renderMV();
-  });
-  pw.appendChild(psw);
-  pw.appendChild(el("div", "lbl s", "ON&nbsp;&nbsp;OFF"));
-  m.appendChild(pw);
-  return m;
-}
-
-/* =========================================================
-   BUILD
-   ========================================================= */
-const grid = document.getElementById("grid");
-const c = state.channels;
-
-/* top row */
-const topRow = el("div", "row-wrap top");
-topRow.appendChild(senseColumn(c[0], c[1], /*header*/true, /*beatSense*/false));
-topRow.appendChild(strip(c[0]));
-topRow.appendChild(strip(c[1]));
-topRow.style.gridRow = "1";
-topRow.style.gridColumn = "1 / span 2";
-grid.appendChild(topRow);
-
-/* bottom row */
-const botRow = el("div", "row-wrap bottom");
-botRow.appendChild(senseColumn(c[2], c[3], /*header*/false, /*beatSense*/true));
-botRow.appendChild(strip(c[2]));
-botRow.appendChild(strip(c[3]));
-botRow.style.gridRow = "2";
-botRow.style.gridColumn = "1 / span 2";
-grid.appendChild(botRow);
-
-/* master column (right) */
-const master_ = masterCol();
-master_.style.gridRow = "1 / span 2";
-master_.style.gridColumn = "3";
-grid.appendChild(master_);
-
-/* =========================================================
-   PADS
-   ========================================================= */
-const padsEl = document.getElementById("pads");
-const PAD_LABELS = ["Ch1 · CYMBAL", "Ch2 · CYMBAL", "Ch3 · SNARE", "Ch4 · NOISE"];
-function makeRingSvg() {
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "ring");
-  svg.setAttribute("viewBox", "0 0 100 100");
-  const defs = document.createElementNS(NS, "defs");
-  const path = document.createElementNS(NS, "path");
-  /* a circle going clockwise from top */
-  path.setAttribute("id", "ring-path-" + Math.random().toString(36).slice(2,8));
-  path.setAttribute("d", "M 50 12 A 38 38 0 1 1 49.999 12");
-  path.setAttribute("fill", "none");
-  defs.appendChild(path);
-  svg.appendChild(defs);
-  const t = document.createElementNS(NS, "text");
-  const tp = document.createElementNS(NS, "textPath");
-  tp.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", "#" + path.getAttribute("id"));
-  tp.setAttribute("href", "#" + path.getAttribute("id"));
-  tp.setAttribute("startOffset", "0%");
-  tp.textContent = "ULT-SOUND · ULT-SOUND ·";
-  t.appendChild(tp);
-  svg.appendChild(t);
-  return svg;
-}
-c.forEach((ch, i) => {
-  const wrap = el("div");
-  const pad = el("div", "pad");
-  pad.appendChild(makeRingSvg());
-  pad.appendChild(el("div", "felt"));
-  pad.appendChild(el("div", "num", String(i+1)));
-  const triggerFromPad = (e) => {
-    /* compute velocity from how close the click is to center */
-    let v = 0.85;
-    if (e && e.target) {
-      const rect = pad.getBoundingClientRect();
-      const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
-      const dx = (e.clientX - cx) / (rect.width/2);
-      const dy = (e.clientY - cy) / (rect.height/2);
+/* ----- pads ----- */
+function buildPads() {
+  const wrap = document.getElementById("pads");
+  wrap.innerHTML = "";
+  state.channels.forEach((ch, i) => {
+    const p = el("div", "pad");
+    p.innerHTML = `<span class="num">${i+1}</span><span class="role">${ch.label}</span>`;
+    ch._pad = p;
+    p.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      ensureAudio();
+      if (actx && actx.state === "suspended") actx.resume();
+      /* velocity from distance-to-center */
+      const r = p.getBoundingClientRect();
+      const dx = (e.clientX - (r.left + r.width/2)) / (r.width/2);
+      const dy = (e.clientY - (r.top + r.height/2)) / (r.height/2);
       const d = Math.min(1, Math.hypot(dx, dy));
-      v = 0.4 + (1 - d) * 0.6;
-    }
-    playChannel(ch, v);
-    pad.classList.add("hit"); ch._led.classList.add("on");
-    setTimeout(() => { pad.classList.remove("hit"); ch._led.classList.remove("on"); }, 110);
+      const vel = 0.4 + (1 - d) * 0.6;
+      playChannel(ch, vel);
+      flashPad(ch);
+    });
+    wrap.appendChild(p);
+  });
+}
+function flashPad(ch) {
+  if (!ch._pad) return;
+  ch._pad.classList.add("hit");
+  document.getElementById("masterLed").classList.add("on");
+  setTimeout(() => {
+    ch._pad.classList.remove("hit");
+    document.getElementById("masterLed").classList.remove("on");
+  }, 100);
+}
+
+/* ----- tabs ----- */
+function buildTabs() {
+  const wrap = document.getElementById("tabs");
+  wrap.innerHTML = "";
+  state.channels.forEach((ch, i) => {
+    const t = el("button", "tab" + (i === state.activeCh ? " active" : ""));
+    t.innerHTML = `Ch${i+1}<span class="role">${ch.label}</span>`;
+    t.addEventListener("click", () => {
+      state.activeCh = i;
+      buildTabs();
+      buildParams();
+    });
+    wrap.appendChild(t);
+  });
+}
+
+/* ----- params for the active channel ----- */
+function rangeRow(label, getVal, setVal, formatter) {
+  const row = el("div", "row");
+  const l = el("span", "lbl", label);
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = "0"; input.max = "1"; input.step = "0.001";
+  input.value = getVal();
+  const val = el("span", "val", formatter(getVal()));
+  const updateTrack = () => {
+    const v = parseFloat(input.value);
+    input.style.setProperty("--p", (v * 100).toFixed(1) + "%");
+    val.textContent = formatter(v);
   };
-  pad.addEventListener("pointerdown", triggerFromPad);
-  wrap.appendChild(pad);
-  const lbl = el("div", "pad-label", `<b>${i+1}</b> &nbsp;${PAD_LABELS[i].split("· ")[1]}`);
-  wrap.appendChild(lbl);
-  padsEl.appendChild(wrap);
-  ch._pad = pad;
-});
+  updateTrack();
+  input.addEventListener("input", () => {
+    setVal(parseFloat(input.value));
+    updateTrack();
+  });
+  row.appendChild(l);
+  row.appendChild(input);
+  row.appendChild(val);
+  return row;
+}
+
+function segRow(values, labels, getVal, setVal, klass="") {
+  const seg = el("div", "seg " + klass);
+  seg.style.setProperty("--cols", values.length);
+  values.forEach((v, i) => {
+    const b = el("button", getVal() === v ? "on" : "", labels[i]);
+    b.addEventListener("click", () => {
+      setVal(v);
+      seg.querySelectorAll("button").forEach((bb, j) => bb.classList.toggle("on", values[j] === v));
+    });
+    seg.appendChild(b);
+  });
+  return seg;
+}
+
+function toggleButton(label, getVal, setVal) {
+  const b = el("button", "toggle" + (getVal() ? " on" : ""), label);
+  b.addEventListener("click", () => {
+    setVal(!getVal());
+    b.classList.toggle("on", getVal());
+  });
+  return b;
+}
+
+function buildParams() {
+  const wrap = document.getElementById("params");
+  wrap.innerHTML = "";
+  const ch = state.channels[state.activeCh];
+
+  /* --- SOURCE --- */
+  const srcSec = el("div", "section");
+  srcSec.appendChild(el("h3", null, `SOURCE <span class="right">${ch.label} channel</span>`));
+  srcSec.appendChild(segRow(
+    ["cymbal","pulse","sin"], ["CYMBAL","PULSE","SIN"],
+    () => ch.waveform, v => { ch.waveform = v; }
+  ));
+  const srcHint = (
+    ch.waveform === "cymbal" ? "広帯域ノイズ単独 (VCO 停止、10kHz LP)" :
+    ch.waveform === "pulse"  ? "矩形波単独 (50% duty, 帯域制限)" :
+                                "純粋サイン波単独"
+  );
+  srcSec.appendChild(el("div", "info", srcHint));
+  wrap.appendChild(srcSec);
+
+  /* --- PITCH --- */
+  const pitch = el("div", "section");
+  pitch.appendChild(el("h3", null, "PITCH"));
+  pitch.appendChild(rangeRow("Note",      () => ch.vco,      v => { ch.vco      = v; }, fmt.note));
+  pitch.appendChild(rangeRow("Beat Tune", () => ch.beatTune, v => { ch.beatTune = v; }, fmt.beatTune));
+  /* octave stepper */
+  const octRow = el("div", "row");
+  octRow.style.gridTemplateColumns = "86px 1fr 74px";
+  octRow.appendChild(el("span", "lbl", "Octave"));
+  const stepper = el("div", "stepper");
+  stepper.style.gridColumn = "2/4";
+  for (let o = 1; o <= 5; ++o) {
+    const b = el("button", ch.octave === o ? "on" : "", String(o));
+    b.addEventListener("click", () => {
+      ch.octave = o;
+      stepper.querySelectorAll("button").forEach((bb, i) => bb.classList.toggle("on", i+1 === o));
+    });
+    stepper.appendChild(b);
+  }
+  octRow.appendChild(stepper);
+  pitch.appendChild(octRow);
+  wrap.appendChild(pitch);
+
+  /* --- ENVELOPE --- */
+  const env = el("div", "section");
+  env.appendChild(el("h3", null, "ENVELOPE"));
+  env.appendChild(rangeRow("Attack",  () => ch.attack,  v => { ch.attack  = v; }, fmt.attack));
+  env.appendChild(rangeRow("Sustain", () => ch.sustain, v => { ch.sustain = v; }, fmt.sustain));
+  wrap.appendChild(env);
+
+  /* --- SWEEP --- */
+  const sw = el("div", "section");
+  sw.appendChild(el("h3", null, "SWEEP"));
+  sw.appendChild(rangeRow("Width", () => ch.sweep, v => { ch.sweep = v; }, fmt.sweep));
+  const dirSeg = segRow(
+    ["up","off","down"], ["UP","OFF","DOWN"],
+    () => ch.sweepDir, v => { ch.sweepDir = v; },
+    "cyan"
+  );
+  sw.appendChild(dirSeg);
+  wrap.appendChild(sw);
+
+  /* --- LFO --- */
+  const lfo = el("div", "section");
+  lfo.appendChild(el("h3", null, `LFO`));
+  lfo.appendChild(rangeRow("Rate",  () => ch.lfoRate,  v => { ch.lfoRate  = v; }, fmt.lfoRate));
+  lfo.appendChild(rangeRow("Depth", () => ch.lfoDepth, v => { ch.lfoDepth = v; }, fmt.pct));
+  const lfoRow = el("div");
+  lfoRow.style.marginTop = "6px";
+  lfoRow.appendChild(toggleButton("LFO ON", () => ch.lfoOn, v => { ch.lfoOn = v; }));
+  lfo.appendChild(lfoRow);
+  wrap.appendChild(lfo);
+
+  /* --- OUTPUT --- */
+  const out = el("div", "section");
+  out.appendChild(el("h3", null, "OUTPUT"));
+  out.appendChild(rangeRow("Volume", () => ch.output,     v => { ch.output     = v; }, fmt.pct));
+  out.appendChild(rangeRow("Sense",  () => ch.senseLevel, v => { ch.senseLevel = v; }, fmt.pct));
+  const optRow = el("div");
+  optRow.style.marginTop = "6px";
+  optRow.appendChild(toggleButton("MULTI VCO", () => ch.multiVCO,    v => { ch.multiVCO    = v; }));
+  optRow.appendChild(toggleButton("BEAT SENSE", () => state.beatSense, v => { state.beatSense = v; }));
+  out.appendChild(optRow);
+  wrap.appendChild(out);
+}
+
+/* ----- master volume + preset + demo (footer) ----- */
+function bindFooter() {
+  const mv = document.getElementById("masterVol");
+  const mvVal = document.getElementById("masterVolVal");
+  mv.value = state.masterVolume;
+  mvVal.textContent = Math.round(state.masterVolume * 100) + "%";
+  mv.addEventListener("input", () => {
+    state.masterVolume = parseFloat(mv.value);
+    mvVal.textContent = Math.round(state.masterVolume * 100) + "%";
+    if (master) master.gain.value = state.masterVolume;
+  });
+
+  const sel = document.getElementById("preset");
+  Object.keys(PRESETS).forEach(k => {
+    const o = document.createElement("option");
+    o.value = k; o.textContent = PRESETS[k]._name;
+    sel.appendChild(o);
+  });
+  sel.addEventListener("change", () => {
+    const p = PRESETS[sel.value];
+    if (!p) return;
+    p._apply();
+    buildTabs(); buildParams();
+    sel.value = "";
+  });
+
+  document.getElementById("demoBtn").addEventListener("click", () => {
+    if (demoTimer) stopDemo(); else startDemo();
+    document.getElementById("demoBtn").textContent = demoTimer ? "■ STOP" : "▶ DEMO";
+  });
+}
 
 /* =========================================================
-   KEYBOARD
+   PRESETS  -- each has a _name, _apply(): rewrites all 4 channels.
    ========================================================= */
-window.addEventListener("keydown", e => {
-  if (e.repeat) return;
-  const i = "1234".indexOf(e.key);
-  if (i >= 0) {
-    const ch = state.channels[i];
-    playChannel(ch, 0.95);
-    ch._pad.classList.add("hit");
-    ch._led.classList.add("on");
-    setTimeout(() => {
-      ch._pad.classList.remove("hit");
-      ch._led.classList.remove("on");
-    }, 110);
-  }
-});
-
-/* autoplay unlock */
-function unlock() {
-  ensureAudio();
-  if (actx && actx.state === "suspended") actx.resume();
-}
-window.addEventListener("pointerdown", unlock, { once: true });
-window.addEventListener("keydown",     unlock, { once: true });
+function setCh(i, patch) { Object.assign(state.channels[i], patch); }
+const PRESETS = {
+  init: {
+    _name: "Init",
+    _apply() {
+      for (let i = 0; i < 4; ++i)
+        setCh(i, { vco:0.5, beatTune:0.0, octave:3, attack:0.0, sustain:0.3,
+                   waveform:"sin", lfoRate:0.3, lfoDepth:0.5, lfoOn:false,
+                   sweep:0.0, sweepDir:"off", output:0.8, senseLevel:0.7, multiVCO:false });
+    },
+  },
+  syndrum: {
+    _name: "Syndrum Classic",
+    _apply() {
+      setCh(0, { vco:0.85, octave:4, attack:0, sustain:0.18, sweep:0.55, sweepDir:"down", waveform:"sin", output:0.78, lfoOn:false, multiVCO:false });
+      setCh(1, { vco:0.65, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sin", output:0.80, lfoOn:false, multiVCO:false });
+      setCh(2, { vco:0.45, octave:3, attack:0, sustain:0.28, sweep:0.55, sweepDir:"down", waveform:"sin", output:0.85, lfoOn:false, multiVCO:false });
+      setCh(3, { vco:0.25, octave:2, attack:0, sustain:0.32, sweep:0.55, sweepDir:"down", waveform:"sin", output:0.92, lfoOn:false, multiVCO:false });
+    },
+  },
+  electro: {
+    _name: "Electro Kit",
+    _apply() {
+      setCh(0, { vco:0.5, octave:3, attack:0, sustain:0.08, sweep:0.0,  sweepDir:"off",  waveform:"cymbal", output:0.55, lfoOn:false, multiVCO:false });
+      setCh(1, { vco:0.5, octave:3, attack:0, sustain:0.28, sweep:0.0,  sweepDir:"off",  waveform:"cymbal", output:0.55, lfoOn:false, multiVCO:false });
+      setCh(2, { vco:0.55,octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"pulse",  output:0.75, lfoOn:false, multiVCO:false });
+      setCh(3, { vco:0.25,octave:2, attack:0, sustain:0.30, sweep:0.55, sweepDir:"down", waveform:"sin",    output:0.92, lfoOn:false, multiVCO:false });
+    },
+  },
+  cymbalWash: {
+    _name: "Cymbal Wash",
+    _apply() {
+      setCh(0, { vco:0.5, octave:3, attack:0, sustain:0.15, sweep:0.0, sweepDir:"off", waveform:"cymbal", output:0.65, lfoOn:false, multiVCO:false });
+      setCh(1, { vco:0.5, octave:3, attack:0, sustain:0.30, sweep:0.0, sweepDir:"off", waveform:"cymbal", output:0.65, lfoOn:false, multiVCO:false });
+      setCh(2, { vco:0.5, octave:3, attack:0, sustain:0.50, sweep:0.0, sweepDir:"off", waveform:"cymbal", output:0.65, lfoOn:false, multiVCO:false });
+      setCh(3, { vco:0.5, octave:3, attack:0, sustain:0.85, sweep:0.0, sweepDir:"off", waveform:"cymbal", output:0.65, lfoOn:false, multiVCO:false });
+    },
+  },
+  cosmic: {
+    _name: "Cosmic Up-Sweep",
+    _apply() {
+      for (let i = 0; i < 4; ++i)
+        setCh(i, { vco:0.3+i*0.07, octave:2+(i>>1), attack:0, sustain:0.55+i*0.05, sweep:0.75+i*0.05,
+                   sweepDir:"up", waveform:"sin", output:0.80,
+                   lfoOn:true, lfoRate:0.50-i*0.05, lfoDepth:0.55+i*0.05, multiVCO:false });
+    },
+  },
+  drone: {
+    _name: "Drone Pad",
+    _apply() {
+      for (let i = 0; i < 4; ++i)
+        setCh(i, { vco:0.5+i*0.04, octave:3+(i&1), attack:0.40, sustain:0.95, sweep:0.0, sweepDir:"off",
+                   waveform:"sin", output:0.55, lfoOn:true, lfoRate:0.20+i*0.05, lfoDepth:0.55, multiVCO:false });
+      state.masterVolume = 0.45;
+      const mv = document.getElementById("masterVol");
+      if (mv) mv.value = 0.45;
+      const mvVal = document.getElementById("masterVolVal");
+      if (mvVal) mvVal.textContent = "45%";
+      if (master) master.gain.value = 0.45;
+    },
+  },
+};
 
 /* =========================================================
    DEMO PATTERN
@@ -1612,35 +1030,21 @@ window.addEventListener("keydown",     unlock, { once: true });
 let demoTimer = null;
 function startDemo() {
   ensureAudio();
-  if (actx.state === "suspended") actx.resume();
-  stopDemo();
-  /* Demo kit: showcase all three sources. CYMBAL for the hat-like
-     parts, PULSE for the snare crack, SIN for the kick. */
-  const PATCHES = [
-    /* Ch1 closed hat */ { vco:0.50, octave:3, attack:0, sustain:0.08, sweep:0.0,  sweepDir:"off",  waveform:"cymbal", output:0.55 },
-    /* Ch2 open hat   */ { vco:0.50, octave:3, attack:0, sustain:0.28, sweep:0.0,  sweepDir:"off",  waveform:"cymbal", output:0.55 },
-    /* Ch3 snare      */ { vco:0.55, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"pulse",  output:0.75 },
-    /* Ch4 kick       */ { vco:0.25, octave:2, attack:0, sustain:0.30, sweep:0.55, sweepDir:"down", waveform:"sin",    output:0.92 },
-  ];
-  state.channels.forEach((ch,i) => applyPreset(ch, PATCHES[i]));
-
-  /* 16-step pattern */
+  if (actx && actx.state === "suspended") actx.resume();
+  PRESETS.electro._apply();
+  buildTabs(); buildParams();
   const pat = [
-    /* HAT  */ [1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0],
-    /* OPEN */ [0,0,0,0,0,0,0,0, 0,0,0,0,0,0,1,0],
-    /* SNR  */ [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,1],
-    /* KICK */ [1,0,0,0,0,0,0,0, 1,0,0,1,0,0,0,0],
+    /* CYM closed */ [1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0],
+    /* CYM open   */ [0,0,0,0,0,0,0,0, 0,0,0,0,0,0,1,0],
+    /* SNARE      */ [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,1],
+    /* KICK       */ [1,0,0,0,0,0,0,0, 1,0,0,1,0,0,0,0],
   ];
   const bpm = 112;
-  const stepMs = 60000 / bpm / 4; // 16th notes
+  const stepMs = 60000 / bpm / 4;
   let step = 0;
   const tick = () => {
-    for (let i=0;i<4;i++) {
-      if (pat[i][step]) {
-        playChannel(state.channels[i], 0.9);
-        flashPad(state.channels[i]);
-      }
-    }
+    for (let i = 0; i < 4; ++i)
+      if (pat[i][step]) { playChannel(state.channels[i], 0.9); flashPad(state.channels[i]); }
     step = (step + 1) % 16;
   };
   tick();
@@ -1649,62 +1053,37 @@ function startDemo() {
 function stopDemo() {
   if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
 }
-function flashPad(ch) {
-  if (!ch._pad) return;
-  ch._pad.classList.add("hit");
-  ch._led.classList.add("on");
-  setTimeout(() => {
-    ch._pad.classList.remove("hit");
-    ch._led.classList.remove("on");
-  }, 100);
-}
-document.getElementById("demo").addEventListener("click", startDemo);
-document.getElementById("stop").addEventListener("click", stopDemo);
 
 /* =========================================================
-   PRESETS
+   KEYBOARD (desktop convenience) -- 1..4 trigger channels
    ========================================================= */
-function applyPreset(ch, p) {
-  Object.assign(ch, p);
-  refreshChannel(ch);
-}
-function refreshChannel(ch) {
-  /* find all controls bound to this channel and re-render */
-  if (ch._strip) {
-    ch._strip.querySelectorAll(".knob,.slider,.vsw,.slide5,.hsw")
-      .forEach(n => n._render && n._render());
+window.addEventListener("keydown", e => {
+  if (e.repeat) return;
+  const i = "1234".indexOf(e.key);
+  if (i >= 0) {
+    const ch = state.channels[i];
+    playChannel(ch, 0.95);
+    flashPad(ch);
   }
-  /* octave needs re-render of slide5 lever */
-  if (ch._octRender) ch._octRender();
-}
-const PRESETS = {
-  syndrum: { vco:0.55, octave:3, attack:0, sustain:0.40, sweep:0.85, sweepDir:"down",
-             waveform:"sin",    lfoOn:false, lfoRate:0.3, lfoDepth:0.4, output:0.85 },
-  toms:    { vco:0.40, octave:2, attack:0, sustain:0.65, sweep:0.55, sweepDir:"down",
-             waveform:"sin",    lfoOn:false, output:0.85 },
-  snare:   { vco:0.55, octave:3, attack:0, sustain:0.20, sweep:0.30, sweepDir:"down",
-             waveform:"pulse",  lfoOn:false, output:0.75 },
-  hat:     { vco:0.50, octave:3, attack:0, sustain:0.08, sweep:0.0,  sweepDir:"off",
-             waveform:"cymbal", lfoOn:false, output:0.60 },
-  cosmic:  { vco:0.35, octave:2, attack:0, sustain:0.70, sweep:0.95, sweepDir:"up",
-             waveform:"sin",    lfoOn:true,  lfoRate:0.45, lfoDepth:0.6, output:0.85 },
-};
-document.getElementById("preset").addEventListener("change", e => {
-  const p = PRESETS[e.target.value];
-  if (!p) return;
-  state.channels.forEach(ch => applyPreset(ch, p));
-  e.target.value = "";
 });
 
-document.getElementById("reset").addEventListener("click", () => {
-  state.channels.forEach((ch,i) => {
-    const def = makeChannel(ch.idx, ch.label);
-    /* keep references */
-    def._pad = ch._pad; def._led = ch._led; def._strip = ch._strip; def._octRender = ch._octRender;
-    Object.keys(def).forEach(k => { if (!k.startsWith("_")) ch[k] = def[k]; });
-    refreshChannel(ch);
-  });
+/* =========================================================
+   SPLASH -- iOS / Android both need a user gesture to start audio
+   ========================================================= */
+document.getElementById("splashBtn").addEventListener("click", () => {
+  ensureAudio();
+  if (actx.state === "suspended") actx.resume();
+  document.getElementById("splash").remove();
+  const app = document.getElementById("app");
+  app.hidden = false;
+  buildPads(); buildTabs(); buildParams(); bindFooter();
 });
+
+/* desktop fallback: clicking anywhere also unlocks */
+window.addEventListener("pointerdown", () => {
+  ensureAudio();
+  if (actx && actx.state === "suspended") actx.resume();
+}, { once: true });
 </script>
 </body>
 </html>
