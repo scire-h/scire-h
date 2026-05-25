@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Click — scire-h</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --panel: #1a1a1a;
+    --ink: #eee;
+    --dim: #777;
+    --line: #2a2a2a;
+    --accent: #6fc;
+    --hot: #f64;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap {
+    width: 100%; max-width: 460px;
+    padding: 32px 22px;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 11px; letter-spacing: 0.45em;
+    color: var(--dim); text-align: center;
+  }
+  .bpm {
+    display: flex; align-items: baseline; justify-content: center; gap: 10px;
+    user-select: none;
+  }
+  .bpm .val {
+    font-size: 108px; font-weight: 600;
+    line-height: 1; letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .bpm .unit { font-size: 13px; letter-spacing: 0.3em; color: var(--dim); }
+  .nudge { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .nudge button {
+    background: #1c1c1c; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 9px 13px; font: inherit; font-size: 12px;
+    letter-spacing: 0.1em; cursor: pointer; min-width: 52px;
+  }
+  .nudge button:hover  { background: #262626; }
+  .nudge button:active { background: #303030; }
+  .nudge .tap { letter-spacing: 0.2em; }
+  input[type=range] {
+    width: 100%; accent-color: var(--accent);
+  }
+  .beats {
+    display: flex; gap: 12px; justify-content: center;
+    height: 20px; align-items: center;
+  }
+  .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #222; transition: background 60ms linear, transform 60ms linear;
+  }
+  .dot.on             { background: var(--accent); transform: scale(1.25); }
+  .dot.accent.on      { background: var(--hot);    transform: scale(1.35); }
+  .play {
+    width: 100%;
+    padding: 20px;
+    font: inherit; font-size: 15px; letter-spacing: 0.25em;
+    background: linear-gradient(#2a2a2a, #161616);
+    color: var(--ink);
+    border: 1px solid #2e2e2e; border-radius: 8px;
+    cursor: pointer;
+  }
+  .play:hover { background: linear-gradient(#333, #1c1c1c); }
+  .play.on    { background: linear-gradient(#1f4a3c, #103025); color: var(--accent); border-color: #1f5a48; }
+  .row {
+    display: flex; gap: 14px; align-items: center; justify-content: space-between;
+    flex-wrap: wrap;
+    font-size: 10px; letter-spacing: 0.25em; color: var(--dim);
+  }
+  .row .group { display: inline-flex; gap: 6px; align-items: center; }
+  .row select {
+    background: #1a1a1a; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 10px; font: inherit; font-size: 12px;
+    letter-spacing: 0.1em; cursor: pointer;
+  }
+  /* knob grid -- 4 columns of small SVG dials */
+  .knobs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px 8px;
+    justify-items: center;
+  }
+  .knob {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    user-select: none; cursor: ns-resize; touch-action: none;
+  }
+  .knob svg { width: 54px; height: 54px; display: block; }
+  .knob .cap {
+    font-size: 9px; letter-spacing: 0.18em; color: var(--dim);
+    font-variant-numeric: tabular-nums; text-align: center;
+    line-height: 1.4;
+  }
+  .knob .cap b {
+    display: block;
+    color: var(--ink); font-weight: 500; letter-spacing: 0.05em;
+    font-size: 11px;
+  }
+  .knob.active .ind { stroke: var(--hot); }
+  footer {
+    text-align: center;
+    font-size: 10px; color: #444; letter-spacing: 0.15em;
+    margin-top: 8px;
+  }
+  footer a { color: #666; text-decoration: none; }
+  footer a:hover { color: #aaa; }
+
+  /* ============= narrow-screen tweaks (iPhone/Android) ============= */
+  @media (max-width: 480px) {
+    .wrap   { padding: 18px 12px; gap: 16px; }
+    h1      { font-size: 10px; letter-spacing: 0.4em; }
+    .bpm .val { font-size: 84px; }
+    .nudge button { min-width: 0; padding: 8px 10px; font-size: 12px; }
+    .row    { gap: 10px 12px; flex-wrap: wrap; justify-content: flex-start; }
+    .row .group { font-size: 9px; gap: 4px; }
+    .row select { padding: 6px 8px; font-size: 12px; }
+    .knobs  { gap: 10px 4px; }
+    .knob svg { width: 46px; height: 46px; }
+    .play   { padding: 16px; font-size: 14px; letter-spacing: 0.2em; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>CLICK</h1>
+
+    <div class="bpm">
+      <span class="val" id="bpmVal">120</span>
+      <span class="unit">BPM</span>
+    </div>
+
+    <div class="nudge">
+      <button id="m10">−10</button>
+      <button id="m1">−1</button>
+      <button id="p1">+1</button>
+      <button id="p10">+10</button>
+      <button class="tap" id="tap">TAP</button>
+    </div>
+
+    <input id="bpm" type="range" min="40" max="240" step="1" value="120" aria-label="BPM">
+
+    <div class="beats" id="beats"></div>
+
+    <button class="play" id="play">▶  START</button>
+
+    <div class="row">
+      <span class="group">
+        TIME
+        <select id="sig">
+          <option value="2">2/4</option>
+          <option value="3">3/4</option>
+          <option value="4" selected>4/4</option>
+          <option value="5">5/4</option>
+          <option value="6">6/8</option>
+          <option value="7">7/8</option>
+        </select>
+      </span>
+      <span class="group">
+        DIV
+        <select id="div">
+          <option value="1">1/4</option>
+          <option value="2" selected>1/8</option>
+          <option value="4">1/16</option>
+        </select>
+      </span>
+      <span class="group">
+        KEY
+        <select id="key">
+          <option value="C">C</option>
+          <option value="C#">C#</option>
+          <option value="D">D</option>
+          <option value="D#">D#</option>
+          <option value="E">E</option>
+          <option value="F">F</option>
+          <option value="F#">F#</option>
+          <option value="G">G</option>
+          <option value="G#">G#</option>
+          <option value="A" selected>A</option>
+          <option value="A#">A#</option>
+          <option value="B">B</option>
+        </select>
+      </span>
+      <span class="group">
+        OCT
+        <select id="oct">
+          <option value="-2">−2</option>
+          <option value="-1">−1</option>
+          <option value="0" selected>0</option>
+          <option value="1">+1</option>
+          <option value="2">+2</option>
+        </select>
+      </span>
+      <span class="group">
+        VOICE
+        <select id="voice">
+          <option value="sine" selected>SINE</option>
+          <option value="triangle">TRI</option>
+          <option value="square">SQR</option>
+          <option value="wood">WOOD</option>
+        </select>
+      </span>
+    </div>
+
+    <div class="knobs" id="knobs"></div>
+
+    <footer><a href="index.html">→ DS-4M synth</a></footer>
+  </div>
+
+<script>
+/* =========================================================
+   click.html  --  minimal precision metronome
+   Sample-accurate via oscillator.start(when); Web Worker
+   drives the lookahead so background tabs keep tempo too.
+   ========================================================= */
+
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let actx = null, master = null, panner = null, noiseBuf = null;
+let silentEl = null, silentSrc = null;
+
+/* short white-noise buffer used as the source for the WOOD voice */
+function makeNoiseBuffer(ctx, sec) {
+  const len = Math.floor(ctx.sampleRate * sec);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+
+/* 500 ms of true digital silence as a WAV blob URL.  We feed it
+   into an <audio> element + MediaElementSource so iOS Safari keeps
+   the audio session active when the tab backgrounds or the screen
+   locks -- without that hack, Web Audio gets suspended and the
+   clicks stop the moment the lockscreen comes on. */
+function makeSilentWavURL() {
+  const sr = 22050;
+  const len = Math.floor(sr * 0.5);
+  const dataBytes = len * 2;
+  const buf = new ArrayBuffer(44 + dataBytes);
+  const v = new DataView(buf);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, "RIFF");
+  v.setUint32(4, 36 + dataBytes, true);
+  ws(8, "WAVE"); ws(12, "fmt ");
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true);
+  v.setUint32(28, sr * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  ws(36, "data");
+  v.setUint32(40, dataBytes, true);
+  /* sample data already zero-initialised */
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+
+function ensureSilentBed() {
+  if (silentEl) return;
+  silentEl = document.createElement("audio");
+  silentEl.src = makeSilentWavURL();
+  silentEl.loop = true;
+  silentEl.preload = "auto";
+  silentEl.crossOrigin = "anonymous";
+  silentEl.playsInline = true;
+  silentEl.setAttribute("playsinline", "");
+  silentEl.setAttribute("webkit-playsinline", "");
+  silentEl.muted = false;                // must NOT be muted for the iOS audio-session trick
+  silentEl.volume = 1.0;
+  /* route through the AudioContext so iOS ties their session together */
+  silentSrc = actx.createMediaElementSource(silentEl);
+  silentSrc.connect(actx.destination);
+}
+
+function ensureAudio() {
+  if (actx) return;
+  actx = new AudioCtx();
+  master = actx.createGain();
+  master.gain.value = state.volume;
+  panner = actx.createStereoPanner();
+  panner.pan.value = state.pan;
+  master.connect(panner).connect(actx.destination);
+  noiseBuf = makeNoiseBuffer(actx, 0.5);
+  ensureSilentBed();
+}
+function unlock() { ensureAudio(); if (actx.state === "suspended") actx.resume(); }
+window.addEventListener("pointerdown", unlock, { once: true });
+window.addEventListener("keydown",     unlock, { once: true });
+
+const state = {
+  bpm: 120,
+  beatsPerBar: 4,    // 2..7
+  subdivision: 2,    // ticks per beat: 1 (1/4), 2 (1/8) or 4 (1/16)
+  key: "A",          // tonal pitch for the beat/sub clicks (12 chromatic notes)
+  octave: 0,         // octave shift for both accent + click (-2..+2)
+  pan: 0,            // -1 (full L) .. +1 (full R)
+  volume: 0.55,      // 0..1 -- master gain
+  decay: 0.040,      // seconds -- body of the click  (peak -> 10%)
+  release: 0.060,    // seconds -- tail of the click  (10%  -> 0)
+  cutoff: 20000,     // Hz -- per-voice lowpass resting cutoff (20 kHz ~= bypass)
+  resonance: 0.707,  // BiquadFilter Q -- raise for ringing / synth-y filter
+  envAmount: 0.0,    // 0..1 -- how much the click envelope opens cutoff upward
+  noise: 0.0,        // 0..1 -- noise transient mixed into every accent
+  voice: "sine",     // sine | triangle | square | wood
+};
+
+/* MIDI note number for a (note name, octave) -- C4 = 60, A4 = 69 */
+const NOTE_SEMI = { "C":0, "C#":1, "D":2, "D#":3, "E":4, "F":5, "F#":6, "G":7, "G#":8, "A":9, "A#":10, "B":11 };
+function noteFreq(note, octave) {
+  const midi = (octave + 1) * 12 + NOTE_SEMI[note];
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+/* sample-accurate click voice -- four flavours:
+     sine / triangle / square -- pure oscillator tone
+     wood                     -- noise burst through a tight bandpass
+                                 tuned to the pitch (woodblock feel)
+   Two pitches per voice: accent = octave above base, click = base. */
+/* 3-stage envelope -- attack (1 ms) -> body (peak -> 10% over decay)
+   -> release (10% -> silence over release). */
+function envelope(when, peak, d, rel) {
+  const FLOOR = 0.0008;
+  const knee  = Math.max(FLOOR, peak * 0.1);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(FLOOR, when);
+  g.gain.exponentialRampToValueAtTime(peak,  when + 0.001);
+  g.gain.exponentialRampToValueAtTime(knee,  when + 0.001 + d);
+  g.gain.exponentialRampToValueAtTime(FLOOR, when + 0.001 + d + rel);
+  return g;
+}
+
+/* per-voice resonant LPF with envelope-driven cutoff sweep:
+     - resting cutoff = state.cutoff
+     - envelope opens it upward by state.envAmount, then sweeps it
+       back down to rest over the click body.
+   At envAmount=0 the filter sits at rest (so CUTOFF is a static
+   tone control); at envAmount=1 it opens ~3 octaves above rest. */
+function makeVoiceFilter(when, d, rel) {
+  const flt = actx.createBiquadFilter();
+  flt.type = "lowpass";
+  flt.Q.value = Math.min(20, Math.max(0.0001, state.resonance));
+  const rest = Math.max(40, state.cutoff);
+  const open = Math.min(20000, rest * Math.pow(8, state.envAmount));
+  flt.frequency.setValueAtTime(open, when);
+  flt.frequency.exponentialRampToValueAtTime(rest, when + 0.001 + d + rel);
+  return flt;
+}
+
+function playVoice(when, f, a, d, rel, kind) {
+  const g   = envelope(when, a, d, rel);
+  const flt = makeVoiceFilter(when, d, rel);
+  g.connect(flt).connect(master);
+  const tail = d + rel + 0.05;
+
+  if (state.voice === "wood") {
+    const src = actx.createBufferSource();
+    src.buffer = noiseBuf;
+    const bp = actx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(f * 1.5, when);
+    bp.Q.value = 14;
+    src.connect(bp).connect(g);
+    src.start(when);
+    src.stop(when + tail);
+  } else {
+    const osc = actx.createOscillator();
+    osc.type = state.voice; // sine | triangle | square
+    osc.frequency.setValueAtTime(f, when);
+    osc.connect(g);
+    osc.start(when);
+    osc.stop(when + tail);
+  }
+
+  /* NOISE component -- accent positions only (beats 1 + half-bar).
+     A brief high-passed transient on top of the tonal voice gives
+     the downbeats a "kch / pft" edge while leaving 2-4/6-8 clean. */
+  if (state.noise > 0 && kind === "accent") {
+    const transient = Math.min(d, 0.030);
+    const ng = envelope(when, state.noise * a * 0.8, transient * 0.6, transient * 0.6);
+    ng.connect(master);
+    const ns = actx.createBufferSource();
+    ns.buffer = noiseBuf;
+    const hp = actx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 1500;
+    ns.connect(hp).connect(ng);
+    ns.start(when);
+    ns.stop(when + transient + 0.05);
+  }
+}
+
+function playClick(when, kind) {
+  const baseOct = (kind === "accent" ? 7 : 6) + state.octave;
+  const f = noteFreq(state.key, baseOct);
+  /* square / wood are louder per-unit than sine -- trim them. */
+  const trim = (state.voice === "square") ? 0.45 : (state.voice === "wood") ? 0.7 : 1.0;
+  const a = (kind === "accent" ? 0.85 : 0.55) * trim;
+  playVoice(when, f, a, state.decay, state.release, kind);
+}
+
+/* visual flash scheduled at the audio time (UI doesn't need sample acc) */
+function flashBeat(beatIdx, when) {
+  const delay = Math.max(0, (when - actx.currentTime) * 1000);
+  setTimeout(() => {
+    const dots = document.querySelectorAll("#beats .dot");
+    dots.forEach((d, i) => d.classList.toggle("on", i === beatIdx));
+  }, delay);
+}
+
+/* ---------- transport: worker-driven lookahead ---------- */
+let worker = null;
+let isPlaying = false;
+let nextTickTime = 0;
+let stepInBar = 0;
+const SCHEDULE_AHEAD = 0.12;
+const LOOKAHEAD_MS   = 25;
+
+function ensureWorker() {
+  if (worker) return worker;
+  const src = `let id=null;onmessage=e=>{if(e.data==='start'){if(!id)id=setInterval(()=>postMessage('t'),${LOOKAHEAD_MS});}else if(e.data==='stop'){if(id){clearInterval(id);id=null;}}};`;
+  worker = new Worker(URL.createObjectURL(new Blob([src], { type: "application/javascript" })));
+  worker.onmessage = scheduler;
+  return worker;
+}
+
+function stepDuration() {
+  return 60.0 / state.bpm / state.subdivision;
+}
+
+/* accent on beat 1, plus the half-bar beat when the bar is an even
+   meter of 4 beats or more.  i.e. 4/4 -> beats 1+3, 6/8 -> beats 1+4,
+   2/4 / 3/4 / 5/4 / 7/8 -> beat 1 only. */
+function isAccentBeat(beatInBar) {
+  if (beatInBar === 0) return true;
+  const n = state.beatsPerBar;
+  if (n >= 4 && n % 2 === 0) return beatInBar === n / 2;
+  return false;
+}
+
+function scheduler() {
+  if (!isPlaying || !actx) return;
+  const stepsPerBar = state.beatsPerBar * state.subdivision;
+  while (nextTickTime < actx.currentTime + SCHEDULE_AHEAD) {
+    const beatInBar = Math.floor(stepInBar / state.subdivision);
+    const onBeat    = (stepInBar % state.subdivision) === 0;
+    const kind = (onBeat && isAccentBeat(beatInBar)) ? "accent" : "click";
+    playClick(nextTickTime, kind);
+    if (onBeat) flashBeat(beatInBar, nextTickTime);
+    nextTickTime += stepDuration();
+    stepInBar = (stepInBar + 1) % stepsPerBar;
+  }
+}
+
+function start() {
+  ensureAudio();
+  if (actx.state === "suspended") actx.resume();
+  if (isPlaying) return;
+  isPlaying = true;
+  stepInBar = 0;
+  nextTickTime = actx.currentTime + 0.06;
+  /* keep iOS audio session alive while we play */
+  if (silentEl) silentEl.play().catch(() => { /* swallow autoplay rejection */ });
+  ensureWorker().postMessage("start");
+  const b = document.getElementById("play");
+  b.textContent = "❚❚  STOP";
+  b.classList.add("on");
+  setMediaSession("playing");
+}
+function stop() {
+  if (worker) worker.postMessage("stop");
+  isPlaying = false;
+  if (silentEl) silentEl.pause();
+  const b = document.getElementById("play");
+  b.textContent = "▶  START";
+  b.classList.remove("on");
+  document.querySelectorAll("#beats .dot").forEach(d => d.classList.remove("on"));
+  setMediaSession("paused");
+}
+
+/* ---------- MediaSession  (OS media keys / lockscreen) ---------- */
+function setMediaSession(playback) {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title:  "Click",
+      artist: "scire-h",
+      album:  state.bpm + " BPM",
+    });
+    navigator.mediaSession.playbackState = playback;
+    navigator.mediaSession.setActionHandler("play",  start);
+    navigator.mediaSession.setActionHandler("pause", stop);
+    navigator.mediaSession.setActionHandler("stop",  stop);
+  } catch (e) { /* ignore */ }
+}
+
+/* ---------- UI ---------- */
+const $ = id => document.getElementById(id);
+const bpmInput = $("bpm");
+const bpmVal   = $("bpmVal");
+
+function setBpm(b) {
+  state.bpm = Math.max(40, Math.min(240, Math.round(b)));
+  bpmInput.value = state.bpm;
+  bpmVal.textContent = state.bpm;
+}
+bpmInput.addEventListener("input", () => setBpm(+bpmInput.value));
+$("m10").addEventListener("click", () => setBpm(state.bpm - 10));
+$("m1") .addEventListener("click", () => setBpm(state.bpm - 1));
+$("p1") .addEventListener("click", () => setBpm(state.bpm + 1));
+$("p10").addEventListener("click", () => setBpm(state.bpm + 10));
+
+$("play").addEventListener("click", () => isPlaying ? stop() : start());
+window.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.code === "Space") { e.preventDefault(); isPlaying ? stop() : start(); }
+});
+
+function buildBeats() {
+  const beats = $("beats");
+  beats.innerHTML = "";
+  for (let i = 0; i < state.beatsPerBar; i++) {
+    const d = document.createElement("div");
+    d.className = "dot" + (i === 0 ? " accent" : "");
+    beats.appendChild(d);
+  }
+}
+$("sig").addEventListener("change", () => {
+  state.beatsPerBar = +$("sig").value;
+  buildBeats();
+  stepInBar = 0;
+});
+$("div").addEventListener("change", () => {
+  state.subdivision = +$("div").value;
+  stepInBar = 0;
+});
+$("key").addEventListener("change",   () => { state.key    = $("key").value; });
+$("oct").addEventListener("change",   () => { state.octave = +$("oct").value; });
+$("voice").addEventListener("change", () => { state.voice  = $("voice").value; });
+
+/* =========================================================
+   KNOBS  --  generic vertical-drag knob with double-click
+   reset and wheel nudge.  Each spec wires straight into
+   state and (optionally) the live audio graph.
+   ========================================================= */
+const KNOB_TEMPLATE = `
+  <svg viewBox="-50 -50 100 100">
+    <circle r="44" fill="#1c1c1c" stroke="#333" stroke-width="2"/>
+    <circle r="3"  fill="#444"/>
+    <line class="ind" x1="0" y1="0" x2="0" y2="-30"
+          stroke="#6fc" stroke-width="3" stroke-linecap="round"/>
+  </svg>
+  <div class="cap"></div>
+`;
+
+function setupKnob(host, spec) {
+  host.innerHTML = KNOB_TEMPLATE;
+  const ind  = host.querySelector(".ind");
+  const cap  = host.querySelector(".cap");
+  const min  = spec.min, max = spec.max;
+  let value  = spec.default;
+
+  function render() {
+    /* -135deg ... +135deg over the value range */
+    const t   = (value - min) / (max - min);
+    const deg = -135 + t * 270;
+    ind.setAttribute("transform", "rotate(" + deg + ")");
+    const shown = spec.format ? spec.format(value) : Math.round(value);
+    cap.innerHTML = spec.label + "<b>" + shown + "</b>";
+  }
+  function setValue(v) {
+    value = Math.max(min, Math.min(max, v));
+    render();
+    spec.onChange(value);
+  }
+  let dragY = 0, startV = 0;
+  host.addEventListener("pointerdown", e => {
+    host.setPointerCapture(e.pointerId);
+    host.classList.add("active");
+    dragY = e.clientY;
+    startV = value;
+    e.preventDefault();
+  });
+  host.addEventListener("pointermove", e => {
+    if (!host.hasPointerCapture(e.pointerId)) return;
+    const dy = dragY - e.clientY;                  // up = positive
+    const range = max - min;
+    setValue(startV + dy * (range / 180));         // ~180 px = full sweep
+  });
+  host.addEventListener("pointerup",     e => host.classList.remove("active"));
+  host.addEventListener("pointercancel", e => host.classList.remove("active"));
+  host.addEventListener("dblclick", () => setValue(spec.default));
+  host.addEventListener("wheel", e => {
+    e.preventDefault();
+    const step = spec.step || (max - min) / 100;
+    setValue(value + (e.deltaY < 0 ? step : -step));
+  }, { passive: false });
+
+  spec.onChange(value);   // sync state
+  render();
+  return { set: setValue, get: () => value };
+}
+
+function panFormat(v) {
+  const r = Math.round(v);
+  return r === 0 ? "C" : (r < 0 ? "L" : "R") + Math.abs(r);
+}
+function cutoffFromKnob(v) { return Math.round(200 * Math.pow(100, v / 100)); }
+
+const KNOBS = [
+  { id: "kVOL", label: "VOL",  min:   0, max: 100, default: 55,
+    format: v => Math.round(v),
+    onChange: v => {
+      state.volume = v / 100;
+      if (master) master.gain.setTargetAtTime(state.volume, actx.currentTime, 0.01);
+    } },
+  { id: "kPAN", label: "PAN",  min: -50, max:  50, default: 0,
+    format: panFormat,
+    onChange: v => {
+      state.pan = v / 50;
+      if (panner) panner.pan.value = state.pan;
+    } },
+  { id: "kDEC", label: "DECAY", min: 10, max: 300, default: 40,
+    format: v => Math.round(v),
+    onChange: v => { state.decay = v / 1000; } },
+  { id: "kREL", label: "REL",  min:   0, max: 500, default: 60,
+    format: v => Math.round(v),
+    onChange: v => { state.release = v / 1000; } },
+  { id: "kCUT", label: "CUT",  min:   0, max: 100, default: 100,
+    format: v => cutoffFromKnob(v),
+    onChange: v => { state.cutoff = cutoffFromKnob(v); } },
+  { id: "kRES", label: "RESO", min:   0, max: 100, default: 0,
+    format: v => Math.round(v),
+    onChange: v => { state.resonance = 0.5 + (v / 100) * 19.5; } },
+  { id: "kENV", label: "ENV",  min:   0, max: 100, default: 0,
+    format: v => Math.round(v),
+    onChange: v => { state.envAmount = v / 100; } },
+  { id: "kNZ",  label: "NOISE",min:   0, max: 100, default: 0,
+    format: v => Math.round(v),
+    onChange: v => { state.noise = v / 100; } },
+];
+
+(function buildKnobs() {
+  const grid = $("knobs");
+  KNOBS.forEach(spec => {
+    const k = document.createElement("div");
+    k.className = "knob";
+    k.id = spec.id;
+    k.title = spec.label + " -- drag to set, double-click to reset";
+    grid.appendChild(k);
+    setupKnob(k, spec);
+  });
+})();
+
+/* ---------- tap tempo (averages over the last 8 taps, 3 s window) ---------- */
+let taps = [];
+$("tap").addEventListener("click", () => {
+  const now = performance.now();
+  taps = taps.filter(t => now - t < 3000);
+  taps.push(now);
+  if (taps.length >= 2) {
+    let dt = 0;
+    for (let i = 1; i < taps.length; i++) dt += taps[i] - taps[i-1];
+    dt /= (taps.length - 1);
+    setBpm(60000 / dt);
+  }
+});
+
+/* ---------- visibility: resume context if browser suspended it ---------- */
+document.addEventListener("visibilitychange", () => {
+  if (actx && actx.state === "suspended") actx.resume();
+});
+
+buildBeats();
+</script>
+</body>
+</html>

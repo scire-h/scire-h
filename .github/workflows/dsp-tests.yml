@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: ["**"]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test:
     name: DSP unit tests
@@ -13,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-14]
     steps:
       - uses: actions/checkout@v4
 
@@ -23,15 +27,105 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++ make
 
+      - name: Toolchain info
+        shell: bash
+        run: |
+          set +e
+          echo "=== uname ==="
+          uname -a
+          echo "=== bash ==="
+          bash --version | head -1
+          echo "=== xcode ==="
+          if command -v xcode-select >/dev/null 2>&1; then xcode-select -p; fi
+          echo "=== g++ ==="
+          g++ --version | head -3 || echo "g++ MISSING"
+          echo "=== clang++ ==="
+          if command -v clang++ >/dev/null 2>&1; then clang++ --version | head -3; fi
+          echo "=== which ==="
+          which bash g++ clang++ cmake make tee tail 2>&1 || true
+          echo "=== ls tests ==="
+          ls -la ds4-native/tests
+          echo "=== ls Source ==="
+          ls -la ds4-native/Source | head -30
+
       - name: Run DSP test suite
+        id: run_all
         working-directory: ds4-native/tests
+        shell: bash
         run: |
           chmod +x run_all.sh
-          ./run_all.sh
+          set -o pipefail
+          ./run_all.sh 2>&1 | tee run_all.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            echo "::group::run_all.sh failed (exit $rc) -- full log"
+            cat run_all.log
+            echo "::endgroup::"
+            tail_msg=$(tail -n 20 run_all.log | tr '\n' '%' | sed 's/%/%0A/g')
+            echo "::error title=DSP run_all.sh failed::${tail_msg}"
+            exit "$rc"
+          fi
 
       - name: Run DSP tests via CMake (optional)
+        id: ctest
         working-directory: ds4-native/tests
+        shell: bash
         run: |
-          cmake -B build
-          cmake --build build --parallel
-          ctest --test-dir build --output-on-failure
+          set -o pipefail
+          {
+            cmake -B build
+            cmake --build build --parallel
+            ctest --test-dir build --output-on-failure
+          } 2>&1 | tee ctest.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            echo "::group::ctest failed (exit $rc) -- full log"
+            cat ctest.log
+            echo "::endgroup::"
+            tail_msg=$(tail -n 20 ctest.log | tr '\n' '%' | sed 's/%/%0A/g')
+            echo "::error title=DSP ctest failed::${tail_msg}"
+            exit "$rc"
+          fi
+
+      - name: Upload failure logs as artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsp-failure-logs-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ds4-native/tests/run_all.log
+            ds4-native/tests/ctest.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Post failure log as PR comment
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MATRIX_OS: ${{ matrix.os }}
+        shell: bash
+        run: |
+          set +e
+          {
+            echo "## DSP test failure: \`${MATRIX_OS}\` @ \`${HEAD_SHA:0:7}\`"
+            echo
+            echo "### run_all.log (tail 80)"
+            echo '```'
+            tail -n 80 ds4-native/tests/run_all.log 2>/dev/null || echo "(no run_all.log)"
+            echo '```'
+            echo
+            echo "### ctest.log (tail 80)"
+            echo '```'
+            tail -n 80 ds4-native/tests/ctest.log 2>/dev/null || echo "(no ctest.log)"
+            echo '```'
+          } > /tmp/comment.md
+          # post as a PR comment (issues API works for PRs too)
+          body_json=$(jq -Rs '{body: .}' < /tmp/comment.md)
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            -d "$body_json" | head -20
