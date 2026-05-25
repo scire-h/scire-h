@@ -661,34 +661,39 @@
 
   /* =================  UTILITY (demo + scope) ================= */
   .utility {
-    width: 1100px;
+    width: 100%;
+    max-width: 1100px;
+    box-sizing: border-box;
     display: flex; align-items: center; justify-content: center;
-    gap: 16px;
-    padding: 4px 24px 0;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    padding: 6px 16px 0;
   }
   .demo-btn {
     background: linear-gradient(#3a3a3a, #1a1a1a);
     color: #eee;
     border: 1px solid #000;
     border-radius: 4px;
-    padding: 7px 16px;
+    padding: 7px 14px;
     font-size: 12px;
     letter-spacing: 0.12em;
     cursor: pointer;
     font-family: inherit;
+    white-space: nowrap;
     box-shadow: 0 2px 4px rgba(0,0,0,0.5),
                 inset 0 1px 0 rgba(255,255,255,0.05);
   }
   .demo-btn:hover { background: linear-gradient(#4a4a4a, #222); }
   .demo-btn.ghost { color: #aaa; }
-  select.demo-btn { appearance: none; padding-right: 24px; min-width: 150px; }
+  select.demo-btn { appearance: none; padding-right: 22px; min-width: 0; }
   select.demo-btn option { background: #1a1a1a; color: #eee; }
   .xport {
     display: inline-flex; align-items: center; gap: 6px;
     color: #aaa; font-size: 11px; letter-spacing: 0.1em;
+    white-space: nowrap;
   }
   .xport input[type=range] {
-    width: 110px; accent-color: #6fc;
+    width: 96px; accent-color: #6fc;
   }
   .xport .val {
     color: #eee; font-family: monospace; min-width: 38px; text-align: right;
