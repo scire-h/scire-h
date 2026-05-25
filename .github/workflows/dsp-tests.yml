@@ -13,7 +13,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # macos-latest was rotated to macOS 15 / Xcode 16 / clang 19, which
+        # made the DSP test step fail in ~7s with no useful annotation.
+        # Pin to the previous LTS image (macOS 14 / Xcode 15.x / clang 16)
+        # until the upstream toolchain regression is identified.
+        os: [ubuntu-latest, macos-14]
     steps:
       - uses: actions/checkout@v4
 
@@ -23,15 +27,48 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++ make
 
+      - name: Toolchain info
+        run: |
+          uname -a
+          bash --version | head -1
+          if command -v xcode-select >/dev/null 2>&1; then xcode-select -p; fi
+          g++ --version | head -1
+          if command -v clang++ >/dev/null 2>&1; then clang++ --version | head -1; fi
+
       - name: Run DSP test suite
         working-directory: ds4-native/tests
+        shell: bash
         run: |
           chmod +x run_all.sh
-          ./run_all.sh
+          set -o pipefail
+          # capture full output so a failure can be surfaced as an annotation
+          # (GitHub Actions log download requires auth that the bot may not have)
+          ./run_all.sh 2>&1 | tee run_all.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            echo "::group::run_all.sh failed (exit $rc) -- last 80 lines"
+            tail -n 80 run_all.log
+            echo "::endgroup::"
+            # surface the tail as a workflow annotation so it's readable
+            # without needing to download the full log
+            tail_msg=$(tail -n 20 run_all.log | tr '\n' '%' | sed 's/%/%0A/g')
+            echo "::error title=DSP run_all.sh failed::${tail_msg}"
+            exit "$rc"
+          fi
 
       - name: Run DSP tests via CMake (optional)
         working-directory: ds4-native/tests
+        shell: bash
         run: |
-          cmake -B build
-          cmake --build build --parallel
-          ctest --test-dir build --output-on-failure
+          set -o pipefail
+          {
+            cmake -B build
+            cmake --build build --parallel
+            ctest --test-dir build --output-on-failure
+          } 2>&1 | tee ctest.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            tail_msg=$(tail -n 20 ctest.log | tr '\n' '%' | sed 's/%/%0A/g')
+            echo "::error title=DSP ctest failed::${tail_msg}"
+            exit "$rc"
+          fi
