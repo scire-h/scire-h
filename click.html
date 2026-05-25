@@ -201,6 +201,16 @@
         </select>
       </span>
       <span class="group">
+        OCT
+        <select id="oct">
+          <option value="-2">−2</option>
+          <option value="-1">−1</option>
+          <option value="0" selected>0</option>
+          <option value="1">+1</option>
+          <option value="2">+2</option>
+        </select>
+      </span>
+      <span class="group">
         VOICE
         <select id="voice">
           <option value="sine" selected>SINE</option>
@@ -229,6 +239,10 @@
     </div>
 
     <div class="slide-stack">
+      <div class="slide">
+        <label>VOLUME <b><span id="volVal">55</span> %</b></label>
+        <input id="vol" type="range" min="0" max="100" step="1" value="55" aria-label="Volume">
+      </div>
       <div class="slide">
         <label>RELEASE <b><span id="relVal">60</span> ms</b></label>
         <input id="rel" type="range" min="0" max="500" step="1" value="60" aria-label="Release">
@@ -317,7 +331,7 @@ function ensureAudio() {
   if (actx) return;
   actx = new AudioCtx();
   master = actx.createGain();
-  master.gain.value = 0.55;
+  master.gain.value = state.volume;
   cutoffNode = actx.createBiquadFilter();
   cutoffNode.type = "lowpass";
   cutoffNode.frequency.value = state.cutoff;
@@ -337,7 +351,9 @@ const state = {
   beatsPerBar: 4,    // 2..7
   subdivision: 2,    // ticks per beat: 1 (1/4), 2 (1/8) or 4 (1/16)
   key: "A",          // tonal pitch for the beat/sub clicks (12 chromatic notes)
+  octave: 0,         // octave shift for both accent + click (-2..+2)
   pan: 0,            // -1 (full L) .. +1 (full R)
+  volume: 0.55,      // 0..1 -- master gain
   decay: 0.040,      // seconds -- body of the click  (peak -> 10%)
   release: 0.060,    // seconds -- tail of the click  (10%  -> 0)
   cutoff: 20000,     // Hz -- master lowpass cutoff (20 kHz ~= bypass)
@@ -412,7 +428,8 @@ function playVoice(when, f, a, d, rel) {
 }
 
 function playClick(when, kind) {
-  const f = noteFreq(state.key, kind === "accent" ? 7 : 6);
+  const baseOct = (kind === "accent" ? 7 : 6) + state.octave;
+  const f = noteFreq(state.key, baseOct);
   /* square / wood are louder per-unit than sine -- trim them. */
   const trim = (state.voice === "square") ? 0.45 : (state.voice === "wood") ? 0.7 : 1.0;
   const a = (kind === "accent" ? 0.85 : 0.55) * trim;
@@ -554,8 +571,15 @@ $("div").addEventListener("change", () => {
   state.subdivision = +$("div").value;
   stepInBar = 0;
 });
-$("key").addEventListener("change",   () => { state.key   = $("key").value; });
-$("voice").addEventListener("change", () => { state.voice = $("voice").value; });
+$("key").addEventListener("change",   () => { state.key    = $("key").value; });
+$("oct").addEventListener("change",   () => { state.octave = +$("oct").value; });
+$("voice").addEventListener("change", () => { state.voice  = $("voice").value; });
+$("vol").addEventListener("input", () => {
+  const pct = +$("vol").value;
+  state.volume = pct / 100;
+  $("volVal").textContent = pct;
+  if (master) master.gain.setTargetAtTime(state.volume, actx.currentTime, 0.01);
+});
 
 /* ---------- PAN knob (vertical drag, double-click to centre) ---------- */
 const panKnob = $("panKnob");
