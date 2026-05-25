@@ -225,30 +225,8 @@ function noteFreq(note, octave) {
      sub    (8th/16th)-- sine beep at 660 Hz, quieter
    Both noise and sine are scheduled via .start(when) so the timing is
    sample-accurate. */
-function playClick(when, kind) {
-  if (kind === "accent") {
-    const dur = 0.035;
-    const src = actx.createBufferSource();
-    src.buffer = pinkBuf;
-    /* slight high-pass so it reads as a "click", not a "shh" */
-    const hp = actx.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 250;
-    const g = actx.createGain();
-    g.gain.setValueAtTime(0.0001, when);
-    g.gain.exponentialRampToValueAtTime(1.0,    when + 0.001);
-    g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
-    src.connect(hp).connect(g).connect(master);
-    src.start(when);
-    src.stop(when + dur + 0.02);
-    return;
-  }
-  /* beat and sub share the same pitch -- 2/3/4 (and any sub-clicks
-     between them) read as one consistent tone, distinguished only
-     by sub being shorter and quieter. */
-  const f = noteFreq(state.key, 6);
-  const a = kind === "beat" ? 0.85 : 0.30;
-  const d = kind === "sub"  ? 0.018 : 0.040;
+/* helper: schedule a sine "beep" of pitch f, peak gain a, length d */
+function playSine(when, f, a, d) {
   const osc = actx.createOscillator();
   osc.type = "sine";
   osc.frequency.setValueAtTime(f, when);
@@ -259,6 +237,35 @@ function playClick(when, kind) {
   osc.connect(g).connect(master);
   osc.start(when);
   osc.stop(when + d + 0.02);
+}
+
+function playClick(when, kind) {
+  if (kind === "accent") {
+    /* pink-noise burst -- the "pft" */
+    const dur = 0.040;
+    const src = actx.createBufferSource();
+    src.buffer = pinkBuf;
+    const hp = actx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 250;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(1.0,    when + 0.001);
+    g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+    src.connect(hp).connect(g).connect(master);
+    src.start(when);
+    src.stop(when + dur + 0.02);
+    /* + sine one octave above beats 2/3/4 so the downbeat has a pitch too */
+    playSine(when, noteFreq(state.key, 7), 0.65, 0.045);
+    return;
+  }
+  /* beat and sub share the same pitch -- 2/3/4 (and any sub-clicks
+     between them) read as one consistent tone, distinguished only
+     by sub being shorter and quieter. */
+  const f = noteFreq(state.key, 6);
+  const a = kind === "beat" ? 0.85 : 0.30;
+  const d = kind === "sub"  ? 0.018 : 0.040;
+  playSine(when, f, a, d);
 }
 
 /* visual flash scheduled at the audio time (UI doesn't need sample acc) */
