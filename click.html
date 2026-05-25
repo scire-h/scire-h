@@ -239,6 +239,15 @@
           <option value="wood">WOOD</option>
         </select>
       </span>
+      <span class="group">
+        NTYPE
+        <select id="nzType">
+          <option value="white">WHT</option>
+          <option value="pink" selected>PNK</option>
+          <option value="brown">BRN</option>
+          <option value="bright">BRT</option>
+        </select>
+      </span>
     </div>
 
     <div class="knobs" id="knobs"></div>
@@ -273,14 +282,52 @@ const AudioCtx = window.AudioContext || window.webkitAudioContext;
 let actx = null, master = null, panner = null, noiseBuf = null;
 let silentEl = null, silentSrc = null;
 
-/* short white-noise buffer used as the source for the WOOD voice */
-function makeNoiseBuffer(ctx, sec) {
+/* noise buffer family -- WOOD voice uses white; the NOISE-mix knob
+   draws from whichever buffer NTYPE selects.  Each buffer is half a
+   second pre-rendered and looped/sliced by BufferSourceNode. */
+function fillBuffer(ctx, sec, fn) {
   const len = Math.floor(ctx.sampleRate * sec);
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
   const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  fn(d, len);
   return buf;
 }
+function makeWhiteBuffer(ctx, sec) {
+  return fillBuffer(ctx, sec, (d, n) => {
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  });
+}
+/* Pink noise -- Paul Kellet's approximation of Voss-McCartney 1/f */
+function makePinkBuffer(ctx, sec) {
+  return fillBuffer(ctx, sec, (d, n) => {
+    let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
+    for (let i = 0; i < n; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179;
+      b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.96900 * b2 + w * 0.1538520;
+      b3 = 0.86650 * b3 + w * 0.3104856;
+      b4 = 0.55000 * b4 + w * 0.5329522;
+      b5 = -0.7616 * b5 - w * 0.0168980;
+      d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.40;
+      b6 = w * 0.115926;
+    }
+  });
+}
+/* Brown noise -- leaky integration of white, rolls off 6 dB / oct */
+function makeBrownBuffer(ctx, sec) {
+  return fillBuffer(ctx, sec, (d, n) => {
+    let last = 0;
+    for (let i = 0; i < n; i++) {
+      const w = Math.random() * 2 - 1;
+      last = (last + 0.02 * w) / 1.02;
+      d[i] = last * 5.5;
+    }
+  });
+}
+const noiseBuffers = {};
+/* alias kept for the WOOD voice path */
+function makeNoiseBuffer(ctx, sec) { return makeWhiteBuffer(ctx, sec); }
 
 /* 500 ms of true digital silence as a WAV blob URL.  We feed it
    into an <audio> element + MediaElementSource so iOS Safari keeps
@@ -352,7 +399,10 @@ function ensureAudio() {
   panner = actx.createStereoPanner();
   panner.pan.value = state.pan;
   master.connect(sat).connect(panner).connect(actx.destination);
-  noiseBuf = makeNoiseBuffer(actx, 0.5);
+  noiseBuffers.white = makeWhiteBuffer(actx, 0.5);
+  noiseBuffers.pink  = makePinkBuffer(actx, 0.5);
+  noiseBuffers.brown = makeBrownBuffer(actx, 0.5);
+  noiseBuf = noiseBuffers.white;  // WOOD voice keeps using white
   ensureSilentBed();
 }
 function unlock() { ensureAudio(); if (actx.state === "suspended") actx.resume(); }
@@ -373,6 +423,7 @@ const state = {
   resonance: 0.707,  // BiquadFilter Q -- raise for ringing / synth-y filter
   envAmount: 0.0,    // 0..1 -- how much the click envelope opens cutoff upward
   noise: 0.0,        // 0..1 -- noise transient mixed into every accent
+  noiseType: "pink", // white | pink | brown | bright (HP-filtered white)
   voice: "sine",     // sine | triangle | square | wood
 };
 
@@ -444,18 +495,26 @@ function playVoice(when, f, a, d, rel, kind) {
   }
 
   /* NOISE component -- accent positions only (beats 1 + half-bar).
-     A brief high-passed transient on top of the tonal voice gives
-     the downbeats a "kch / pft" edge while leaving 2-4/6-8 clean. */
+     Type is picked from NTYPE: white / pink (default) / brown /
+     bright (white through a 1.5 kHz HPF for the classic "tch"). */
   if (state.noise > 0 && kind === "accent") {
     const transient = Math.min(d, 0.030);
-    const ng = envelope(when, state.noise * a * 0.8, transient * 0.6, transient * 0.6);
+    /* level is independent of accent so loud accents don't drown
+       the panel in noise; raise the NOISE knob to push it back. */
+    const ng = envelope(when, state.noise * 0.55, transient * 0.6, transient * 0.6);
     ng.connect(master);
+    const isBright = state.noiseType === "bright";
     const ns = actx.createBufferSource();
-    ns.buffer = noiseBuf;
-    const hp = actx.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 1500;
-    ns.connect(hp).connect(ng);
+    ns.buffer = noiseBuffers[isBright ? "white" : state.noiseType] || noiseBuffers.white;
+    let tail = ns;
+    if (isBright) {
+      const hp = actx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 1500;
+      ns.connect(hp);
+      tail = hp;
+    }
+    tail.connect(ng);
     ns.start(when);
     ns.stop(when + transient + 0.05);
   }
@@ -612,7 +671,8 @@ $("div").addEventListener("change", () => {
 });
 $("key").addEventListener("change",   () => { state.key    = $("key").value; });
 $("oct").addEventListener("change",   () => { state.octave = +$("oct").value; });
-$("voice").addEventListener("change", () => { state.voice  = $("voice").value; });
+$("voice").addEventListener("change",  () => { state.voice     = $("voice").value;  });
+$("nzType").addEventListener("change", () => { state.noiseType = $("nzType").value; });
 
 /* =========================================================
    KNOBS  --  generic vertical-drag knob with double-click
@@ -748,7 +808,7 @@ const knobHandles = [];
 const STORAGE_PREFIX = "scire-h.click.slot.";
 const SAVED_KEYS = ["bpm","beatsPerBar","subdivision","key","octave",
                     "pan","volume","decay","release","cutoff","resonance",
-                    "envAmount","noise","voice"];
+                    "envAmount","noise","noiseType","voice"];
 
 function snapshotState() {
   const s = {};
@@ -763,7 +823,8 @@ function applySnapshot(s) {
   $("div").value   = state.subdivision;
   $("key").value   = state.key;
   $("oct").value   = state.octave;
-  $("voice").value = state.voice;
+  $("voice").value  = state.voice;
+  $("nzType").value = state.noiseType;
   bpmInput.value     = state.bpm;
   bpmVal.textContent = state.bpm;
   buildBeats();
