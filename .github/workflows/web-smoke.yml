@@ -1,0 +1,54 @@
+name: Web smoke test
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  oscilloscope:
+    name: oscilloscope.html (Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save playwright
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Serve repo
+        run: |
+          nohup python3 -m http.server 8000 >/tmp/server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf "http://localhost:8000/oscilloscope.html" >/dev/null && exit 0
+            sleep 0.5
+          done
+          echo "server failed to start"; cat /tmp/server.log; exit 1
+
+      - name: Run smoke test
+        run: node tests/web/smoke.mjs http://localhost:8000/oscilloscope.html
+
+      - name: Upload preview screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oscilloscope-preview
+          path: tests/web/artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
