@@ -123,16 +123,17 @@ void test_sine_shaper_harmonics() {
                  fund, h2dB, h3dB, h4dB, h5dB);
     std::fflush (stdout);
 
-    /* ICL8038 fingerprint: odd harmonics audible (~1-3 % THD), even
-       harmonics essentially absent (odd-symmetric polynomial).
-       Empirically the 3rd-order Bhaskara shaper applied to a triangle
-       gives H3 ≈ -38 dB (≈ 1.3 % THD), H5 ≈ -53 dB; H2 and H4 sit in
-       the numerical noise floor. */
-    assert (h3dB > -42.0);      // 3rd harmonic clearly present
-    assert (h3dB < -30.0);      // ...but not as loud as the triangle's own H3 (-19 dB)
-    assert (h2dB < -45.0);      // 2nd harmonic in the noise floor
-    assert (h4dB < -45.0);      // 4th likewise
-    std::puts ("  [pass] sine shaper has ICL8038-style odd-harmonic content");
+    /* Reference target: real measurements of the SDS-2002 era drum-synth
+       software (LFO off, SWEEP off, SIN source) show H2 sitting at
+       -118 dB and H3..H10 all -95 dB or quieter -- mathematically pure
+       sine. Our sine shaper is now std::sin(pi/2 * triangle), so every
+       harmonic should fall well below -40 dB. The previous Bhaskara
+       polynomial gave H3 around -38 dB, which was the wrong character. */
+    assert (h2dB < -40.0);      // even harmonics absent (odd-symmetric)
+    assert (h3dB < -40.0);      // 3rd harmonic deep in the noise floor
+    assert (h4dB < -40.0);      // 4th likewise
+    assert (h5dB < -50.0);      // 5th and beyond essentially silent
+    std::puts ("  [pass] sine shaper is mathematically pure (matches SDS-2002 reference)");
 }
 
 void test_drift_changes_output() {

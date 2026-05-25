@@ -234,8 +234,18 @@ DS4MProcessor::createParameterLayout() {
             ParameterID { p + P::pid::sustain, 1 },      nm + "Sustain",
             NormalisableRange<float>(0.0f, 1.0f), 0.3f));
         params.push_back (std::make_unique<AudioParameterChoice>(
-            ParameterID { p + P::pid::waveform, 1 },     nm + "Waveform",
-            StringArray { "Sine", "Triangle", "Square", "Sawtooth" }, 0));
+            ParameterID { p + P::pid::waveform, 2 },     nm + "Source",
+            /* Reference measurements from the SDS-2002 era drum-synth
+               software (LFO + SWEEP off, settled tone):
+                  SIN    -> pure sin(2pi.f.t), H2 floor at -118 dB
+                  PULSE  -> bandlimited 50% square, H3 -11 dB, H5 -16 dB,
+                            even harmonics in the noise floor
+                  CYMBAL -> band-passed noise centred ~3 kHz with a
+                            secondary resonance ~5.7 kHz, *no* VCO content.
+               So the source is a 3-way mutually-exclusive radio rather
+               than the 4-way sine/tri/sqr/saw + separate noise toggle
+               we had before. */
+            StringArray { "Cymbal", "Pulse", "Sin" }, 1));
         params.push_back (std::make_unique<AudioParameterBool>(
             ParameterID { p + P::pid::noiseOn, 1 },      nm + "Noise", true));
         params.push_back (std::make_unique<AudioParameterFloat>(

@@ -166,11 +166,22 @@ void Voice::processBlock(float* outL, float* outR, int numSamples) {
     /* per-sample LFO output (Hz already set in updateParameters). */
     const float lfoCents = pLfoOn ? 20.0f + pLfoDepth * 180.0f : 0.0f;
 
+    /* Source (was a 4-way sine/tri/sqr/saw selector + separate noise
+       toggle; reference measurements show the original device is a
+       3-way mutually-exclusive radio: 0 = Cymbal, 1 = Pulse, 2 = Sin).
+       We map to the VCO waveform once per block and pick whether to
+       run the noise path or the VCO path. */
+    const bool useCymbal = (pWaveform == 0);
+    const bool usePulse  = (pWaveform == 1);
+    const bool useSine   = (pWaveform == 2) || (!useCymbal && !usePulse);
+    if      (usePulse) vco.setWaveform(TriangleCoreVCO::Waveform::Square);
+    else if (useSine)  vco.setWaveform(TriangleCoreVCO::Waveform::Sine);
+
     /* per-sample loop */
     for (int n = 0; n < numSamples; ++n) {
         const float aE = ampEnv.processSample();
         const float pE = pitchEnv.processSample();
-        (void) filterEnv.processSample();   // env still ticks for state hygiene
+        (void) filterEnv.processSample();
 
         /* Pitch -- exponential sweep from sweepFromHz to sweepToHz. */
         const float currHz = sweepToHz *
@@ -179,30 +190,26 @@ void Voice::processBlock(float* outL, float* outR, int numSamples) {
         /* LFO -> detune cents. */
         const float lfoVal = lfoCents * lfo.processSample();
 
-        vco.setFrequency(currHz);
-        vco.setExternalDetuneCents(lfoVal);
-        float vcoSum = vco.processSample();
-
-        /* Per-waveform attenuation to keep mix at sensible level. */
-        const float oscMix = (pWaveform == 0) ? 1.0f
-                           : (pWaveform == 1) ? 0.85f
-                           : (pWaveform == 2) ? 0.45f
-                                              : 0.55f;
-        vcoSum *= oscMix;
-
-        float noiseSig = 0.0f;
-        if (pNoiseOn) noiseSig = noise.processSample() * 0.55f;
-
-        /* The real DS-4 has no VCF on the VCO path -- the only
-           filtering is the fixed band-pass inside the noise voice
-           per CYMBAL / SNARE / NOISE character. Mixing straight
-           into the VCA matches the panel (no FILTER pill exists)
-           and keeps the raw, percussive brightness of the original. */
-        const float mixed = vcoSum + noiseSig;
+        float source = 0.0f;
+        if (useCymbal) {
+            /* Cymbal mode = noise voice only. The noise voice's
+               band-pass (per CYMBAL / SNARE / NOISE channel role) is
+               the only thing on the signal path -- the VCO is silent
+               in this mode, matching the reference. */
+            source = noise.processSample();
+        } else {
+            /* Pulse or Sin -- pure VCO, no noise mix. */
+            vco.setFrequency(currHz);
+            vco.setExternalDetuneCents(lfoVal);
+            source = vco.processSample();
+            /* Slightly attenuate the square so it doesn't tower over
+               the sine when the user A/Bs between waveforms. */
+            if (usePulse) source *= 0.55f;
+        }
 
         /* OTAVCA: envelope sets I_abc, audio passes through tanh. */
         vca.setControlGain(aE);
-        const float y = vca.processSample(mixed);
+        const float y = vca.processSample(source);
 
         outL[n] += y;
         if (outR) outR[n] += y;

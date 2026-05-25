@@ -45,17 +45,17 @@ float TriangleCoreVCO::polyBLEP(double t, double dt) {
     return 0.0f;
 }
 
-/* 3rd-order Bhaskara-style polynomial:  y = (3/2)t - (1/2)t³ .
-   Constraints satisfied:  y(0)=0, y(±1)=±1, odd-symmetric.
-   THD applied to a unity-amplitude triangle is roughly:
-       3rd harmonic   ≈ -28 dBc
-       5th harmonic   ≈ -42 dBc
-       7th harmonic   ≈ -55 dBc
-   which matches the ICL8038 sine-output spectrum to within a couple of dB
-   per harmonic.  A pure std::sin() call has none of this, so the audible
-   difference at full output is a noticeable warmer, hollow-flute character. */
+/* Map triangle [-1, +1] -> true sine via y = sin(pi/2 * t).
+   The previous 3rd-order Bhaskara polynomial added ~1.3% THD (H3
+   around -28 dBc) on the assumption that the original DS-family
+   instruments used an ICL8038-style diode breakpoint shaper. That
+   assumption was wrong: actual reference measurements of the
+   SDS-2002 era drum synth software show H2 sitting at -118 dB and
+   all other harmonics at -95 dB or quieter, i.e. an essentially
+   mathematically pure sine.  Returning to std::sin removes the
+   spurious 'hollow flute' character. */
 float TriangleCoreVCO::sineShaper(float t) {
-    return t * (1.5f - 0.5f * t * t);
+    return std::sin (1.5707963267948966f * t);
 }
 
 float TriangleCoreVCO::processSample() {

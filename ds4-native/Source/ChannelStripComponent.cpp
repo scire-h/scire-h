@@ -109,10 +109,14 @@ ChannelStripComponent::ChannelStripComponent (DS4MProcessor& proc, int chIdx,
     installFormatter (senseKnob,      fmtPercent);
 
     /* Combo boxes. */
-    waveformBox.addItem ("∿  sine",     1);
-    waveformBox.addItem ("△  triangle", 2);
-    waveformBox.addItem ("⊓  square",   3);
-    waveformBox.addItem ("⋀  saw",       4);
+    /* Three mutually-exclusive sources matching the reference
+       measurement set: CYMBAL = band-passed noise voice, PULSE =
+       bandlimited 50% square, SIN = pure sin. The previous 4-way
+       sine/tri/sqr/saw + separate NOISE toggle was the wrong
+       architecture; see ChangeLog for the spectral evidence. */
+    waveformBox.addItem ("CYMBAL", 1);
+    waveformBox.addItem ("PULSE",  2);
+    waveformBox.addItem ("SIN",    3);
     addAndMakeVisible (waveformBox);
 
     sweepDirBox.addItem ("UP",   1);
