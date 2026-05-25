@@ -72,24 +72,37 @@ const drawReport = await page.evaluate(() => {
     const data = ctx.getImageData(0, 0, w, h).data;
     let nonBlack = 0;
     let maxR = 0, maxG = 0, maxB = 0;
+    let sumR = 0, sumG = 0, sumB = 0;
+    // Tally only "lit" pixels (clearly above the dark vignette background)
+    // so the average colour reflects the beam glow, not the empty screen.
+    let litCount = 0, litR = 0, litG = 0, litB = 0;
     for (let i = 0; i < data.length; i += 4) {
         const r = data[i], g = data[i + 1], b = data[i + 2];
-        if (r + g + b > 10) nonBlack++;
+        const s = r + g + b;
+        if (s > 10) { nonBlack++; sumR += r; sumG += g; sumB += b; }
+        if (s > 90) { litCount++; litR += r; litG += g; litB += b; }
         if (r > maxR) maxR = r;
         if (g > maxG) maxG = g;
         if (b > maxB) maxB = b;
     }
-    return { w, h, nonBlack, maxR, maxG, maxB };
+    const avgR = litCount ? litR / litCount : 0;
+    const avgG = litCount ? litG / litCount : 0;
+    const avgB = litCount ? litB / litCount : 0;
+    return { w, h, nonBlack, litCount, maxR, maxG, maxB, avgR, avgG, avgB };
 });
-console.log(`Canvas ${drawReport.w}x${drawReport.h}: nonBlackPx=${drawReport.nonBlack}  peakRGB=(${drawReport.maxR},${drawReport.maxG},${drawReport.maxB})`);
+console.log(`Canvas ${drawReport.w}x${drawReport.h}: nonBlackPx=${drawReport.nonBlack}  litPx=${drawReport.litCount}  peakRGB=(${drawReport.maxR},${drawReport.maxG},${drawReport.maxB})  avgLitRGB=(${drawReport.avgR.toFixed(1)},${drawReport.avgG.toFixed(1)},${drawReport.avgB.toFixed(1)})`);
 
 // Sanity: should have drawn at least *some* pixels by now.
 const minPixels = 100;
 const drewSomething = drawReport.nonBlack >= minPixels;
 
-// Sanity: the beam is green/cyan by default, so the green channel
-// must dominate the red channel on at least one pixel.
-const greenDominant = drawReport.maxG > Math.max(40, drawReport.maxR * 1.3);
+// The hottest pixel along the beam core is intentionally clipped to
+// (255,255,255) by the multi-pass bloom (outer halo and mid glow tint
+// the surrounding pixels green, the inner core saturates to white).
+// So check the *average* colour of lit pixels: across the soft halo
+// the green channel should dominate the red.
+const greenDominant = drawReport.litCount >= minPixels &&
+                      drawReport.avgG > Math.max(20, drawReport.avgR * 1.2);
 
 // Switch source to image tab to ensure the tab UI is interactive without errors,
 // then switch back. Catches event-binding regressions.
