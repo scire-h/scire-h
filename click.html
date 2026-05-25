@@ -159,8 +159,8 @@
       <span class="group">
         DIV
         <select id="div">
-          <option value="1" selected>1/4</option>
-          <option value="2">1/8</option>
+          <option value="1">1/4</option>
+          <option value="2" selected>1/8</option>
           <option value="4">1/16</option>
         </select>
       </span>
@@ -179,6 +179,15 @@
           <option value="A" selected>A</option>
           <option value="A#">A#</option>
           <option value="B">B</option>
+        </select>
+      </span>
+      <span class="group">
+        VOICE
+        <select id="voice">
+          <option value="sine" selected>SINE</option>
+          <option value="triangle">TRI</option>
+          <option value="square">SQR</option>
+          <option value="wood">WOOD</option>
         </select>
       </span>
     </div>
@@ -211,7 +220,16 @@
    ========================================================= */
 
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
-let actx = null, master = null, panner = null;
+let actx = null, master = null, panner = null, noiseBuf = null;
+
+/* short white-noise buffer used as the source for the WOOD voice */
+function makeNoiseBuffer(ctx, sec) {
+  const len = Math.floor(ctx.sampleRate * sec);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
 
 function ensureAudio() {
   if (actx) return;
@@ -221,6 +239,7 @@ function ensureAudio() {
   panner = actx.createStereoPanner();
   panner.pan.value = state.pan;
   master.connect(panner).connect(actx.destination);
+  noiseBuf = makeNoiseBuffer(actx, 0.1);
 }
 function unlock() { ensureAudio(); if (actx.state === "suspended") actx.resume(); }
 window.addEventListener("pointerdown", unlock, { once: true });
@@ -229,10 +248,11 @@ window.addEventListener("keydown",     unlock, { once: true });
 const state = {
   bpm: 120,
   beatsPerBar: 4,    // 2..7
-  subdivision: 1,    // ticks per beat: 1 (just the beats), 2 (8ths) or 4 (16ths)
+  subdivision: 2,    // ticks per beat: 1 (1/4), 2 (1/8) or 4 (1/16)
   key: "A",          // tonal pitch for the beat/sub clicks (12 chromatic notes)
   pan: 0,            // -1 (full L) .. +1 (full R)
   decay: 0.040,      // seconds -- length of each click
+  voice: "sine",     // sine | triangle | square | wood
 };
 
 /* MIDI note number for a (note name, octave) -- C4 = 60, A4 = 69 */
@@ -242,29 +262,45 @@ function noteFreq(note, octave) {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
-/* sample-accurate sine "beep" -- two pitches:
-     accent -- one octave above the base note   (beats 1 and 3)
-     click  -- base note                        (all other positions,
-                                                  whether on-beat or
-                                                  in-between, identical)
-   Scheduled via .start(when) so timing is sample-accurate. */
-function playSine(when, f, a, d) {
-  const osc = actx.createOscillator();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(f, when);
+/* sample-accurate click voice -- four flavours:
+     sine / triangle / square -- pure oscillator tone
+     wood                     -- noise burst through a tight bandpass
+                                 tuned to the pitch (woodblock feel)
+   Two pitches per voice: accent = octave above base, click = base. */
+function playVoice(when, f, a, d) {
   const g = actx.createGain();
   g.gain.setValueAtTime(0.0001, when);
   g.gain.exponentialRampToValueAtTime(a,      when + 0.001);
   g.gain.exponentialRampToValueAtTime(0.0008, when + d);
-  osc.connect(g).connect(master);
+  g.connect(master);
+
+  if (state.voice === "wood") {
+    const src = actx.createBufferSource();
+    src.buffer = noiseBuf;
+    const bp = actx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(f * 1.5, when); // emphasis above fundamental
+    bp.Q.value = 14;
+    src.connect(bp).connect(g);
+    src.start(when);
+    src.stop(when + d + 0.02);
+    return;
+  }
+  const osc = actx.createOscillator();
+  osc.type = state.voice; // sine | triangle | square
+  osc.frequency.setValueAtTime(f, when);
+  osc.connect(g);
   osc.start(when);
   osc.stop(when + d + 0.02);
 }
 
 function playClick(when, kind) {
   const f = noteFreq(state.key, kind === "accent" ? 7 : 6);
-  const a = kind === "accent" ? 0.85 : 0.55;
-  playSine(when, f, a, state.decay);
+  /* square / saw have more energy than sine, trim them so the mix
+     stays comfortable; wood is broadband, also trim. */
+  const trim = (state.voice === "square") ? 0.45 : (state.voice === "wood") ? 0.7 : 1.0;
+  const a = (kind === "accent" ? 0.85 : 0.55) * trim;
+  playVoice(when, f, a, state.decay);
 }
 
 /* visual flash scheduled at the audio time (UI doesn't need sample acc) */
@@ -399,7 +435,8 @@ $("div").addEventListener("change", () => {
   state.subdivision = +$("div").value;
   stepInBar = 0;
 });
-$("key").addEventListener("change", () => { state.key = $("key").value; });
+$("key").addEventListener("change",   () => { state.key   = $("key").value; });
+$("voice").addEventListener("change", () => { state.voice = $("voice").value; });
 
 /* ---------- PAN knob (vertical drag, double-click to centre) ---------- */
 const panKnob = $("panKnob");
