@@ -132,6 +132,7 @@
   .mem button.flash-save  { background: #5a1f1f; border-color: #6b2424; color: var(--hot); }
   .mem button.flash-load  { background: #1f4a3c; border-color: #1f5a48; color: var(--accent); }
   .mem button.flash-empty { opacity: 0.35; }
+  .mem button.store.on    { background: linear-gradient(#5a1f1f, #2a0c0c); color: var(--hot); border-color: #6b2424; }
   .hint {
     text-align: center;
     font-size: 9px; letter-spacing: 0.2em; color: #444;
@@ -249,13 +250,14 @@
         <button class="slot" data-slot="2">C</button>
         <button class="slot" data-slot="3">D</button>
       </div>
+      <button id="storeBtn" class="store">STORE</button>
       <div class="files">
-        <button id="exportBtn" title="Save current settings to a JSON file">↓ FILE</button>
-        <button id="importBtn" title="Load settings from a JSON file">↑ FILE</button>
+        <button id="exportBtn" title="Save current settings to a JSON file">Save</button>
+        <button id="importBtn" title="Load settings from a JSON file">Load</button>
         <input id="importFile" type="file" accept="application/json,.json" hidden>
       </div>
     </div>
-    <div class="hint">tap slot to recall · long-press to store</div>
+    <div class="hint">tap slot = recall · STORE then tap slot = store</div>
 
     <footer><a href="index.html">→ DS-4M synth</a></footer>
   </div>
@@ -798,21 +800,25 @@ function loadSlot(idx, el) {
   } catch (e) { flashSlot(el, "empty"); }
 }
 
+let storeMode = false;
+const storeBtn = $("storeBtn");
+function setStoreMode(on) {
+  storeMode = on;
+  storeBtn.classList.toggle("on", on);
+  storeBtn.textContent = on ? "STORE…" : "STORE";
+}
+storeBtn.addEventListener("click", () => setStoreMode(!storeMode));
+
 document.querySelectorAll(".slot").forEach(el => {
   const idx = +el.dataset.slot;
-  let timer = null, longPressed = false;
-  el.addEventListener("pointerdown", e => {
-    longPressed = false;
-    timer = setTimeout(() => { longPressed = true; saveSlot(idx, el); }, 500);
+  el.addEventListener("click", e => {
+    if (storeMode || e.shiftKey) {
+      saveSlot(idx, el);
+      setStoreMode(false);
+    } else {
+      loadSlot(idx, el);
+    }
   });
-  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
-  el.addEventListener("pointerup", e => {
-    cancel();
-    if (longPressed) return;
-    if (e.shiftKey) saveSlot(idx, el); else loadSlot(idx, el);
-  });
-  el.addEventListener("pointercancel", cancel);
-  el.addEventListener("pointerleave",  cancel);
 });
 refreshSlotMarkers();
 
