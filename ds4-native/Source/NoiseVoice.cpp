@@ -6,6 +6,9 @@ void NoiseVoice::prepare(double sampleRate) {
     sr = sampleRate;
     bp.prepare(sampleRate);
     peakBp.prepare(sampleRate);
+    /* Default modes; updateQs() re-selects per character. CYMBAL needs
+       LP because its measured spectrum is flat across 100..10000 Hz
+       with a sharp roll-off above (broadband + LPF), not band-passed. */
     bp.setMode(TPTSvf::Output::BP);
     peakBp.setMode(TPTSvf::Output::BP);
     reset();
@@ -22,12 +25,40 @@ void NoiseVoice::reset() {
 }
 
 void NoiseVoice::updateQs() {
-    /* Per-character voicing -- centre Q and the peaking emphasis. */
-    float bpQ = 1.0f, peakQ = 1.0f, peakMul = 1.4f, boost = 0.7f;
+    /* Per-character voicing based on direct spectral measurements of
+       the reference drum-synth software (LFO off, SWEEP off, hit at
+       default settings):
+
+       CYMBAL: averaged 1/3-octave spectrum 50-400 ms after the hit
+               is FLAT within +/- 1 dB from 100 Hz up to ~10 kHz,
+               then drops 22 dB at 10-14 kHz and 40 dB at 14-20 kHz.
+               It's broadband white noise lowpassed near 10 kHz --
+               NOT a narrow band-pass with peaking emphasis as we
+               had it before. So Q is low and the peaking emphasis
+               adds essentially nothing.
+
+       SNARE and NOISE: not yet measured against the reference. Kept
+       at moderate / wide settings; will refine as data comes in. */
+    float bpQ = 0.7f, peakQ = 1.0f, peakMul = 1.0f, boost = 0.0f;
     switch (character) {
-        case Character::Cymbal: bpQ = 6.0f; peakQ = 6.0f; peakMul = 1.4f; boost = 1.4f; break;
-        case Character::Snare:  bpQ = 2.4f; peakQ = 3.0f; peakMul = 1.3f; boost = 1.0f; break;
-        case Character::Noise:  bpQ = 0.9f; peakQ = 1.5f; peakMul = 1.0f; boost = 0.4f; break;
+        case Character::Cymbal:
+            /* Broadband white noise -> LP at ~10 kHz. Peaking BP off. */
+            bp.setMode    (TPTSvf::Output::LP);
+            peakBp.setMode(TPTSvf::Output::LP);
+            bpQ = 0.7f; peakQ = 0.7f; peakMul = 1.0f; boost = 0.0f;
+            break;
+        case Character::Snare:
+            /* Mid-band-passed noise with a body resonance. */
+            bp.setMode    (TPTSvf::Output::BP);
+            peakBp.setMode(TPTSvf::Output::BP);
+            bpQ = 1.8f; peakQ = 2.4f; peakMul = 1.3f; boost = 0.7f;
+            break;
+        case Character::Noise:
+            /* Broadband -- almost no shaping. */
+            bp.setMode    (TPTSvf::Output::LP);
+            peakBp.setMode(TPTSvf::Output::BP);
+            bpQ = 0.7f; peakQ = 1.0f; peakMul = 1.0f; boost = 0.1f;
+            break;
     }
     bp.setQ(bpQ);
     peakBp.setQ(peakQ);

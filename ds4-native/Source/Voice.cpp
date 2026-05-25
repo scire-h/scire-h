@@ -147,9 +147,13 @@ void Voice::trigger(float velocity) {
         noise.setCharacter(characterFor(channelIdx));
         float centerLo = 0.0f, centerHi = 0.0f;
         switch (characterFor(channelIdx)) {
-            case NoiseVoice::Character::Cymbal: centerLo = 2500.0f; centerHi = 9000.0f; break;
-            case NoiseVoice::Character::Snare:  centerLo =  600.0f; centerHi = 4200.0f; break;
-            case NoiseVoice::Character::Noise:  centerLo =  140.0f; centerHi = 2200.0f; break;
+            /* CYMBAL noise is LP'd at ~10 kHz on the reference; TUNING
+               only nudges the cutoff a bit. NOISE is also broadband.
+               SNARE keeps a true band-pass for the snare body
+               resonance. */
+            case NoiseVoice::Character::Cymbal: centerLo = 8000.0f; centerHi = 12000.0f; break;
+            case NoiseVoice::Character::Snare:  centerLo =  600.0f; centerHi =  4200.0f; break;
+            case NoiseVoice::Character::Noise:  centerLo = 3000.0f; centerHi = 10000.0f; break;
         }
         const float c  = centerLo + (centerHi - centerLo) * pTuning;
         const float wm = std::pow(2.0f, widthOct * 0.5f);
