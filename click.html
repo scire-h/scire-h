@@ -170,28 +170,7 @@
    ========================================================= */
 
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
-let actx = null, master = null, pinkBuf = null;
-
-/* 100 ms pink noise -- Paul Kellet's filter approximation of Voss-McCartney.
-   We pre-render once and reuse the buffer for every accent burst. */
-function makePinkBuffer(ctx, seconds) {
-  const len = Math.floor(ctx.sampleRate * seconds);
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
-  for (let i = 0; i < len; i++) {
-    const w = Math.random() * 2 - 1;
-    b0 = 0.99886 * b0 + w * 0.0555179;
-    b1 = 0.99332 * b1 + w * 0.0750759;
-    b2 = 0.96900 * b2 + w * 0.1538520;
-    b3 = 0.86650 * b3 + w * 0.3104856;
-    b4 = 0.55000 * b4 + w * 0.5329522;
-    b5 = -0.7616 * b5 - w * 0.0168980;
-    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
-    b6 = w * 0.115926;
-  }
-  return buf;
-}
+let actx = null, master = null;
 
 function ensureAudio() {
   if (actx) return;
@@ -199,7 +178,6 @@ function ensureAudio() {
   master = actx.createGain();
   master.gain.value = 0.55;
   master.connect(actx.destination);
-  pinkBuf = makePinkBuffer(actx, 0.1);
 }
 function unlock() { ensureAudio(); if (actx.state === "suspended") actx.resume(); }
 window.addEventListener("pointerdown", unlock, { once: true });
@@ -219,13 +197,12 @@ function noteFreq(note, octave) {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
-/* sample-accurate click voices:
-     accent (beat 1)  -- short pink-noise burst, slight high-pass for "pft"
-     beat   (2,3,4)   -- sine beep at 1100 Hz, same level as the accent
-     sub    (8th/16th)-- sine beep at 660 Hz, quieter
-   Both noise and sine are scheduled via .start(when) so the timing is
-   sample-accurate. */
-/* helper: schedule a sine "beep" of pitch f, peak gain a, length d */
+/* sample-accurate sine "beep" -- two pitches:
+     accent -- one octave above the base note   (beats 1 and 3)
+     click  -- base note                        (all other positions,
+                                                  whether on-beat or
+                                                  in-between, identical)
+   Scheduled via .start(when) so timing is sample-accurate. */
 function playSine(when, f, a, d) {
   const osc = actx.createOscillator();
   osc.type = "sine";
@@ -240,33 +217,9 @@ function playSine(when, f, a, d) {
 }
 
 function playClick(when, kind) {
-  if (kind === "accent") {
-    /* pink-noise burst -- the "pft" */
-    const dur = 0.040;
-    const src = actx.createBufferSource();
-    src.buffer = pinkBuf;
-    const hp = actx.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 250;
-    const g = actx.createGain();
-    g.gain.setValueAtTime(0.0001, when);
-    g.gain.exponentialRampToValueAtTime(1.0,    when + 0.001);
-    g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
-    src.connect(hp).connect(g).connect(master);
-    src.start(when);
-    src.stop(when + dur + 0.02);
-    /* + sine one octave above beats 2/3/4 so the downbeat has a pitch too */
-    playSine(when, noteFreq(state.key, 7), 0.65, 0.045);
-    return;
-  }
-  /* beat and sub share the same pitch.  Beats 2/3/4 sit clearly
-     below the beat-1 accent, sub-clicks sit clearly below those --
-     so a 1/8 read is "ONE! two three four", with the 8th notes
-     felt as a soft ghost pulse rather than a separate click. */
-  const f = noteFreq(state.key, 6);
-  const a = kind === "beat" ? 0.65 : 0.14;
-  const d = kind === "sub"  ? 0.012 : 0.040;
-  playSine(when, f, a, d);
+  const f = noteFreq(state.key, kind === "accent" ? 7 : 6);
+  const a = kind === "accent" ? 0.85 : 0.55;
+  playSine(when, f, a, 0.040);
 }
 
 /* visual flash scheduled at the audio time (UI doesn't need sample acc) */
@@ -298,13 +251,23 @@ function stepDuration() {
   return 60.0 / state.bpm / state.subdivision;
 }
 
+/* accent on beat 1, plus the half-bar beat when the bar is an even
+   meter of 4 beats or more.  i.e. 4/4 -> beats 1+3, 6/8 -> beats 1+4,
+   2/4 / 3/4 / 5/4 / 7/8 -> beat 1 only. */
+function isAccentBeat(beatInBar) {
+  if (beatInBar === 0) return true;
+  const n = state.beatsPerBar;
+  if (n >= 4 && n % 2 === 0) return beatInBar === n / 2;
+  return false;
+}
+
 function scheduler() {
   if (!isPlaying || !actx) return;
   const stepsPerBar = state.beatsPerBar * state.subdivision;
   while (nextTickTime < actx.currentTime + SCHEDULE_AHEAD) {
     const beatInBar = Math.floor(stepInBar / state.subdivision);
     const onBeat    = (stepInBar % state.subdivision) === 0;
-    const kind = !onBeat ? "sub" : (beatInBar === 0 ? "accent" : "beat");
+    const kind = (onBeat && isAccentBeat(beatInBar)) ? "accent" : "click";
     playClick(nextTickTime, kind);
     if (onBeat) flashBeat(beatInBar, nextTickTime);
     nextTickTime += stepDuration();
