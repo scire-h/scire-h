@@ -683,6 +683,16 @@
   .demo-btn.ghost { color: #aaa; }
   select.demo-btn { appearance: none; padding-right: 24px; min-width: 150px; }
   select.demo-btn option { background: #1a1a1a; color: #eee; }
+  .xport {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: #aaa; font-size: 11px; letter-spacing: 0.1em;
+  }
+  .xport input[type=range] {
+    width: 110px; accent-color: #6fc;
+  }
+  .xport .val {
+    color: #eee; font-family: monospace; min-width: 38px; text-align: right;
+  }
   #scope {
     border: 1px solid #000;
     border-radius: 3px;
@@ -718,9 +728,23 @@
     <div class="pads" id="pads"></div>
 
     <div class="utility">
-      <button id="demo"  class="demo-btn">▶ DEMO PATTERN</button>
+      <button id="demo"  class="demo-btn">▶ PLAY</button>
       <button id="stop"  class="demo-btn ghost">■ STOP</button>
       <button id="reset" class="demo-btn ghost">↻ INIT</button>
+      <select id="pattern" class="demo-btn" title="Drum pattern">
+        <option value="basic">PATTERN: BASIC 112</option>
+        <option value="ymo">PATTERN: YMO CLICK</option>
+      </select>
+      <label class="xport" title="Beats per minute">
+        BPM
+        <input id="bpm" type="range" min="60" max="200" step="1" value="112">
+        <span class="val" id="bpmVal">112</span>
+      </label>
+      <label class="xport" title="Master pitch / transpose (semitones)">
+        PITCH
+        <input id="pitch" type="range" min="-12" max="12" step="1" value="0">
+        <span class="val" id="pitchVal">+0</span>
+      </label>
       <select id="preset" class="demo-btn">
         <option value="">— PRESET —</option>
         <option value="syndrum">Syndrum Pew</option>
@@ -755,7 +779,10 @@
     + 0.15-0.4Hz の連続揺らぎを加え、毎回鳴り方が微妙に違うアナログ的な挙動になります。
     <br>
     左下 <b>BEAT SENSE</b> ON でパッドのクリック位置（中央寄り = 強打）が音量に反映。
-    <b>DEMO PATTERN</b> は 112 BPM の 4 ch ドラムビート、
+    <b>PLAY</b> でパターン再生（<b>PATTERN</b> で <i>BASIC</i> / <i>YMO CLICK</i> 切替）、
+    <b>BPM</b> 60-200・<b>PITCH</b> ±12 半音は再生中もリアルタイムに変更可。
+    タブを背面に回しても Web Worker タイマーが時計を打ち続けるので、テンポは揺らぎません
+    （OS のメディアキー／ロック画面の再生・停止にも対応）。
     <b>PRESET</b> で 5 種類のパッチに一括変更、<b>INIT</b> で工場出荷値に戻ります。
   </div>
 
@@ -828,7 +855,8 @@ function vcoFreq(knob01, octaveStep, beatTune01) {
   const semis = (knob01 - 0.5) * 24;
   const oct = (octaveStep - 3) * 12;
   const cents = beatTune01 * 200;
-  return 220 * Math.pow(2, (semis + oct + cents / 100) / 12);
+  const master = (typeof state !== "undefined" && state) ? (state.pitchOffset || 0) : 0;
+  return 220 * Math.pow(2, (semis + oct + master + cents / 100) / 12);
 }
 function makeChannel(idx, label) {
   return {
@@ -856,6 +884,9 @@ const state = {
   masterVolume: 0.55,
   power:    true,
   beatSense: false,
+  bpm:       112,
+  pitchOffset: 0,   // master transpose, semitones (-12..+12)
+  patternId: "basic",
   channels: [
     makeChannel(1, "CYMBAL"),
     makeChannel(2, "CYMBAL"),
@@ -1603,47 +1634,111 @@ window.addEventListener("pointerdown", unlock, { once: true });
 window.addEventListener("keydown",     unlock, { once: true });
 
 /* =========================================================
-   DEMO PATTERN
+   PATTERNS  (16-step 4ch  -- rows: HAT / OPEN / SNARE / KICK)
    ========================================================= */
-let demoTimer = null;
+const PATTERN_PATCHES = [
+  /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.75 },
+  /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.7  },
+  /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.85 },
+  /* Ch4 kick                  */ { vco:0.40, octave:2, attack:0, sustain:0.32, sweep:0.65, sweepDir:"down", waveform:"sine",                lfoOn:false, output:0.95 },
+];
+const PATTERNS = {
+  /* basic 4/4 backbeat -- the original DEMO PATTERN */
+  basic: {
+    bpm: 112,
+    steps: [
+      [1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0],
+      [0,0,0,0,0,0,0,0, 0,0,0,0,0,0,1,0],
+      [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,1],
+      [1,0,0,0,0,0,0,0, 1,0,0,1,0,0,0,0],
+    ],
+  },
+  /* YMO CLICK -- Rydeen / Technopolis flavour: relentless 16th hat,
+     2/4 snare, syncopated kick, occasional open accent on the "&" of 4 */
+  ymo: {
+    bpm: 130,
+    steps: [
+      /* HAT 16ths */ [1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1],
+      /* OPEN      */ [0,0,0,0,0,0,0,1, 0,0,0,0,0,0,0,1],
+      /* SNARE 2/4 */ [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,0],
+      /* KICK syn  */ [1,0,0,0,0,0,1,0, 0,0,1,0,0,0,1,0],
+    ],
+  },
+};
+
+/* =========================================================
+   TRANSPORT  --  Web-Audio lookahead scheduler driven by a
+   Web Worker (so tab-throttling can't make the beat stutter
+   when the page is in the background).
+   ========================================================= */
+let tickWorker = null;
+let nextStepTime = 0;          // AudioContext time of the next 16th
+let currentStep  = 0;
+let isPlaying    = false;
+let scopePulseUntil = 0;       // until when to keep ticking the scope
+const LOOKAHEAD_MS  = 25;      // worker poll interval
+const SCHEDULE_AHEAD = 0.12;   // seconds of audio we schedule in advance
+
+function ensureTickWorker() {
+  if (tickWorker) return tickWorker;
+  /* inline worker -- setInterval inside a Worker is NOT throttled */
+  const src = `let id=null;onmessage=e=>{if(e.data==='start'){if(!id)id=setInterval(()=>postMessage('t'),${LOOKAHEAD_MS});}else if(e.data==='stop'){if(id){clearInterval(id);id=null;}}};`;
+  const url = URL.createObjectURL(new Blob([src], { type: "application/javascript" }));
+  tickWorker = new Worker(url);
+  tickWorker.onmessage = scheduler;
+  return tickWorker;
+}
+
+function stepDuration() {
+  return 60.0 / Math.max(20, state.bpm) / 4; // 16th note in seconds
+}
+
+function scheduleStep(stepIdx, when) {
+  const pat = PATTERNS[state.patternId] || PATTERNS.basic;
+  const delay = Math.max(0, when - actx.currentTime);
+  for (let i = 0; i < 4; i++) {
+    if (pat.steps[i][stepIdx]) {
+      const ch = state.channels[i];
+      /* schedule audio + UI flash at the exact lookahead time */
+      setTimeout(() => {
+        playChannel(ch, 0.9);
+        flashPad(ch);
+      }, delay * 1000);
+    }
+  }
+}
+
+function scheduler() {
+  if (!isPlaying || !actx) return;
+  while (nextStepTime < actx.currentTime + SCHEDULE_AHEAD) {
+    scheduleStep(currentStep, nextStepTime);
+    nextStepTime += stepDuration();
+    currentStep  = (currentStep + 1) % 16;
+  }
+}
+
 function startDemo() {
   ensureAudio();
   if (actx.state === "suspended") actx.resume();
-  stopDemo();
-  /* dial in cymbal / tom / snare / kick so the pattern reads as drums */
-  const PATCHES = [
-    /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.75 },
-    /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.7  },
-    /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.85 },
-    /* Ch4 kick                  */ { vco:0.40, octave:2, attack:0, sustain:0.32, sweep:0.65, sweepDir:"down", waveform:"sine",  lfoOn:false, output:0.95 },
-  ];
-  state.channels.forEach((ch,i) => applyPreset(ch, PATCHES[i]));
-
-  /* 16-step pattern */
-  const pat = [
-    /* HAT  */ [1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0],
-    /* OPEN */ [0,0,0,0,0,0,0,0, 0,0,0,0,0,0,1,0],
-    /* SNR  */ [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,1],
-    /* KICK */ [1,0,0,0,0,0,0,0, 1,0,0,1,0,0,0,0],
-  ];
-  const bpm = 112;
-  const stepMs = 60000 / bpm / 4; // 16th notes
-  let step = 0;
-  const tick = () => {
-    for (let i=0;i<4;i++) {
-      if (pat[i][step]) {
-        playChannel(state.channels[i], 0.9);
-        flashPad(state.channels[i]);
-      }
-    }
-    step = (step + 1) % 16;
-  };
-  tick();
-  demoTimer = setInterval(tick, stepMs);
+  if (isPlaying) return;
+  /* apply the drum kit patches for the chosen pattern */
+  state.channels.forEach((ch, i) => applyPreset(ch, PATTERN_PATCHES[i]));
+  currentStep  = 0;
+  nextStepTime = actx.currentTime + 0.05;
+  isPlaying    = true;
+  setMediaSession("playing");
+  document.getElementById("demo").textContent = "❚❚ PAUSE";
+  ensureTickWorker().postMessage("start");
 }
 function stopDemo() {
-  if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+  if (tickWorker) tickWorker.postMessage("stop");
+  isPlaying = false;
+  setMediaSession("paused");
+  const b = document.getElementById("demo");
+  if (b) b.textContent = "▶ PLAY";
 }
+function togglePlay() { isPlaying ? stopDemo() : startDemo(); }
+
 function flashPad(ch) {
   if (!ch._pad) return;
   ch._pad.classList.add("hit");
@@ -1653,8 +1748,59 @@ function flashPad(ch) {
     ch._led.classList.remove("on");
   }, 100);
 }
-document.getElementById("demo").addEventListener("click", startDemo);
+
+document.getElementById("demo").addEventListener("click", togglePlay);
 document.getElementById("stop").addEventListener("click", stopDemo);
+
+/* ---------- BPM / PITCH / PATTERN live controls ---------- */
+const bpmInput = document.getElementById("bpm");
+const bpmVal   = document.getElementById("bpmVal");
+const pitchInput = document.getElementById("pitch");
+const pitchVal   = document.getElementById("pitchVal");
+const patternSel = document.getElementById("pattern");
+
+bpmInput.addEventListener("input", () => {
+  state.bpm = +bpmInput.value;
+  bpmVal.textContent = state.bpm;
+});
+pitchInput.addEventListener("input", () => {
+  state.pitchOffset = +pitchInput.value;
+  const s = state.pitchOffset;
+  pitchVal.textContent = (s > 0 ? "+" : s < 0 ? "" : "+") + s;
+});
+patternSel.addEventListener("change", () => {
+  state.patternId = patternSel.value;
+  /* if the pattern carries its own tempo, adopt it (user can still override) */
+  const p = PATTERNS[state.patternId];
+  if (p && p.bpm) {
+    state.bpm = p.bpm;
+    bpmInput.value = p.bpm;
+    bpmVal.textContent = p.bpm;
+  }
+  currentStep = 0;
+});
+
+/* ---------- MediaSession  (lockscreen / OS media keys) ---------- */
+function setMediaSession(playback) {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title:  "DS-4M Pattern",
+      artist: "ULT-SOUND Web Clone",
+      album:  "scire-h",
+    });
+    navigator.mediaSession.playbackState = playback; // "playing" | "paused" | "none"
+    navigator.mediaSession.setActionHandler("play",  () => startDemo());
+    navigator.mediaSession.setActionHandler("pause", () => stopDemo());
+    navigator.mediaSession.setActionHandler("stop",  () => stopDemo());
+  } catch (e) { /* not supported -- harmless */ }
+}
+
+/* ---------- keep AudioContext alive on tab visibility flips ---------- */
+document.addEventListener("visibilitychange", () => {
+  if (!actx) return;
+  if (actx.state === "suspended") actx.resume();
+});
 
 /* =========================================================
    PRESETS
