@@ -744,11 +744,10 @@
     <b>VCO TUNING</b>（音名 C…B のノブ）／ <b>BEAT TUNE</b> 0-200cent 上方デチューン ／
     <b>OCTAVE 1-5</b> オクターブシフト ／
     <b>ATTACK</b> 1〜350ms 立ち上がり ／ <b>SUSTAIN</b> 30ms〜4.5s 減衰時間 ／
-    <b>波形セレクタ ∿/△/⊓/⋀</b> サイン／三角／矩形／鋸（クリック / 右クリックで循環）／
+    <b>ソース 3 択 CYMBAL / PULSE / SIN</b> (クリックで循環) — 排他選択。CYMBAL = 広帯域 LP ノイズ単独 (VCO 停止)、PULSE = bandlimited 矩形波単独、SIN = 純粋サイン波単独 ／
     <b>LFO LEVEL</b>（ノブ：振幅 20-200cent）／ <b>LFO FREQUENCY</b>（フェーダー：0.8〜23Hz、∿/OFF で有効化）／
-    <b>SWEEP WIDTH 0-6 OCT</b> ピッチエンベロープ幅（<b>UP/OFF/DOWN</b> で方向）／
+    <b>SWEEP WIDTH 0-6 OCT</b> ピッチエンベロープ幅（<b>UP/OFF/DOWN</b> で方向、RC 時間定数 45ms 固定）／
     <b>OUTPUT</b> 出力 ／ <b>SENSE LEVEL</b> パッド感度 ／
-    <b>NOISE</b> Ch ごとのバンドパスノイズ（CYMBAL/SNARE/NOISE 特性）を ON/OFF ／
     <b>MULTI VCO</b> 隣接 ch を 7cent デチューンで 4 オシレーター・ユニゾン化。
     <br>
     内部は VCO+Noise → 共鳴 LPF(VCF) → 飽和付き VCA の正統な減算合成構成。各 VCO に ±3cent のヒット毎ドリフト
@@ -840,8 +839,8 @@ function makeChannel(idx, label) {
     octave:     3,
     attack:     0.0,
     sustain:    0.45,
-    waveform:   "sine",       // sine | triangle | square | sawtooth
-    noiseOn:    true,         // mix per-channel noise voice in?
+    waveform:   "sin",        // cymbal | pulse | sin   (3-way mutually exclusive, SDS-2002 reference)
+    noiseOn:    false,        // legacy -- ignored by the new voice (CYMBAL mode covers the noise path)
     lfoRate:    0.3,
     lfoDepth:   0.5,
     lfoOn:      false,
@@ -864,10 +863,12 @@ const state = {
   ],
 };
 /* sensible defaults that match each labeled voice */
-Object.assign(state.channels[0], { vco: 0.78, octave: 4, sweep: 0.30, sweepDir:"down", waveform:"sine",     noiseOn:true,  sustain:0.12, attack:0.0, lfoRate:0.3 });
-Object.assign(state.channels[1], { vco: 0.70, octave: 4, sweep: 0.45, sweepDir:"down", waveform:"sine",     noiseOn:true,  sustain:0.22, attack:0.0, lfoRate:0.3 });
-Object.assign(state.channels[2], { vco: 0.50, octave: 3, sweep: 0.30, sweepDir:"down", waveform:"triangle", noiseOn:true,  sustain:0.18, attack:0.0, lfoRate:0.3 });
-Object.assign(state.channels[3], { vco: 0.30, octave: 2, sweep: 0.55, sweepDir:"down", waveform:"sine",     noiseOn:false, sustain:0.30, attack:0.0, lfoRate:0.3 });
+/* Per-channel defaults. Source picks one of three mutually exclusive
+   modes (CYMBAL / PULSE / SIN), matching the SDS-2002 reference. */
+Object.assign(state.channels[0], { vco: 0.85, octave: 4, sweep: 0.55, sweepDir:"down", waveform:"sin",    sustain:0.18, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[1], { vco: 0.65, octave: 4, sweep: 0.55, sweepDir:"down", waveform:"sin",    sustain:0.22, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[2], { vco: 0.45, octave: 3, sweep: 0.30, sweepDir:"down", waveform:"pulse",  sustain:0.18, attack:0.0, lfoRate:0.3 });
+Object.assign(state.channels[3], { vco: 0.25, octave: 2, sweep: 0.55, sweepDir:"down", waveform:"sin",    sustain:0.32, attack:0.0, lfoRate:0.3 });
 
 /* =========================================================
    VOICE
@@ -910,18 +911,25 @@ function playChannel(ch, velocity=1) {
 
   const now      = actx.currentTime;
   const base     = vcoFreq(ch.vco, ch.octave, ch.beatTune);
-  const atk      = 0.001 + Math.pow(ch.attack, 1.4) * 0.35;     // 1-350 ms
-  const decay    = 0.03 + Math.pow(ch.sustain, 1.4) * 4.5;      // 30 ms-4.5 s
+  const atk      = 0.001 + Math.pow(ch.attack, 1.4) * 0.35;
+  /* Reference measurement (default SUSTAIN, broadband LPF on hit
+     amplitude envelope) gave tau = 659 ms. Map slider 0..1 to that
+     range so 0.5 sits near the reference default. */
+  const decay    = 0.03 + Math.pow(ch.sustain, 1.4) * 3.5;       // 30 ms .. 3.5 s
   const sense    = state.beatSense ? Math.max(0.15, velocity) : 1.0;
   const peak     = (0.05 + ch.output * 0.95) *
                    (0.25 + ch.senseLevel * 0.75) * sense;
-  const sweepT   = 0.025 + Math.pow(ch.sweep, 0.85) * 0.25;     // 25-275 ms
+  /* RC time constant for the pitch-sweep envelope is fixed on the
+     real device -- only the start frequency moves with WIDTH. */
+  const sweepT   = 0.045;
 
-  /* ---------- VCA (with saturation) ---------- */
+  /* ---------- VCA (with soft saturation) ----------
+     Linear attack, exponential decay -- analog RC behaviour. The
+     DS-4 has no VCF on the VCO path, so the VCA is the only stage
+     between the source and the master bus. */
   const vca = actx.createGain();
   vca.gain.setValueAtTime(0, now);
   vca.gain.linearRampToValueAtTime(peak, now + atk);
-  /* exponential decay -- approximate analog RC envelope */
   vca.gain.exponentialRampToValueAtTime(0.0008, now + atk + decay);
 
   const sat = actx.createWaveShaper();
@@ -929,21 +937,11 @@ function playChannel(ch, velocity=1) {
   sat.oversample = "2x";
   vca.connect(sat).connect(master);
 
-  /* ---------- VCF (resonant LPF with its own envelope) ----------
-     Opens wide at hit, closes during decay. This gives the analog
-     "darkening" you hear as a drum hit dies away.                 */
-  const vcf = actx.createBiquadFilter();
-  vcf.type = "lowpass";
-  vcf.Q.value = 1.6 + ch.sweep * 4.0;    // sweep also controls resonance
-  const fOpen  = 18000;
-  const fClose = 220 + 1400 * ch.sustain; // longer sustain = brighter rest
-  vcf.frequency.setValueAtTime(fOpen, now);
-  vcf.frequency.exponentialRampToValueAtTime(
-    Math.max(120, fClose), now + Math.max(0.05, decay * 0.9));
-  vcf.connect(vca);
-
-  /* ---------- attack click (analog stick transient) ---------- */
-  if (ch.attack < 0.05) {
+  /* ---------- attack click (only when CYMBAL or PULSE, very short
+                 ATTACK) -- provides the stick transient. SIN at low
+                 ATTACK doesn't get a click since the reference
+                 measurement showed a clean rise-to-peak in 1 ms. */
+  if (ch.waveform !== "sin" && ch.attack < 0.05) {
     const click = actx.createBufferSource();
     const len   = Math.floor(actx.sampleRate * 0.012);
     const cb    = actx.createBuffer(1, len, actx.sampleRate);
@@ -953,43 +951,47 @@ function playChannel(ch, velocity=1) {
     }
     click.buffer = cb;
     const cg  = actx.createGain();
-    cg.gain.value = 0.30 * (1 - ch.attack / 0.05);
+    cg.gain.value = 0.25 * (1 - ch.attack / 0.05);
     const chp = actx.createBiquadFilter();
     chp.type = "highpass";
     chp.frequency.value = 1800;
-    click.connect(chp).connect(cg).connect(vcf);
+    click.connect(chp).connect(cg).connect(vca);
     click.start(now);
     click.stop(now + 0.02);
   }
 
-  /* ---------- VCO(s) ---------- */
-  spawnVCO(base, sweepT, ch, vcf, decay, 0);
-  if (ch.multiVCO) {
-    /* analog "multi-VCO" — three slightly detuned copies + 1 from neighbour */
-    spawnVCO(base, sweepT, ch, vcf, decay, +7);  // +7 cents
-    spawnVCO(base, sweepT, ch, vcf, decay, -7);  // -7 cents
-    const neighbor = state.channels[(ch.idx + 2) % 4];
-    const nf = vcoFreq(neighbor.vco, neighbor.octave, neighbor.beatTune);
-    spawnVCO(nf, sweepT, ch, vcf, decay, 0);
-  }
-
-  /* ---------- NOISE ---------- */
-  if (ch.noiseOn) {
-    spawnNoise(base, sweepT, ch, vcf, decay);
+  /* ---------- source selection (3-way mutually exclusive) ----------
+     SDS-2002 reference architecture: at any one time the channel
+     emits exactly one of CYMBAL noise, PULSE square, or SIN. There
+     is no VCO + noise mixing on a single channel. */
+  if (ch.waveform === "cymbal") {
+    spawnNoise(base, sweepT, ch, vca, decay);
+  } else {
+    spawnVCO(base, sweepT, ch, vca, decay, 0);
+    if (ch.multiVCO) {
+      spawnVCO(base, sweepT, ch, vca, decay, +7);
+      spawnVCO(base, sweepT, ch, vca, decay, -7);
+      const neighbor = state.channels[(ch.idx + 2) % 4];
+      const nf = vcoFreq(neighbor.vco, neighbor.octave, neighbor.beatTune);
+      spawnVCO(nf, sweepT, ch, vca, decay, 0);
+    }
   }
 }
 
 function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
   const now = actx.currentTime;
   const osc = actx.createOscillator();
-  osc.type = ch.waveform;          // sine | triangle | square | sawtooth
+  /* SDS-2002 reference: PULSE measures as a bandlimited 50% duty
+     square (H1 + odd harmonics 1/n), SIN as a mathematically pure
+     sine (H2 floor at -118 dB). Web Audio's native types match. */
+  osc.type = (ch.waveform === "pulse") ? "square" : "sine";
 
   /* per-channel analog drift -- new value every hit */
-  const hitDrift  = (Math.random() - 0.5) * 6;     // ±3 cents per hit
-  const slowDrift = chDriftCents(ch.idx);          // random walk ±3 cents
+  const hitDrift  = (Math.random() - 0.5) * 6;
+  const slowDrift = chDriftCents(ch.idx);
   osc.detune.value = hitDrift + slowDrift + (extraCents || 0);
 
-  /* pitch sweep (0-6 oct WIDTH) */
+  /* pitch sweep (0-6 oct WIDTH, fixed RC time) */
   const w = 6 * ch.sweep;
   let f0 = base, f1 = base;
   if (ch.sweepDir === "down")     { f0 = base * Math.pow(2, w); f1 = base; }
@@ -997,45 +999,48 @@ function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
   osc.frequency.setValueAtTime(Math.max(20, f0), now);
   osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), now + sweepTime);
 
-  /* slow continuous drift LFO -- "analog warmth" wobble */
+  /* slow continuous drift -- analog VCO instability wobble */
   const wobble = actx.createOscillator();
   wobble.type = "sine";
-  wobble.frequency.value = 0.15 + Math.random() * 0.25; // 0.15-0.4 Hz
+  wobble.frequency.value = 0.15 + Math.random() * 0.25;
   const wobbleG = actx.createGain();
-  wobbleG.gain.value = 1.5;        // ±1.5 cents
+  wobbleG.gain.value = 1.5;
   wobble.connect(wobbleG).connect(osc.detune);
   wobble.start(now);
   wobble.stop(now + decay + 0.2);
 
-  /* LFO vibrato (panel control) */
   if (ch.lfoOn) {
     const lfo = actx.createOscillator();
     lfo.type = "sine";
     lfo.frequency.value = 0.8 + ch.lfoRate * 22;
     const lfoG = actx.createGain();
-    lfoG.gain.value = 20 + ch.lfoDepth * 180;   // 20-200 cents (up to 2 semitones)
+    lfoG.gain.value = 20 + ch.lfoDepth * 180;
     lfo.connect(lfoG).connect(osc.detune);
     lfo.start(now);
     lfo.stop(now + decay + 0.2);
   }
 
-  /* per-waveform attenuation so square/saw don't blow out the mix */
+  /* Source-relative level: square is much louder than sine of the
+     same peak amplitude due to its harmonic content. */
   const lev = actx.createGain();
-  lev.gain.value = (ch.waveform === "sine"     ? 1.0 :
-                    ch.waveform === "triangle" ? 0.85 :
-                    ch.waveform === "square"   ? 0.45 :
-                    /* sawtooth */               0.55);
+  lev.gain.value = (ch.waveform === "pulse") ? 0.45 : 1.0;
   osc.connect(lev).connect(dest);
   osc.start(now);
   osc.stop(now + decay + 0.1);
 }
 
-/* per-channel noise voicing tables, matching the CYMBAL / SNARE / NOISE
-   silk-screen pills on the real DS-4M ATTACK column.                  */
+/* Per-channel noise voicings driven by direct spectral measurements
+   of the SDS-2002 reference (LFO off, SWEEP off):
+
+   CYMBAL: 1/3-octave averaged spectrum is FLAT within +/-1 dB from
+           100 Hz to ~10 kHz, then drops 22 dB by 14 kHz. It's
+           broadband white noise lowpassed near 10 kHz -- not a
+           narrow band-pass.
+   SNARE/NOISE: not yet measured; sensible defaults for now. */
 const NOISE_VOICE = {
-  CYMBAL: { centerLo: 2500, centerHi: 9000, q: 6.0, peakGain: 14, peakQ: 6, bodyGain: 0.05, bodyFollow: 0.5 },
-  SNARE:  { centerLo:  600, centerHi: 4200, q: 2.4, peakGain:  9, peakQ: 3, bodyGain: 0.35, bodyFollow: 1.0 },
-  NOISE:  { centerLo:  140, centerHi: 2200, q: 0.9, peakGain:  4, peakQ: 1.5, bodyGain: 0.12, bodyFollow: 0.0 },
+  CYMBAL: { mode: "lowpass",  cutLo:  9000, cutHi: 11000, q: 0.7, bodyGain: 0.0,  bodyFollow: 0.0 },
+  SNARE:  { mode: "bandpass", cutLo:   600, cutHi:  4200, q: 2.4, bodyGain: 0.35, bodyFollow: 1.0 },
+  NOISE:  { mode: "lowpass",  cutLo:  3000, cutHi: 10000, q: 0.7, bodyGain: 0.12, bodyFollow: 0.0 },
 };
 
 function spawnNoise(base, sweepTime, ch, dest, decay) {
@@ -1046,39 +1051,41 @@ function spawnNoise(base, sweepTime, ch, dest, decay) {
   n.buffer = getNoiseBuf();
   n.loop = true;
 
-  /* band-pass + resonant peak make the noise character */
-  const bp = actx.createBiquadFilter();
-  bp.type = "bandpass";
-  bp.Q.value = v.q;
+  /* Single filter: LP for broadband CYMBAL/NOISE characters, BP for
+     SNARE's body resonance. The peaking-emphasis BP we had before
+     was unjustified by the reference spectrum and added noticeable
+     resonance that didn't belong. */
+  const filter = actx.createBiquadFilter();
+  filter.type = v.mode;
+  filter.Q.value = v.q;
 
-  const peak = actx.createBiquadFilter();
-  peak.type = "peaking";
-  peak.gain.value = v.peakGain;
-  peak.Q.value = v.peakQ;
-
-  /* sweep the filter centre with the WIDTH slider (also 0..6 OCT) */
-  const w = Math.pow(2, 6 * ch.sweep * 0.5); // half the VCO width feels right
-  const center = v.centerLo + (v.centerHi - v.centerLo) * ch.vco;
+  /* TUNING positions the filter centre between cutLo and cutHi.
+     For broadband CYMBAL this only nudges the LP corner; for SNARE
+     it moves the BP body resonance. SWEEP WIDTH expands the range
+     on either side. */
+  const w = Math.pow(2, 6 * ch.sweep * 0.5);
+  const center = v.cutLo + (v.cutHi - v.cutLo) * ch.vco;
   let c0 = center, c1 = center;
   if (ch.sweepDir === "down") { c0 = center * w; c1 = center; }
   else if (ch.sweepDir === "up") { c0 = center; c1 = center * w; }
-  bp.frequency.setValueAtTime(Math.max(60, c0), now);
-  bp.frequency.exponentialRampToValueAtTime(Math.max(60, c1), now + sweepTime);
-  peak.frequency.setValueAtTime(Math.max(60, c0 * 1.3), now);
-  peak.frequency.exponentialRampToValueAtTime(Math.max(60, c1 * 1.3), now + sweepTime);
+  filter.frequency.setValueAtTime(Math.max(60, c0), now);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(60, c1), now + sweepTime);
 
-  /* body tone underneath -- prominent for SNARE, almost absent for CYMBAL */
-  const osc = actx.createOscillator();
-  osc.type = "triangle";
-  osc.frequency.setValueAtTime(base * (1 + v.bodyFollow * 0.6), now);
-  osc.frequency.exponentialRampToValueAtTime(base, now + sweepTime);
-  const ng = actx.createGain();
-  ng.gain.value = v.bodyGain;
-  osc.connect(ng).connect(dest);
-  osc.start(now);
-  osc.stop(now + tail);
+  /* Body tone underneath (only for SNARE / NOISE; CYMBAL is pure
+     noise per the reference). */
+  if (v.bodyGain > 0.0) {
+    const osc = actx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(base * (1 + v.bodyFollow * 0.6), now);
+    osc.frequency.exponentialRampToValueAtTime(base, now + sweepTime);
+    const ng = actx.createGain();
+    ng.gain.value = v.bodyGain;
+    osc.connect(ng).connect(dest);
+    osc.start(now);
+    osc.stop(now + tail);
+  }
 
-  n.connect(bp).connect(peak).connect(dest);
+  n.connect(filter).connect(dest);
   n.start(now);
   n.stop(now + tail);
 }
@@ -1324,9 +1331,13 @@ function colAttack(ch) {
   c.appendChild(el("div", "pill", "SUSTAIN"));
   c.appendChild(sliderGroup(ch, "sustain", { scale: ["LONG","","","","","","SHORT"] }));
   c.appendChild(el("div", "pill", ch.label || ""));
+  /* 3-way source selector matching the SDS-2002 reference panel:
+     CYMBAL = broadband-LP noise (no VCO), PULSE = bandlimited
+     50% square (no noise), SIN = pure sine. Mutually exclusive,
+     replacing the previous 4-way sine/tri/sqr/saw + noise toggle. */
   c.appendChild(vSwitch(ch, "waveform",
-    ["sine","triangle","square","sawtooth"],
-    { tall4: true, labels: ["∿","△","⊓","⋀"] }));
+    ["cymbal","pulse","sin"],
+    { tall: true, labels: ["CYMBAL","PULSE","SIN"] }));
   return c;
 }
 function colLFO(ch) {
@@ -1378,17 +1389,10 @@ function senseColumn(chTop, chBot, showHeader=false, showBeatSense=false) {
     // MULTI VCO horizontal switch (pull simulated)
     const m = hSwitch(() => ch.multiVCO, v => ch.multiVCO = v);
     cell.appendChild(m);
-    /* NOISE on/off toggle -- mixes the channel-specific noise voice */
-    const nrow = el("div");
-    nrow.style.display = "flex";
-    nrow.style.alignItems = "center";
-    nrow.style.gap = "3px";
-    nrow.style.marginTop = "2px";
-    const nlbl = el("div", "lbl s", "NOISE");
-    nlbl.style.fontSize = "6.5px";
-    nrow.appendChild(nlbl);
-    nrow.appendChild(hSwitch(() => ch.noiseOn, v => ch.noiseOn = v));
-    cell.appendChild(nrow);
+    /* (NOISE on/off toggle removed -- with the new 3-way source
+       selector, CYMBAL waveform IS the noise path, so a separate
+       toggle is redundant. The noiseOn state is kept in ch for
+       legacy preset compatibility but the voice ignores it.) */
     cell.appendChild(el("div", "lbl s", "SENSE LEVEL"));
     cell.appendChild(knob(ch, "senseLevel", { small: true }));
     cell.appendChild(el("div", "ticks", "<span>LOW</span><span>HIGH</span>"));
@@ -1610,12 +1614,13 @@ function startDemo() {
   ensureAudio();
   if (actx.state === "suspended") actx.resume();
   stopDemo();
-  /* dial in cymbal / tom / snare / kick so the pattern reads as drums */
+  /* Demo kit: showcase all three sources. CYMBAL for the hat-like
+     parts, PULSE for the snare crack, SIN for the kick. */
   const PATCHES = [
-    /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.75 },
-    /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.7  },
-    /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.85 },
-    /* Ch4 kick                  */ { vco:0.40, octave:2, attack:0, sustain:0.32, sweep:0.65, sweepDir:"down", waveform:"sine",  lfoOn:false, output:0.95 },
+    /* Ch1 closed hat */ { vco:0.50, octave:3, attack:0, sustain:0.08, sweep:0.0,  sweepDir:"off",  waveform:"cymbal", output:0.55 },
+    /* Ch2 open hat   */ { vco:0.50, octave:3, attack:0, sustain:0.28, sweep:0.0,  sweepDir:"off",  waveform:"cymbal", output:0.55 },
+    /* Ch3 snare      */ { vco:0.55, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"pulse",  output:0.75 },
+    /* Ch4 kick       */ { vco:0.25, octave:2, attack:0, sustain:0.30, sweep:0.55, sweepDir:"down", waveform:"sin",    output:0.92 },
   ];
   state.channels.forEach((ch,i) => applyPreset(ch, PATCHES[i]));
 
@@ -1674,15 +1679,15 @@ function refreshChannel(ch) {
 }
 const PRESETS = {
   syndrum: { vco:0.55, octave:3, attack:0, sustain:0.40, sweep:0.85, sweepDir:"down",
-             waveform:"sine", lfoOn:false, lfoRate:0.3, lfoDepth:0.4, output:0.85 },
+             waveform:"sin",    lfoOn:false, lfoRate:0.3, lfoDepth:0.4, output:0.85 },
   toms:    { vco:0.40, octave:2, attack:0, sustain:0.65, sweep:0.55, sweepDir:"down",
-             waveform:"sine", lfoOn:false, output:0.85 },
+             waveform:"sin",    lfoOn:false, output:0.85 },
   snare:   { vco:0.55, octave:3, attack:0, sustain:0.20, sweep:0.30, sweepDir:"down",
-             waveform:"sine", noiseOn:true, lfoOn:false, output:0.85 },
-  hat:     { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.20, sweepDir:"down",
-             waveform:"sine", noiseOn:true, lfoOn:false, output:0.80 },
+             waveform:"pulse",  lfoOn:false, output:0.75 },
+  hat:     { vco:0.50, octave:3, attack:0, sustain:0.08, sweep:0.0,  sweepDir:"off",
+             waveform:"cymbal", lfoOn:false, output:0.60 },
   cosmic:  { vco:0.35, octave:2, attack:0, sustain:0.70, sweep:0.95, sweepDir:"up",
-             waveform:"sine", lfoOn:true, lfoRate:0.45, lfoDepth:0.6, output:0.85 },
+             waveform:"sin",    lfoOn:true,  lfoRate:0.45, lfoDepth:0.6, output:0.85 },
 };
 document.getElementById("preset").addEventListener("change", e => {
   const p = PRESETS[e.target.value];
