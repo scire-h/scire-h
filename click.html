@@ -112,6 +112,30 @@
     font-size: 11px;
   }
   .knob.active .ind { stroke: var(--hot); }
+
+  /* memory slots + file save/load */
+  .mem {
+    display: flex; gap: 12px; align-items: center; justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .mem .slots, .mem .files { display: flex; gap: 6px; }
+  .mem button {
+    background: #1a1a1a; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 12px; font: inherit; font-size: 11px;
+    letter-spacing: 0.18em; cursor: pointer;
+    min-width: 40px;
+    user-select: none; touch-action: manipulation;
+  }
+  .mem button:hover  { background: #232323; }
+  .mem button.slot.filled { color: var(--accent); border-color: #1f5a48; }
+  .mem button.flash-save  { background: #5a1f1f; border-color: #6b2424; color: var(--hot); }
+  .mem button.flash-load  { background: #1f4a3c; border-color: #1f5a48; color: var(--accent); }
+  .mem button.flash-empty { opacity: 0.35; }
+  .hint {
+    text-align: center;
+    font-size: 9px; letter-spacing: 0.2em; color: #444;
+  }
   footer {
     text-align: center;
     font-size: 10px; color: #444; letter-spacing: 0.15em;
@@ -217,6 +241,21 @@
     </div>
 
     <div class="knobs" id="knobs"></div>
+
+    <div class="mem">
+      <div class="slots">
+        <button class="slot" data-slot="0">A</button>
+        <button class="slot" data-slot="1">B</button>
+        <button class="slot" data-slot="2">C</button>
+        <button class="slot" data-slot="3">D</button>
+      </div>
+      <div class="files">
+        <button id="exportBtn" title="Save current settings to a JSON file">↓ FILE</button>
+        <button id="importBtn" title="Load settings from a JSON file">↑ FILE</button>
+        <input id="importFile" type="file" accept="application/json,.json" hidden>
+      </div>
+    </div>
+    <div class="hint">tap slot to recall · long-press to store</div>
 
     <footer><a href="index.html">→ DS-4M synth</a></footer>
   </div>
@@ -571,7 +610,7 @@ function setupKnob(host, spec) {
   const ind  = host.querySelector(".ind");
   const cap  = host.querySelector(".cap");
   const min  = spec.min, max = spec.max;
-  let value  = spec.default;
+  let value  = spec.read ? spec.read() : spec.default;
 
   function render() {
     /* -135deg ... +135deg over the value range */
@@ -620,50 +659,164 @@ function panFormat(v) {
 }
 function cutoffFromKnob(v) { return Math.round(200 * Math.pow(100, v / 100)); }
 
+/* inverse map: cutoff Hz -> 0..100 slider value */
+function knobFromCutoff(hz) {
+  return Math.log(Math.max(1, hz) / 200) / Math.log(100) * 100;
+}
+
 const KNOBS = [
   { id: "kVOL", label: "VOL",  min:   0, max: 100, default: 55,
     format: v => Math.round(v),
+    read: () => state.volume * 100,
     onChange: v => {
       state.volume = v / 100;
       if (master) master.gain.setTargetAtTime(state.volume, actx.currentTime, 0.01);
     } },
   { id: "kPAN", label: "PAN",  min: -50, max:  50, default: 0,
     format: panFormat,
+    read: () => state.pan * 50,
     onChange: v => {
       state.pan = v / 50;
       if (panner) panner.pan.value = state.pan;
     } },
   { id: "kDEC", label: "DECAY", min: 10, max: 300, default: 40,
     format: v => Math.round(v),
+    read: () => state.decay * 1000,
     onChange: v => { state.decay = v / 1000; } },
   { id: "kREL", label: "REL",  min:   0, max: 500, default: 60,
     format: v => Math.round(v),
+    read: () => state.release * 1000,
     onChange: v => { state.release = v / 1000; } },
   { id: "kCUT", label: "CUT",  min:   0, max: 100, default: 100,
     format: v => cutoffFromKnob(v),
+    read: () => knobFromCutoff(state.cutoff),
     onChange: v => { state.cutoff = cutoffFromKnob(v); } },
   { id: "kRES", label: "RESO", min:   0, max: 100, default: 0,
     format: v => Math.round(v),
+    read: () => (state.resonance - 0.5) / 19.5 * 100,
     onChange: v => { state.resonance = 0.5 + (v / 100) * 19.5; } },
   { id: "kENV", label: "ENV",  min:   0, max: 100, default: 0,
     format: v => Math.round(v),
+    read: () => state.envAmount * 100,
     onChange: v => { state.envAmount = v / 100; } },
   { id: "kNZ",  label: "NOISE",min:   0, max: 100, default: 0,
     format: v => Math.round(v),
+    read: () => state.noise * 100,
     onChange: v => { state.noise = v / 100; } },
 ];
 
+const knobHandles = [];
 (function buildKnobs() {
   const grid = $("knobs");
-  KNOBS.forEach(spec => {
+  KNOBS.forEach((spec, i) => {
     const k = document.createElement("div");
     k.className = "knob";
     k.id = spec.id;
     k.title = spec.label + " -- drag to set, double-click to reset";
     grid.appendChild(k);
-    setupKnob(k, spec);
+    knobHandles[i] = setupKnob(k, spec);
   });
 })();
+
+/* =========================================================
+   MEMORY  --  4 localStorage slots + JSON file save/load
+   ========================================================= */
+const STORAGE_PREFIX = "scire-h.click.slot.";
+const SAVED_KEYS = ["bpm","beatsPerBar","subdivision","key","octave",
+                    "pan","volume","decay","release","cutoff","resonance",
+                    "envAmount","noise","voice"];
+
+function snapshotState() {
+  const s = {};
+  SAVED_KEYS.forEach(k => s[k] = state[k]);
+  return s;
+}
+function applySnapshot(s) {
+  if (!s || typeof s !== "object") return;
+  SAVED_KEYS.forEach(k => { if (k in s) state[k] = s[k]; });
+  /* re-sync UI controls to the new state */
+  $("sig").value   = state.beatsPerBar;
+  $("div").value   = state.subdivision;
+  $("key").value   = state.key;
+  $("oct").value   = state.octave;
+  $("voice").value = state.voice;
+  bpmInput.value     = state.bpm;
+  bpmVal.textContent = state.bpm;
+  buildBeats();
+  if (master) master.gain.value = state.volume;
+  if (panner) panner.pan.value  = state.pan;
+  /* push state values back into the knobs */
+  KNOBS.forEach((spec, i) => {
+    if (spec.read) knobHandles[i].set(spec.read());
+  });
+}
+
+function flashSlot(el, kind) {
+  el.classList.add("flash-" + kind);
+  setTimeout(() => el.classList.remove("flash-" + kind), 220);
+}
+function refreshSlotMarkers() {
+  document.querySelectorAll(".slot").forEach(el => {
+    el.classList.toggle("filled", !!localStorage.getItem(STORAGE_PREFIX + el.dataset.slot));
+  });
+}
+function saveSlot(idx, el) {
+  try {
+    localStorage.setItem(STORAGE_PREFIX + idx, JSON.stringify(snapshotState()));
+    flashSlot(el, "save");
+    refreshSlotMarkers();
+  } catch (e) { /* quota exceeded etc -- ignore */ }
+}
+function loadSlot(idx, el) {
+  const raw = localStorage.getItem(STORAGE_PREFIX + idx);
+  if (!raw) { flashSlot(el, "empty"); return; }
+  try {
+    applySnapshot(JSON.parse(raw));
+    flashSlot(el, "load");
+  } catch (e) { flashSlot(el, "empty"); }
+}
+
+document.querySelectorAll(".slot").forEach(el => {
+  const idx = +el.dataset.slot;
+  let timer = null, longPressed = false;
+  el.addEventListener("pointerdown", e => {
+    longPressed = false;
+    timer = setTimeout(() => { longPressed = true; saveSlot(idx, el); }, 500);
+  });
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener("pointerup", e => {
+    cancel();
+    if (longPressed) return;
+    if (e.shiftKey) saveSlot(idx, el); else loadSlot(idx, el);
+  });
+  el.addEventListener("pointercancel", cancel);
+  el.addEventListener("pointerleave",  cancel);
+});
+refreshSlotMarkers();
+
+/* ---------- file SAVE / LOAD ---------- */
+$("exportBtn").addEventListener("click", () => {
+  const snap = snapshotState();
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const a = document.createElement("a");
+  const blob = new Blob([JSON.stringify(snap, null, 2)], { type: "application/json" });
+  a.href = URL.createObjectURL(blob);
+  a.download = "click-preset-" + stamp + ".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$("importBtn").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try { applySnapshot(JSON.parse(reader.result)); }
+    catch (err) { alert("Invalid preset file"); }
+  };
+  reader.readAsText(f);
+  e.target.value = "";   // allow re-loading the same file
+});
 
 /* ---------- tap tempo (averages over the last 8 taps, 3 s window) ---------- */
 let taps = [];
