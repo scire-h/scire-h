@@ -243,8 +243,10 @@ function playClick(when, kind) {
     src.stop(when + dur + 0.02);
     return;
   }
-  /* beat -> selected key at octave 6, sub -> same key one octave below */
-  const f = noteFreq(state.key, kind === "beat" ? 6 : 5);
+  /* beat and sub share the same pitch -- 2/3/4 (and any sub-clicks
+     between them) read as one consistent tone, distinguished only
+     by sub being shorter and quieter. */
+  const f = noteFreq(state.key, 6);
   const a = kind === "beat" ? 0.85 : 0.30;
   const d = kind === "sub"  ? 0.018 : 0.040;
   const osc = actx.createOscillator();
