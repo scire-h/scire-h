@@ -259,12 +259,13 @@ function playClick(when, kind) {
     playSine(when, noteFreq(state.key, 7), 0.65, 0.045);
     return;
   }
-  /* beat and sub share the same pitch -- 2/3/4 (and any sub-clicks
-     between them) read as one consistent tone, distinguished only
-     by sub being shorter and quieter. */
+  /* beat and sub share the same pitch.  Beats 2/3/4 sit clearly
+     below the beat-1 accent, sub-clicks sit clearly below those --
+     so a 1/8 read is "ONE! two three four", with the 8th notes
+     felt as a soft ghost pulse rather than a separate click. */
   const f = noteFreq(state.key, 6);
-  const a = kind === "beat" ? 0.85 : 0.30;
-  const d = kind === "sub"  ? 0.018 : 0.040;
+  const a = kind === "beat" ? 0.65 : 0.14;
+  const d = kind === "sub"  ? 0.012 : 0.040;
   playSine(when, f, a, d);
 }
 
