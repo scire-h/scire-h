@@ -1653,12 +1653,14 @@ const DRUM_PATCHES = [
 /* Two tonal "tick" voices for the click track:
      Ch1 = accented downbeat ("ki" / "ka")  -- higher, slightly louder
      Ch2 = subdivision tick   ("ko")        -- lower, quieter
+   Pure sine, no pitch sweep, attack >= 0.05 to skip the engine's
+   noise-stick transient -- a plain Moog-style beep, no drum body.
    Ch3 / Ch4 are silenced so the click stays clean. */
 const CLICK_PATCHES = [
-  { vco:0.50, octave:5, attack:0, sustain:0.04, sweep:0.10, sweepDir:"down", waveform:"triangle", noiseOn:false, lfoOn:false, output:0.90 },
-  { vco:0.50, octave:4, attack:0, sustain:0.025, sweep:0.06, sweepDir:"down", waveform:"triangle", noiseOn:false, lfoOn:false, output:0.55 },
-  { vco:0.50, octave:3, attack:0, sustain:0.01,  sweep:0.0,  sweepDir:"off",  waveform:"sine",     noiseOn:false, lfoOn:false, output:0.0  },
-  { vco:0.50, octave:3, attack:0, sustain:0.01,  sweep:0.0,  sweepDir:"off",  waveform:"sine",     noiseOn:false, lfoOn:false, output:0.0  },
+  { vco:0.50, octave:5, attack:0.06, sustain:0.05,  sweep:0.0, sweepDir:"off", waveform:"sine", noiseOn:false, multiVCO:false, lfoOn:false, output:0.85 },
+  { vco:0.50, octave:4, attack:0.06, sustain:0.035, sweep:0.0, sweepDir:"off", waveform:"sine", noiseOn:false, multiVCO:false, lfoOn:false, output:0.50 },
+  { vco:0.50, octave:3, attack:0,    sustain:0.01,  sweep:0.0, sweepDir:"off", waveform:"sine", noiseOn:false, multiVCO:false, lfoOn:false, output:0.0  },
+  { vco:0.50, octave:3, attack:0,    sustain:0.01,  sweep:0.0, sweepDir:"off", waveform:"sine", noiseOn:false, multiVCO:false, lfoOn:false, output:0.0  },
 ];
 const PATTERNS = {
   /* basic 4/4 backbeat -- the original DEMO PATTERN */
