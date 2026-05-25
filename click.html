@@ -140,6 +140,23 @@
           <option value="4">1/16</option>
         </select>
       </span>
+      <span class="group">
+        KEY
+        <select id="key">
+          <option value="C">C</option>
+          <option value="C#">C#</option>
+          <option value="D">D</option>
+          <option value="D#">D#</option>
+          <option value="E">E</option>
+          <option value="F">F</option>
+          <option value="F#">F#</option>
+          <option value="G">G</option>
+          <option value="G#">G#</option>
+          <option value="A" selected>A</option>
+          <option value="A#">A#</option>
+          <option value="B">B</option>
+        </select>
+      </span>
     </div>
 
     <footer><a href="index.html">→ DS-4M synth</a></footer>
@@ -192,7 +209,15 @@ const state = {
   bpm: 120,
   beatsPerBar: 4,    // 2..7
   subdivision: 1,    // ticks per beat: 1 (just the beats), 2 (8ths) or 4 (16ths)
+  key: "A",          // tonal pitch for the beat/sub clicks (12 chromatic notes)
 };
+
+/* MIDI note number for a (note name, octave) -- C4 = 60, A4 = 69 */
+const NOTE_SEMI = { "C":0, "C#":1, "D":2, "D#":3, "E":4, "F":5, "F#":6, "G":7, "G#":8, "A":9, "A#":10, "B":11 };
+function noteFreq(note, octave) {
+  const midi = (octave + 1) * 12 + NOTE_SEMI[note];
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
 
 /* sample-accurate click voices:
      accent (beat 1)  -- short pink-noise burst, slight high-pass for "pft"
@@ -218,7 +243,8 @@ function playClick(when, kind) {
     src.stop(when + dur + 0.02);
     return;
   }
-  const f = kind === "beat" ? 1100 : 660;
+  /* beat -> selected key at octave 6, sub -> same key one octave below */
+  const f = noteFreq(state.key, kind === "beat" ? 6 : 5);
   const a = kind === "beat" ? 0.85 : 0.30;
   const d = kind === "sub"  ? 0.018 : 0.040;
   const osc = actx.createOscillator();
@@ -355,6 +381,7 @@ $("div").addEventListener("change", () => {
   state.subdivision = +$("div").value;
   stepInBar = 0;
 });
+$("key").addEventListener("change", () => { state.key = $("key").value; });
 
 /* ---------- tap tempo (averages over the last 8 taps, 3 s window) ---------- */
 let taps = [];
