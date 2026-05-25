@@ -736,9 +736,9 @@
       <button id="demo"  class="demo-btn">▶ PLAY</button>
       <button id="stop"  class="demo-btn ghost">■ STOP</button>
       <button id="reset" class="demo-btn ghost">↻ INIT</button>
-      <select id="pattern" class="demo-btn" title="Drum pattern">
-        <option value="basic">PATTERN: BASIC 112</option>
-        <option value="ymo">PATTERN: YMO CLICK</option>
+      <select id="pattern" class="demo-btn" title="Pattern">
+        <option value="basic">PATTERN: BASIC DRUM</option>
+        <option value="click">PATTERN: 16TH CLICK</option>
       </select>
       <label class="xport" title="Beats per minute">
         BPM
@@ -784,7 +784,9 @@
     + 0.15-0.4Hz の連続揺らぎを加え、毎回鳴り方が微妙に違うアナログ的な挙動になります。
     <br>
     左下 <b>BEAT SENSE</b> ON でパッドのクリック位置（中央寄り = 強打）が音量に反映。
-    <b>PLAY</b> でパターン再生（<b>PATTERN</b> で <i>BASIC</i> / <i>YMO CLICK</i> 切替）、
+    <b>PLAY</b> でパターン再生 ―
+    <b>PATTERN</b> は <i>BASIC DRUM</i>（4 拍ドラム）／
+    <i>16TH CLICK</i>（拍頭強・16分裏弱のメトロノーム）の 2 種。
     <b>BPM</b> 60-200・<b>PITCH</b> ±12 半音は再生中もリアルタイムに変更可。
     タブを背面に回しても Web Worker タイマーが時計を打ち続けるので、テンポは揺らぎません
     （OS のメディアキー／ロック画面の再生・停止にも対応）。
@@ -1639,18 +1641,30 @@ window.addEventListener("pointerdown", unlock, { once: true });
 window.addEventListener("keydown",     unlock, { once: true });
 
 /* =========================================================
-   PATTERNS  (16-step 4ch  -- rows: HAT / OPEN / SNARE / KICK)
+   PATTERNS  (16-step 4ch -- each pattern carries its own per-
+   channel patches so a drum kit and a metronome can coexist.)
    ========================================================= */
-const PATTERN_PATCHES = [
-  /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.75 },
-  /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.7  },
-  /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true, lfoOn:false, output:0.85 },
-  /* Ch4 kick                  */ { vco:0.40, octave:2, attack:0, sustain:0.32, sweep:0.65, sweepDir:"down", waveform:"sine",                lfoOn:false, output:0.95 },
+const DRUM_PATCHES = [
+  /* Ch1 closed-hat-ish cymbal */ { vco:0.80, octave:4, attack:0, sustain:0.08, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true,  lfoOn:false, output:0.75 },
+  /* Ch2 open hat / ride bell  */ { vco:0.70, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sine", noiseOn:true,  lfoOn:false, output:0.70 },
+  /* Ch3 tight snare           */ { vco:0.50, octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"sine", noiseOn:true,  lfoOn:false, output:0.85 },
+  /* Ch4 kick                  */ { vco:0.40, octave:2, attack:0, sustain:0.32, sweep:0.65, sweepDir:"down", waveform:"sine", noiseOn:false, lfoOn:false, output:0.95 },
+];
+/* Two tonal "tick" voices for the click track:
+     Ch1 = accented downbeat ("ki" / "ka")  -- higher, slightly louder
+     Ch2 = subdivision tick   ("ko")        -- lower, quieter
+   Ch3 / Ch4 are silenced so the click stays clean. */
+const CLICK_PATCHES = [
+  { vco:0.50, octave:5, attack:0, sustain:0.04, sweep:0.10, sweepDir:"down", waveform:"triangle", noiseOn:false, lfoOn:false, output:0.90 },
+  { vco:0.50, octave:4, attack:0, sustain:0.025, sweep:0.06, sweepDir:"down", waveform:"triangle", noiseOn:false, lfoOn:false, output:0.55 },
+  { vco:0.50, octave:3, attack:0, sustain:0.01,  sweep:0.0,  sweepDir:"off",  waveform:"sine",     noiseOn:false, lfoOn:false, output:0.0  },
+  { vco:0.50, octave:3, attack:0, sustain:0.01,  sweep:0.0,  sweepDir:"off",  waveform:"sine",     noiseOn:false, lfoOn:false, output:0.0  },
 ];
 const PATTERNS = {
   /* basic 4/4 backbeat -- the original DEMO PATTERN */
   basic: {
     bpm: 112,
+    patches: DRUM_PATCHES,
     steps: [
       [1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0],
       [0,0,0,0,0,0,0,0, 0,0,0,0,0,0,1,0],
@@ -1658,15 +1672,17 @@ const PATTERNS = {
       [1,0,0,0,0,0,0,0, 1,0,0,1,0,0,0,0],
     ],
   },
-  /* YMO CLICK -- Rydeen / Technopolis flavour: relentless 16th hat,
-     2/4 snare, syncopated kick, occasional open accent on the "&" of 4 */
-  ymo: {
-    bpm: 130,
+  /* 16TH CLICK -- a metronome, not a drum pattern.
+     Quarter-note accent on every beat, 16th-note sub-click on
+     the three off-beats between them: ki ko ko ko / ka ko ko ko ... */
+  click: {
+    bpm: 120,
+    patches: CLICK_PATCHES,
     steps: [
-      /* HAT 16ths */ [1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1],
-      /* OPEN      */ [0,0,0,0,0,0,0,1, 0,0,0,0,0,0,0,1],
-      /* SNARE 2/4 */ [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,0],
-      /* KICK syn  */ [1,0,0,0,0,0,1,0, 0,0,1,0,0,0,1,0],
+      /* ACCENT (1,2,3,4) */ [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+      /* SUB    (e,&,a)   */ [0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1],
+      /* unused           */ [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+      /* unused           */ [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
     ],
   },
 };
@@ -1726,8 +1742,10 @@ function startDemo() {
   ensureAudio();
   if (actx.state === "suspended") actx.resume();
   if (isPlaying) return;
-  /* apply the drum kit patches for the chosen pattern */
-  state.channels.forEach((ch, i) => applyPreset(ch, PATTERN_PATCHES[i]));
+  /* apply the per-channel patches that this pattern carries */
+  const pat = PATTERNS[state.patternId] || PATTERNS.basic;
+  const patches = pat.patches || DRUM_PATCHES;
+  state.channels.forEach((ch, i) => applyPreset(ch, patches[i]));
   currentStep  = 0;
   nextStepTime = actx.currentTime + 0.05;
   isPlaying    = true;
