@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>MUSHI // 6-voice insect synthesizer</title>
+<title>MUSHI // 10-voice insect synthesizer</title>
 <style>
   :root{
     /* —— 1-bit Macintosh nostalgia · Graphite × Grape —— */
@@ -157,7 +157,7 @@
   /* ====== track strip row ====== */
   .tracks-strip{
     display:grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(10, 1fr);
     gap: 1px;
     background: #000;
     border-top: 1px solid #000;
@@ -869,7 +869,7 @@
     header .brand .sub{ display: none; }
     main{ padding: 6px; gap: 6px; }
     section.panel > *:not(h2){ margin-left: 8px; margin-right: 8px; }
-    .tracks-strip{ grid-template-columns: repeat(4, 1fr); }
+    .tracks-strip{ grid-template-columns: repeat(5, 1fr); }
     .strip{ padding: 5px 6px 6px; }
     .strip .meter{ height: 3px; margin-top: 4px; }
     .strip-head{ flex-direction: column; align-items: stretch; gap: 3px; }
@@ -1095,7 +1095,7 @@
     </div>
 
     <div class="hint" id="hint">
-      space play · 1–6 track · ↑↓ pitch · ←→ call rate · t tap · m toggle natural/sequenced · q clear track · [ ] burst length
+      space play · 1–9,0 track · ↑↓ pitch · ←→ call rate · t tap · m toggle natural/sequenced · q clear track · [ ] burst length
     </div>
   </div>
 
@@ -1174,9 +1174,9 @@
    single-file web audio app
    ================================================================= */
 
-const NUM_TRACKS = 6;
+const NUM_TRACKS = 10;
 
-/* — 6 insect voices for the night meadow —
+/* — 10 insect voices for the night meadow —
    pitch:       center frequency Hz
    burstLen:    one bug-pulse length in ms
    popCount:    pulses per call (the "rin-rin-rin" repeat count)
@@ -1205,6 +1205,18 @@ const TRACK_PRESETS = [
   { name: "DRONE",  voice: "drone",
     pitch: 900,  burstLen: 3500, popCount: 1, callRate: 0.25,
     variability: 40, tone: 4500,  density: 1, distance: 0.85, pan:  0.0 },
+  { name: "SWEEP",  voice: "sweep",
+    pitch: 3500, burstLen: 220, popCount: 1,  callRate: 0.35,
+    variability: 55, tone: 14000, density: 1, distance: 0.35, pan: -0.35 },
+  { name: "KANA",   voice: "kana",
+    pitch: 3800, burstLen: 1800, popCount: 14, callRate: 0.15,
+    variability: 60, tone: 11000, density: 1, distance: 0.50, pan:  0.45 },
+  { name: "TRIO",   voice: "trio",
+    pitch: 5000, burstLen: 35,  popCount: 1,  callRate: 0.45,
+    variability: 45, tone: 15000, density: 1, distance: 0.30, pan: -0.05 },
+  { name: "HUSH",   voice: "hush",
+    pitch: 7000, burstLen: 2500, popCount: 1, callRate: 0.20,
+    variability: 50, tone: 12000, density: 1, distance: 0.75, pan:  0.1 },
 ];
 const $ = id => document.getElementById(id);
 const clamp = (v,a,b)=> v<a?a:v>b?b:v;
@@ -2212,6 +2224,10 @@ function refreshUIForTrack(){
     scrape: "SCRAPE · 轡虫風 noisy bandpass scraping",
     tick:   "TICK · 鉦叩風 metallic high-Q pings",
     drone:  "DRONE · 草の風 / distant swarm wash",
+    sweep:  "SWEEP · 馬追風 スイーッチョン rising sweep + tick",
+    kana:   "KANA · 蜩 カナカナカナ descending tone + AM",
+    trio:   "TRIO · 松虫 チンチロリン three-note bursts",
+    hush:   "HUSH · 草陰の微かな高音持続 quiet whisper wash",
   };
   $("voiceLabel").textContent = voiceNames[t.voice] || t.voice;
   const voiceMeta = {
@@ -2221,6 +2237,10 @@ function refreshUIForTrack(){
     scrape: "long noise + sawtooth-AM, Q≈3 (broader, rougher)",
     tick:   "Pop Count pings spaced ~150 ms, Q≈60 (metallic)",
     drone:  "long pink-filtered noise with slow LFO on the cutoff",
+    sweep:  "rising BPF sweep over Burst Len · Pop Count adds 'cho!' snaps",
+    kana:   "long BPF noise, pitch descends · Pop Count drives AM rate",
+    trio:   "three pitched bursts (1.0 · 1.18 · 1.06 ×) · Pop Count = triplets",
+    hush:   "high BPF wash, slow LFO on cutoff · barely-there ambience",
   };
   $("voiceMeta").textContent = voiceMeta[t.voice] || "";
 
@@ -2558,6 +2578,152 @@ function voiceDrone(t, when, pan, pitchMul){
   noise.stop(when + total + 0.1); lfo.stop(when + total + 0.1);
 }
 
+/* SWEEP — 馬追風 (umaoi: スイーッチョン)
+   rising frequency bandpass noise sweep, optional sharp tick at end
+   if popCount > 1 — the "cho!" snap that follows the "swiii" slide */
+function voiceSweep(t, when, pan, pitchMul){
+  const ctx = G.ctx;
+  const out = _panner(t, pan, when);
+  const dur = clamp(t.burstLen / 1000, 0.05, 1.5);
+  const fStart = clamp(t.pitch * pitchMul * 0.55, 200, 12000);
+  const fEnd   = clamp(t.pitch * pitchMul * 1.9,  300, 18000);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(); noise.loop = true;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.setValueAtTime(fStart, when);
+  bp.frequency.exponentialRampToValueAtTime(fEnd, when + dur * 0.85);
+  bp.Q.value = 20;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(0.5, when + 0.02);
+  g.gain.setValueAtTime(0.5, when + dur * 0.85);
+  g.gain.exponentialRampToValueAtTime(0.001, when + dur);
+  noise.connect(bp).connect(g).connect(out);
+  noise.start(when, Math.random()*1.5);
+  noise.stop(when + dur + 0.05);
+
+  // "cho!" snap — repeated popCount-1 times if user wants a chain of snaps
+  for(let k=1; k<t.popCount; k++){
+    const tickT = when + dur + 0.03 + (k-1) * 0.12;
+    const tn = ctx.createBufferSource();
+    tn.buffer = getNoiseBuffer();
+    const tBp = ctx.createBiquadFilter();
+    tBp.type = "bandpass";
+    tBp.frequency.value = fEnd * (1 + rand(-0.05, 0.05));
+    tBp.Q.value = 35;
+    const tG = ctx.createGain();
+    tG.gain.setValueAtTime(0.4, tickT);
+    tG.gain.exponentialRampToValueAtTime(0.0005, tickT + 0.08);
+    tn.connect(tBp).connect(tG).connect(out);
+    tn.start(tickT, Math.random()*1.5, 0.006);
+    tn.stop(tickT + 0.1);
+  }
+}
+
+/* KANA — 蜩 (higurashi: カナカナカナ)
+   long bandpass noise tone that slowly descends in pitch,
+   with rapid AM creating the "kana-kana-kana" pulsing */
+function voiceKana(t, when, pan, pitchMul){
+  const ctx = G.ctx;
+  const out = _panner(t, pan, when);
+  const dur = clamp(t.burstLen / 1000, 0.5, 6.0);
+  const f   = clamp(t.pitch * pitchMul, 300, 12000);
+  const trillHz = clamp(8 + t.popCount * 1.4, 6, 40);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(); noise.loop = true;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.setValueAtTime(f * 1.18, when);
+  bp.frequency.exponentialRampToValueAtTime(f * 0.78, when + dur);
+  bp.Q.value = 14;
+
+  const amGain = ctx.createGain();
+  amGain.gain.setValueAtTime(0, when);
+  amGain.gain.linearRampToValueAtTime(0.45, when + 0.35);
+  amGain.gain.setValueAtTime(0.45, when + dur * 0.75);
+  amGain.gain.linearRampToValueAtTime(0, when + dur);
+
+  const lfo = ctx.createOscillator();
+  lfo.type = "sine";
+  lfo.frequency.value = trillHz;
+  const lfoGain = ctx.createGain();
+  lfoGain.gain.value = 0.42;
+  lfo.connect(lfoGain).connect(amGain.gain);
+
+  noise.connect(bp).connect(amGain).connect(out);
+  noise.start(when, Math.random()*1.5); lfo.start(when);
+  noise.stop(when + dur + 0.1); lfo.stop(when + dur + 0.1);
+}
+
+/* TRIO — 松虫 (matsumushi: チンチロリン)
+   3-note pitched bursts in quick succession,
+   popCount controls how many triplets fire per call */
+function voiceTrio(t, when, pan, pitchMul){
+  const ctx = G.ctx;
+  const out = _panner(t, pan, when);
+  const burst = clamp(t.burstLen / 1000, 0.005, 0.2);
+  const noteGap    = clamp(burst * 1.7, 0.04, 0.22);
+  const tripletGap = noteGap * 5;
+  const base = clamp(t.pitch * pitchMul, 200, 14000);
+  // "chin · chi · ro" — 3 notes, the middle one higher
+  const pitches = [1.0, 1.18, 1.06];
+  for(let rep=0; rep<Math.max(1,t.popCount); rep++){
+    const repT = when + rep * tripletGap;
+    for(let p=0; p<3; p++){
+      const t0 = repT + p * noteGap;
+      const noise = ctx.createBufferSource();
+      noise.buffer = getNoiseBuffer(); noise.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = base * pitches[p];
+      bp.Q.value = 30;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.5, t0 + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0005, t0 + burst);
+      noise.connect(bp).connect(g).connect(out);
+      noise.start(t0, Math.random()*1.5);
+      noise.stop(t0 + burst + 0.02);
+    }
+  }
+}
+
+/* HUSH — 草陰の微かな高音持続 (the almost-imaginary whisper of grass)
+   long, quiet, high-frequency bandpass wash with subtle filter movement */
+function voiceHush(t, when, pan, pitchMul){
+  const ctx = G.ctx;
+  const out = _panner(t, pan, when);
+  const dur = clamp(t.burstLen / 1000, 0.5, 6.0);
+  const f   = clamp(t.pitch * pitchMul, 1000, 17000);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(); noise.loop = true;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = f;
+  bp.Q.value = 6;
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(0.18, when + dur * 0.35);
+  g.gain.setValueAtTime(0.18, when + dur * 0.65);
+  g.gain.linearRampToValueAtTime(0, when + dur);
+
+  const lfo = ctx.createOscillator();
+  lfo.type = "sine";
+  lfo.frequency.value = 0.6 + Math.random() * 0.9;
+  const lfoGain = ctx.createGain();
+  lfoGain.gain.value = f * 0.10;
+  lfo.connect(lfoGain).connect(bp.frequency);
+
+  noise.connect(bp).connect(g).connect(out);
+  noise.start(when, Math.random()*1.5); lfo.start(when);
+  noise.stop(when + dur + 0.1); lfo.stop(when + dur + 0.1);
+}
+
 const INSECT_VOICES = {
   chirp: voiceChirp,
   trill: voiceTrill,
@@ -2565,6 +2731,10 @@ const INSECT_VOICES = {
   scrape: voiceScrape,
   tick:  voiceTick,
   drone: voiceDrone,
+  sweep: voiceSweep,
+  kana:  voiceKana,
+  trio:  voiceTrio,
+  hush:  voiceHush,
 };
 
 
@@ -2596,7 +2766,7 @@ window.addEventListener("resize", ()=>{
    vertical axis:   pan, top = L, bottom = R
    color: per-track via dot brightness; current track stands out */
 const FIELD_WINDOW_MS = 12000;
-const TRACK_DOT_COLORS = ["#6e5a8c","#807a90","#8868a4","#5d5d6e","#7e4d9a","#6d6582"];
+const TRACK_DOT_COLORS = ["#6e5a8c","#807a90","#8868a4","#5d5d6e","#7e4d9a","#6d6582","#7a6090","#555568","#9078a8","#4c4a60"];
 
 function drawWaveform(){
   const c = waveCanvas;
@@ -3653,7 +3823,8 @@ document.addEventListener("keydown", e=>{
     setSliderUI("burstLen", t.burstLen, fmtMs);
   }
   // 1–6 = T1–T6
-  const tIdx = "123456".indexOf(e.key);
+  // 1-9 = T1-T9, 0 = T10
+  const tIdx = "1234567890".indexOf(e.key);
   if(tIdx >= 0){ selectTrack(tIdx); return; }
   // F1-F6 alias
   if(e.key === "F1") { e.preventDefault(); selectTrack(0); }
@@ -3662,6 +3833,10 @@ document.addEventListener("keydown", e=>{
   if(e.key === "F4") { e.preventDefault(); selectTrack(3); }
   if(e.key === "F5") { e.preventDefault(); selectTrack(4); }
   if(e.key === "F6") { e.preventDefault(); selectTrack(5); }
+  if(e.key === "F7") { e.preventDefault(); selectTrack(6); }
+  if(e.key === "F8") { e.preventDefault(); selectTrack(7); }
+  if(e.key === "F9") { e.preventDefault(); selectTrack(8); }
+  if(e.key === "F10"){ e.preventDefault(); selectTrack(9); }
 });
 
 
