@@ -135,8 +135,8 @@
       <span class="group">
         DIV
         <select id="div">
-          <option value="1">1/4</option>
-          <option value="2" selected>1/8</option>
+          <option value="1" selected>1/4</option>
+          <option value="2">1/8</option>
           <option value="4">1/16</option>
         </select>
       </span>
@@ -168,14 +168,16 @@ window.addEventListener("keydown",     unlock, { once: true });
 const state = {
   bpm: 120,
   beatsPerBar: 4,    // 2..7
-  subdivision: 2,    // ticks per beat: 1 (just the beats), 2 (8ths) or 4 (16ths)
+  subdivision: 1,    // ticks per beat: 1 (just the beats), 2 (8ths) or 4 (16ths)
 };
 
-/* sample-accurate sine "beep" -- 3 timbres for accent / beat / sub */
+/* sample-accurate sine "beep" -- 3 timbres for accent / beat / sub.
+   Beats 2-4 sit at the same level as the accent so a 1-2-3-4 count
+   reads as four equally-present clicks with the "1" raised in pitch. */
 function playClick(when, kind) {
-  const f = kind === "accent" ? 1760 : kind === "beat" ? 880 : 660;
-  const a = kind === "accent" ? 0.95 : kind === "beat" ? 0.6  : 0.25;
-  const d = kind === "sub"    ? 0.018 : 0.035;
+  const f = kind === "accent" ? 1760 : kind === "beat" ? 1100 : 660;
+  const a = kind === "accent" ? 0.95 : kind === "beat" ? 0.85 : 0.30;
+  const d = kind === "sub"    ? 0.018 : 0.040;
   const osc = actx.createOscillator();
   osc.type = "sine";
   osc.frequency.setValueAtTime(f, when);
