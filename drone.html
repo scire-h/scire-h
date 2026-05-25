@@ -445,7 +445,7 @@
     <section class="panel">
       <h2>EVOLVE</h2>
       <div class="chips" id="evolveChips" style="margin-top:10px;"></div>
-      <div class="knob-grid cols-2" id="evolveKnobs"></div>
+      <div class="knob-grid cols-3" id="evolveKnobs"></div>
       <div class="row" style="margin-top:6px;"><label>Transition</label></div>
       <div class="chips" id="transitionChips"></div>
       <div class="row" style="margin-top:6px;"><label>Root Walk</label><span class="chip" id="rootWalkToggle">OFF</span></div>
@@ -590,6 +590,14 @@
     <section class="panel">
       <h2>EQ</h2>
       <div class="knob-grid cols-2" id="eqKnobs"></div>
+    </section>
+
+    <section class="panel">
+      <h2>BASS</h2>
+      <div class="knob-grid cols-3" id="bassKnobs"></div>
+      <div style="font-size:9px; color:var(--ink-dd); margin-top:6px; line-height:1.4;">
+        Sub Oct=オクターブ下のサイン生成 / Bass=80Hz peak EQ / Mono=低音をモノ集約 / HPF=サブソニックカット / Warm=低域パラレル飽和
+      </div>
     </section>
 
     <section class="panel">
@@ -767,6 +775,16 @@ const G = {
   revFreeze:  false,   // wet output feeds back into conv input -> infinite hold
   revMod:     false,   // chorus modulation on wet bus
   revShimmer: false,   // pitch-up feedback from wet -> conv input
+
+  // BASS section
+  subOct:    0,        // 0..100  per-voice sine one octave below fundamental
+  eqBass:    0,        // -12..+12 dB peaking around 80 Hz
+  monoBass:  0,        // 0..100  amount of mono'd-and-boosted low band
+  hpfHz:     25,       // 12..120 Hz   high-pass to clean subsonic rumble
+  bassSat:   0,        // 0..100  parallel low-band tanh saturation
+
+  // BUILD UP — voice entry stagger when starting from silence
+  buildUp:   0,        // 0..600 seconds, spread over the chord's voices
 
   // 3-band master EQ (low-shelf 220Hz / mid-peak / high-shelf 4500Hz)
   eqLowGain:  0,   // dB, -12..+12
@@ -1030,7 +1048,23 @@ async function ensureAudio(){
   // chain: preFilter -> EQ -> postFilter (BRIGHT) -> shimmer -> [dry, conv->wet, delay] -> master -> comp -> limiter -> dest
   // EQ goes BEFORE the LPF so that boosting HIGH/MID actually has material to
   // work on — otherwise BRIGHT had already lopped off the highs before EQ saw them.
-  G.preFilter.connect(G.eqLow);
+  // ----- BASS section: subsonic HPF, BASS peaking EQ, low-band saturator,
+  //       parallel mono-bass enhancer -----
+  G.hpf = ctx.createBiquadFilter();
+  G.hpf.type = "highpass";
+  G.hpf.frequency.value = G.hpfHz;
+  G.hpf.Q.value = 0.7;
+
+  G.eqBassFilt = ctx.createBiquadFilter();
+  G.eqBassFilt.type = "peaking";
+  G.eqBassFilt.frequency.value = 80;
+  G.eqBassFilt.Q.value = 0.9;
+  G.eqBassFilt.gain.value = G.eqBass;
+
+  // chain: preFilter -> HPF -> Bass EQ -> Low/Mid/High -> postFilter -> shimmer ...
+  G.preFilter.connect(G.hpf);
+  G.hpf.connect(G.eqBassFilt);
+  G.eqBassFilt.connect(G.eqLow);
   G.eqLow.connect(G.eqMid);
   G.eqMid.connect(G.eqHigh);
   G.eqHigh.connect(G.postFilter);
@@ -1103,6 +1137,45 @@ async function ensureAudio(){
   G.master.connect(G.ana2);
   G.master.connect(G.meterAna);
   G.master.connect(G.comp).connect(G.limiter).connect(ctx.destination);
+
+  // ----- Parallel low-band saturator (BASS WARMTH) -----
+  // master -> LPF(220) -> tanh waveshaper -> satGain -> destination
+  G.satLpf = ctx.createBiquadFilter();
+  G.satLpf.type = "lowpass";
+  G.satLpf.frequency.value = 220;
+  G.satLpf.Q.value = 0.7;
+  G.satShaper = ctx.createWaveShaper();
+  const SN = 2048;
+  const scurve = new Float32Array(SN);
+  for(let i=0; i<SN; i++){
+    const x = (i/(SN-1))*2 - 1;
+    scurve[i] = Math.tanh(x * 3.0) * 0.6;
+  }
+  G.satShaper.curve = scurve;
+  G.satShaper.oversample = "2x";
+  G.satGain = ctx.createGain();
+  G.satGain.gain.value = G.bassSat / 100 * 0.5;
+  G.master.connect(G.satLpf).connect(G.satShaper).connect(G.satGain).connect(ctx.destination);
+
+  // ----- Parallel mono-bass enhancer -----
+  // master -> stereo split -> sum L+R -> LPF(180) -> monoGain -> both channels
+  G.monoSplit  = ctx.createChannelSplitter(2);
+  G.monoSum    = ctx.createGain();
+  G.monoSum.gain.value = 0.5; // average L+R
+  G.monoLpf    = ctx.createBiquadFilter();
+  G.monoLpf.type = "lowpass";
+  G.monoLpf.frequency.value = 180;
+  G.monoLpf.Q.value = 0.6;
+  G.monoOutGain = ctx.createGain();
+  G.monoOutGain.gain.value = G.monoBass / 100 * 0.6;
+  G.monoMerge  = ctx.createChannelMerger(2);
+  G.master.connect(G.monoSplit);
+  G.monoSplit.connect(G.monoSum, 0);
+  G.monoSplit.connect(G.monoSum, 1);
+  G.monoSum.connect(G.monoLpf).connect(G.monoOutGain);
+  G.monoOutGain.connect(G.monoMerge, 0, 0); // → L
+  G.monoOutGain.connect(G.monoMerge, 0, 1); // → R
+  G.monoMerge.connect(ctx.destination);
 
   // INPUT GRAIN — dry/wet split so the imported sound can be heard raw, fully
   // granularised, or any blend. Both feed into mixGain -> preFilter so the
@@ -1530,6 +1603,18 @@ function buildVoice(freq, idx, total, fadeIn){
   v.triGain.connect(v.oscSubMix);
   v.noiseGain.connect(v.oscSubMix);
 
+  // ----- SUB OCTAVE generator (one octave below voice fundamental) -----
+  v.subOsc = ctx.createOscillator();
+  v.subOsc.type = "sine";
+  v.subOsc.frequency.value = freq / 2;
+  v.subOsc.detune.value = v.vintageTuningError * 0.5;
+  v.driftOut.connect(v.subOsc.detune);
+  v.subGain = ctx.createGain();
+  v.subGain.gain.value = (G.subOct / 100) * 0.6;
+  v.subOsc.connect(v.subGain).connect(v.oscSubMix);
+  v.subOsc.start(ctx.currentTime + srand()*0.02);
+  v.oscList.push(v.subOsc);
+
   // ----- grain sub-mix -----
   v.grainSubMix = ctx.createGain();
   v.grainSubMix.gain.value = G.grainLevel;
@@ -1575,13 +1660,29 @@ function startDrone(){
   ensureAudio().then(()=>{
     if(G.playing) return;
     cancelFadeOut();
+    G.playing = true;        // mark first so rebuildVoices builds with the fade path
     rebuildVoices();
-    const t = G.ctx.currentTime;
-    G.master.gain.cancelScheduledValues(t);
-    G.master.gain.setValueAtTime(G.master.gain.value, t);
-    G.master.gain.linearRampToValueAtTime(db2lin(G.vol_db), t + 1.8);
-    G.playing = true;
-    G.sessionStart = t;
+
+    const t0 = G.ctx.currentTime;
+    // Master jumps to target volume immediately; each voice controls its own
+    // fade-in below, so the BUILD UP stagger is visible per voice.
+    G.master.gain.cancelScheduledValues(t0);
+    G.master.gain.setValueAtTime(db2lin(G.vol_db), t0);
+
+    const buildSec  = G.buildUp || 0;
+    const morphTime = 1.5 + (G.seamless/100) * 10;
+    const N = Math.max(1, G.voices.length);
+    for(let i=0; i<G.voices.length; i++){
+      const v = G.voices[i];
+      if(!v || !v.gainOut) continue;
+      // even spread of voice entry across the full BUILD UP window
+      const offset = (N > 1) ? (i / (N - 1)) * buildSec : 0;
+      v.gainOut.gain.cancelScheduledValues(t0);
+      v.gainOut.gain.setValueAtTime(0.0001, t0);
+      rampEqualPower(v.gainOut.gain, 0.0001, v.baseGain, t0 + offset, morphTime);
+    }
+
+    G.sessionStart = t0;
     evolveReset();
     $("playBtn").classList.add("on");
     $("playBtn").textContent = "■ STOP";
@@ -1805,9 +1906,11 @@ function glideVoice(v, newFreq, dur){
   v.freq = newFreq;
   for(const o of v.oscList){
     try {
+      // sub-octave osc tracks an octave below
+      const target = (o === v.subOsc) ? newFreq / 2 : newFreq;
       o.frequency.cancelScheduledValues(t);
       o.frequency.setValueAtTime(o.frequency.value, t);
-      o.frequency.exponentialRampToValueAtTime(Math.max(1, newFreq), t + dur);
+      o.frequency.exponentialRampToValueAtTime(Math.max(1, target), t + dur);
     } catch(_){}
   }
 }
@@ -2085,6 +2188,22 @@ function applyDelay(){
   G.delayFbL.gain.setTargetAtTime(G.delayFb, t, 0.05);
   G.delayFbR.gain.setTargetAtTime(G.delayFb, t, 0.05);
   G.delayWet.gain.setTargetAtTime(G.delayMix, t, 0.05);
+}
+
+function applySubOct(){
+  if(!G.ctx) return;
+  const t = G.ctx.currentTime;
+  for(const v of G.voices){
+    if(v.subGain) v.subGain.gain.setTargetAtTime((G.subOct/100)*0.6, t, 0.05);
+  }
+}
+function applyBass(){
+  if(!G.ctx) return;
+  const t = G.ctx.currentTime;
+  if(G.eqBassFilt) G.eqBassFilt.gain.setTargetAtTime(G.eqBass, t, 0.05);
+  if(G.hpf)        G.hpf.frequency.setTargetAtTime(G.hpfHz, t, 0.05);
+  if(G.satGain)    G.satGain.gain.setTargetAtTime((G.bassSat/100)*0.5, t, 0.05);
+  if(G.monoOutGain) G.monoOutGain.gain.setTargetAtTime((G.monoBass/100)*0.6, t, 0.05);
 }
 
 function applyReverbModes(){
@@ -2394,6 +2513,28 @@ function buildAllKnobs(){
                       onInput:v=>{ G.eqHighGain = v; applyEQ(); }
                     }, "eqHighGain");
 
+  // BASS — sub-oct generator, peaking bass band, mono crossover, HPF, warm sat
+  addKnob("bassKnobs", { label:"Sub Oct", min:0, max:100, value:G.subOct,
+                        fmt:v=>v<0.5?"off":v.toFixed(0)+"%", defaultValue:0,
+                        onInput:v=>{ G.subOct = v; applySubOct(); }
+                      }, "subOct");
+  addKnob("bassKnobs", { label:"Bass",    min:-12, max:12, value:G.eqBass,
+                        fmt:v=>(v>=0?"+":"")+v.toFixed(1)+" dB", defaultValue:0,
+                        onInput:v=>{ G.eqBass = v; applyBass(); }
+                      }, "eqBass");
+  addKnob("bassKnobs", { label:"Mono",    min:0, max:100, value:G.monoBass,
+                        fmt:v=>v<0.5?"off":v.toFixed(0)+"%", defaultValue:0,
+                        onInput:v=>{ G.monoBass = v; applyBass(); }
+                      }, "monoBass");
+  addKnob("bassKnobs", { label:"HPF",     min:12, max:120, value:G.hpfHz,
+                        log:true, fmt:v=>v.toFixed(0)+" Hz", defaultValue:25,
+                        onInput:v=>{ G.hpfHz = v; applyBass(); }
+                      }, "hpfHz");
+  addKnob("bassKnobs", { label:"Warm",    min:0, max:100, value:G.bassSat,
+                        fmt:v=>v<0.5?"off":v.toFixed(0)+"%", defaultValue:0,
+                        onInput:v=>{ G.bassSat = v; applyBass(); }
+                      }, "bassSat");
+
   // ANALOG — Sequential-style vintage + Davachi-style breath
   addKnob("analogKnobs", { label:"Vintage", min:0, max:100, value:G.vintage,
                           fmt:v=>v.toFixed(0)+"%", defaultValue:0,
@@ -2448,7 +2589,7 @@ function buildAllKnobs(){
                        }, "posSpd");
 
   // EVOLVE
-  addKnob("evolveKnobs", { label:"Interval", min:8, max:300, value:G.evolveInterval,
+  addKnob("evolveKnobs", { label:"Interval", min:8, max:1800, value:G.evolveInterval,
                           log:true, fmt:v => {
                             const t = Math.round(v);
                             if(t < 60) return t + " s";
@@ -2469,6 +2610,18 @@ function buildAllKnobs(){
                           defaultValue:50,
                           onInput:v=>{ G.seamless = v; }
                         }, "seamless");
+  addKnob("evolveKnobs", { label:"Build Up", min:0, max:600, value:G.buildUp,
+                          log:false,
+                          fmt:v=>{
+                            const t = Math.round(v);
+                            if(t < 1) return "instant";
+                            if(t < 60) return t+" s";
+                            const m = Math.floor(t/60), s = t%60;
+                            return m+":"+(s<10?"0":"")+s;
+                          },
+                          defaultValue:0,
+                          onInput:v=>{ G.buildUp = v; }
+                        }, "buildUp");
 
   // VOICE WALK
   addKnob("walkKnobs", { label:"Walk",  min:0, max:100, value:G.walkRate,
@@ -3015,6 +3168,8 @@ function applyPreset(name){
     applyEQ();
     applyDelay();
     applyReverbModes();
+    applyBass();
+    applySubOct();
     evolveReset();
   }
   refreshNextChordIndicator();
@@ -3223,6 +3378,8 @@ const PATCH_KEYS = {
   dt:"delayTime", dfb:"delayFb", dmx:"delayMix",
   bin:"binaural",
   rvg:"revGated", rvf:"revFreeze", rvm:"revMod", rvs:"revShimmer",
+  so:"subOct", eb:"eqBass", mb:"monoBass", hp:"hpfHz", bs:"bassSat",
+  bu:"buildUp",
 };
 
 // INPUT GRAIN params travel under their own short keys (saved alongside G)
@@ -3311,6 +3468,8 @@ function loadPatchFromHash(){
     applyEQ();
     applyDelay();
     applyReverbModes();
+    applyBass();
+    applySubOct();
   }
   return true;
 }
@@ -3396,6 +3555,8 @@ function applyPatchObj(data){
     applyEQ();
     applyDelay();
     applyReverbModes();
+    applyBass();
+    applySubOct();
   }
 }
 
