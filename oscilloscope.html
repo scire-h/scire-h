@@ -700,8 +700,10 @@ function extractContours(mask, w, h) {
   return ordered;
 }
 
-function simplifyPolyline(pts, tol) {
-  // Douglas-Peucker
+// Douglas-Peucker on an open polyline. The classic algorithm assumes
+// start != end so the reference line has a non-zero direction; closed
+// loops must be split into two open halves first (see simplifyPolyline).
+function dpSimplify(pts, tol) {
   if (pts.length < 3) return pts;
   const keep = new Uint8Array(pts.length);
   keep[0] = 1; keep[pts.length - 1] = 1;
@@ -726,6 +728,30 @@ function simplifyPolyline(pts, tol) {
   const out = [];
   for (let i = 0; i < pts.length; i++) if (keep[i]) out.push(pts[i]);
   return out;
+}
+
+function simplifyPolyline(pts, tol) {
+  if (pts.length < 3) return pts;
+  const last = pts.length - 1;
+  const closed = pts[0].x === pts[last].x && pts[0].y === pts[last].y;
+  if (closed) {
+    if (pts.length < 5) return pts;
+    // Anchor the second cut at the point farthest from pts[0]; otherwise
+    // the start->end reference line is zero-length and every interior
+    // point gets distance zero, collapsing the loop to a single point.
+    let farIdx = 1, farD = 0;
+    for (let i = 1; i < last; i++) {
+      const dx = pts[i].x - pts[0].x;
+      const dy = pts[i].y - pts[0].y;
+      const d = dx * dx + dy * dy;
+      if (d > farD) { farD = d; farIdx = i; }
+    }
+    if (farD < 4) return pts;
+    const h1 = dpSimplify(pts.slice(0, farIdx + 1), tol);
+    const h2 = dpSimplify(pts.slice(farIdx), tol);
+    return h1.concat(h2.slice(1));
+  }
+  return dpSimplify(pts, tol);
 }
 
 function greedyOrder(polylines) {

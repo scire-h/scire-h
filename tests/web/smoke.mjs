@@ -55,6 +55,13 @@ await page.waitForFunction(() => {
 const status = await page.locator('#status').textContent();
 console.log(`Status: ${status}`);
 
+// Parse "<n> ストローク / <m> units" and require both > 0. A 0 unit total
+// means the contour simplifier collapsed every polyline to a point, so
+// nothing will actually be drawn even though strokes were detected.
+const sm = /(\d+)\s*ストローク\s*\/\s*(\d+(?:\.\d+)?)\s*units/.exec(status || '');
+const strokeCount = sm ? Number(sm[1]) : 0;
+const unitCount   = sm ? Number(sm[2]) : 0;
+
 // Let a few animation frames run so the beam has time to draw something.
 await page.waitForTimeout(800);
 
@@ -109,6 +116,8 @@ function fail(msg) { console.error(`FAIL: ${msg}`); failed = true; }
 
 if (jsErrors.length)      fail(`pageerror events: ${JSON.stringify(jsErrors)}`);
 if (consoleErrors.length) fail(`console.error events: ${JSON.stringify(consoleErrors)}`);
+if (strokeCount < 1)      fail(`status parse: no strokes detected ("${status}")`);
+if (unitCount   < 1)      fail(`status parse: zero path length ("${status}") -- contour pipeline collapsed`);
 if (!drewSomething)       fail(`canvas drew only ${drawReport.nonBlack} non-black pixels (expected >= ${minPixels})`);
 if (!greenDominant)       fail(`green not dominant in drawn pixels: ${JSON.stringify(drawReport)}`);
 if (!hiResOk)             fail(`4K resolution switch did not resize canvas (got w/h after switch)`);
