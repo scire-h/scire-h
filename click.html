@@ -135,8 +135,8 @@
       <span class="group">
         DIV
         <select id="div">
-          <option value="1" selected>1/4</option>
-          <option value="2">1/8</option>
+          <option value="1">1/4</option>
+          <option value="2" selected>1/8</option>
           <option value="4">1/16</option>
         </select>
       </span>
@@ -168,7 +168,7 @@ window.addEventListener("keydown",     unlock, { once: true });
 const state = {
   bpm: 120,
   beatsPerBar: 4,    // 2..7
-  subdivision: 1,    // ticks per beat: 1 (just the beats), 2 (8ths) or 4 (16ths)
+  subdivision: 2,    // ticks per beat: 1 (just the beats), 2 (8ths) or 4 (16ths)
 };
 
 /* sample-accurate sine "beep" -- 3 timbres for accent / beat / sub */
