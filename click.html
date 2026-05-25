@@ -88,6 +88,30 @@
     padding: 7px 10px; font: inherit; font-size: 12px;
     letter-spacing: 0.1em; cursor: pointer;
   }
+  /* small horizontal control (knob + slider live here) */
+  .ctrl {
+    display: flex; align-items: center; gap: 18px;
+    justify-content: space-between;
+  }
+  .knob {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    user-select: none; cursor: ns-resize; touch-action: none;
+  }
+  .knob svg { width: 46px; height: 46px; display: block; }
+  .knob .cap {
+    font-size: 10px; letter-spacing: 0.25em; color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .knob .cap b { color: var(--ink); font-weight: 500; letter-spacing: 0.05em; }
+  .slide {
+    flex: 1; display: flex; flex-direction: column; gap: 4px;
+  }
+  .slide label {
+    display: flex; justify-content: space-between;
+    font-size: 10px; letter-spacing: 0.25em; color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .slide label b { color: var(--ink); font-weight: 500; letter-spacing: 0.05em; }
   footer {
     text-align: center;
     font-size: 10px; color: #444; letter-spacing: 0.15em;
@@ -159,6 +183,23 @@
       </span>
     </div>
 
+    <div class="ctrl">
+      <div class="knob" id="panKnob" title="L / R pan (drag, double-click to centre)">
+        <svg viewBox="-50 -50 100 100" aria-label="PAN">
+          <circle r="44" fill="#1c1c1c" stroke="#333" stroke-width="2"/>
+          <circle r="3"  fill="#444"/>
+          <line id="panInd" x1="0" y1="0" x2="0" y2="-30"
+                stroke="#6fc" stroke-width="3" stroke-linecap="round"
+                transform="rotate(0)"/>
+        </svg>
+        <div class="cap">PAN&nbsp;&nbsp;<b id="panVal">C</b></div>
+      </div>
+      <div class="slide">
+        <label>DECAY <b><span id="decVal">40</span> ms</b></label>
+        <input id="dec" type="range" min="10" max="300" step="1" value="40" aria-label="Decay">
+      </div>
+    </div>
+
     <footer><a href="index.html">→ DS-4M synth</a></footer>
   </div>
 
@@ -170,14 +211,16 @@
    ========================================================= */
 
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
-let actx = null, master = null;
+let actx = null, master = null, panner = null;
 
 function ensureAudio() {
   if (actx) return;
   actx = new AudioCtx();
   master = actx.createGain();
   master.gain.value = 0.55;
-  master.connect(actx.destination);
+  panner = actx.createStereoPanner();
+  panner.pan.value = state.pan;
+  master.connect(panner).connect(actx.destination);
 }
 function unlock() { ensureAudio(); if (actx.state === "suspended") actx.resume(); }
 window.addEventListener("pointerdown", unlock, { once: true });
@@ -188,6 +231,8 @@ const state = {
   beatsPerBar: 4,    // 2..7
   subdivision: 1,    // ticks per beat: 1 (just the beats), 2 (8ths) or 4 (16ths)
   key: "A",          // tonal pitch for the beat/sub clicks (12 chromatic notes)
+  pan: 0,            // -1 (full L) .. +1 (full R)
+  decay: 0.040,      // seconds -- length of each click
 };
 
 /* MIDI note number for a (note name, octave) -- C4 = 60, A4 = 69 */
@@ -219,7 +264,7 @@ function playSine(when, f, a, d) {
 function playClick(when, kind) {
   const f = noteFreq(state.key, kind === "accent" ? 7 : 6);
   const a = kind === "accent" ? 0.85 : 0.55;
-  playSine(when, f, a, 0.040);
+  playSine(when, f, a, state.decay);
 }
 
 /* visual flash scheduled at the audio time (UI doesn't need sample acc) */
@@ -355,6 +400,44 @@ $("div").addEventListener("change", () => {
   stepInBar = 0;
 });
 $("key").addEventListener("change", () => { state.key = $("key").value; });
+
+/* ---------- PAN knob (vertical drag, double-click to centre) ---------- */
+const panKnob = $("panKnob");
+const panInd  = $("panInd");
+function panLabel(p) {
+  const v = Math.round(p * 50);
+  return v === 0 ? "C" : (v < 0 ? "L" : "R") + Math.abs(v);
+}
+function setPan(p) {
+  state.pan = Math.max(-1, Math.min(1, p));
+  panInd.setAttribute("transform", "rotate(" + (state.pan * 135) + ")");
+  $("panVal").textContent = panLabel(state.pan);
+  if (panner) panner.pan.value = state.pan;
+}
+let panDragY = 0, panStart = 0;
+panKnob.addEventListener("pointerdown", e => {
+  panKnob.setPointerCapture(e.pointerId);
+  panDragY = e.clientY;
+  panStart = state.pan;
+  e.preventDefault();
+});
+panKnob.addEventListener("pointermove", e => {
+  if (!panKnob.hasPointerCapture(e.pointerId)) return;
+  const dy = panDragY - e.clientY;       // up = positive
+  setPan(panStart + dy * 0.008);          // ~125 px = full sweep
+});
+panKnob.addEventListener("dblclick", () => setPan(0));
+panKnob.addEventListener("wheel", e => {
+  e.preventDefault();
+  setPan(state.pan + (e.deltaY < 0 ? 0.05 : -0.05));
+}, { passive: false });
+
+/* ---------- DECAY slider ---------- */
+$("dec").addEventListener("input", () => {
+  const ms = +$("dec").value;
+  state.decay = ms / 1000;
+  $("decVal").textContent = ms;
+});
 
 /* ---------- tap tempo (averages over the last 8 taps, 3 s window) ---------- */
 let taps = [];
