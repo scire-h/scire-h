@@ -79,6 +79,7 @@
   .play.on    { background: linear-gradient(#1f4a3c, #103025); color: var(--accent); border-color: #1f5a48; }
   .row {
     display: flex; gap: 14px; align-items: center; justify-content: space-between;
+    flex-wrap: wrap;
     font-size: 10px; letter-spacing: 0.25em; color: var(--dim);
   }
   .row .group { display: inline-flex; gap: 6px; align-items: center; }
@@ -119,6 +120,21 @@
   }
   footer a { color: #666; text-decoration: none; }
   footer a:hover { color: #aaa; }
+
+  /* ============= narrow-screen tweaks (iPhone/Android) ============= */
+  @media (max-width: 480px) {
+    .wrap   { padding: 18px 12px; gap: 16px; }
+    h1      { font-size: 10px; letter-spacing: 0.4em; }
+    .bpm .val { font-size: 84px; }
+    .nudge button { min-width: 0; padding: 8px 10px; font-size: 12px; }
+    .row    { gap: 10px 12px; flex-wrap: wrap; justify-content: flex-start; }
+    .row .group { font-size: 9px; gap: 4px; }
+    .row select { padding: 6px 8px; font-size: 12px; }
+    .ctrl   { flex-wrap: wrap; gap: 14px; }
+    .ctrl .slide { min-width: 60%; }
+    .knob svg { width: 42px; height: 42px; }
+    .play   { padding: 16px; font-size: 14px; letter-spacing: 0.2em; }
+  }
 </style>
 </head>
 <body>
@@ -221,6 +237,7 @@
 
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
 let actx = null, master = null, panner = null, noiseBuf = null;
+let silentEl = null, silentSrc = null;
 
 /* short white-noise buffer used as the source for the WOOD voice */
 function makeNoiseBuffer(ctx, sec) {
@@ -229,6 +246,51 @@ function makeNoiseBuffer(ctx, sec) {
   const d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   return buf;
+}
+
+/* 500 ms of true digital silence as a WAV blob URL.  We feed it
+   into an <audio> element + MediaElementSource so iOS Safari keeps
+   the audio session active when the tab backgrounds or the screen
+   locks -- without that hack, Web Audio gets suspended and the
+   clicks stop the moment the lockscreen comes on. */
+function makeSilentWavURL() {
+  const sr = 22050;
+  const len = Math.floor(sr * 0.5);
+  const dataBytes = len * 2;
+  const buf = new ArrayBuffer(44 + dataBytes);
+  const v = new DataView(buf);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, "RIFF");
+  v.setUint32(4, 36 + dataBytes, true);
+  ws(8, "WAVE"); ws(12, "fmt ");
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true);
+  v.setUint32(28, sr * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  ws(36, "data");
+  v.setUint32(40, dataBytes, true);
+  /* sample data already zero-initialised */
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+
+function ensureSilentBed() {
+  if (silentEl) return;
+  silentEl = document.createElement("audio");
+  silentEl.src = makeSilentWavURL();
+  silentEl.loop = true;
+  silentEl.preload = "auto";
+  silentEl.crossOrigin = "anonymous";
+  silentEl.playsInline = true;
+  silentEl.setAttribute("playsinline", "");
+  silentEl.setAttribute("webkit-playsinline", "");
+  silentEl.muted = false;                // must NOT be muted for the iOS audio-session trick
+  silentEl.volume = 1.0;
+  /* route through the AudioContext so iOS ties their session together */
+  silentSrc = actx.createMediaElementSource(silentEl);
+  silentSrc.connect(actx.destination);
 }
 
 function ensureAudio() {
@@ -240,6 +302,7 @@ function ensureAudio() {
   panner.pan.value = state.pan;
   master.connect(panner).connect(actx.destination);
   noiseBuf = makeNoiseBuffer(actx, 0.1);
+  ensureSilentBed();
 }
 function unlock() { ensureAudio(); if (actx.state === "suspended") actx.resume(); }
 window.addEventListener("pointerdown", unlock, { once: true });
@@ -363,6 +426,8 @@ function start() {
   isPlaying = true;
   stepInBar = 0;
   nextTickTime = actx.currentTime + 0.06;
+  /* keep iOS audio session alive while we play */
+  if (silentEl) silentEl.play().catch(() => { /* swallow autoplay rejection */ });
   ensureWorker().postMessage("start");
   const b = document.getElementById("play");
   b.textContent = "❚❚  STOP";
@@ -372,6 +437,7 @@ function start() {
 function stop() {
   if (worker) worker.postMessage("stop");
   isPlaying = false;
+  if (silentEl) silentEl.pause();
   const b = document.getElementById("play");
   b.textContent = "▶  START";
   b.classList.remove("on");
