@@ -6,10 +6,16 @@ on:
   pull_request:
     branches: ["**"]
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
-  oscilloscope:
+  smoke:
     name: oscilloscope.html (Chromium)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -17,38 +23,92 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-v1
+      - name: Diagnostic - env
+        run: |
+          set -x
+          node --version
+          npm --version
+          python3 --version
+          uname -a
+          pwd
+          ls -la
 
       - name: Install Playwright
+        id: install
         run: |
-          npm init -y >/dev/null
-          npm install --no-save playwright
+          set -ex
+          npm init -y
+          npm install playwright
+          ls node_modules/.bin/playwright
+          npx playwright --version
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Serve repo
         run: |
+          set -ex
+          npx playwright install --with-deps chromium
+
+      - name: Start static server
+        run: |
+          set -ex
           nohup python3 -m http.server 8000 >/tmp/server.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -sf "http://localhost:8000/oscilloscope.html" >/dev/null && exit 0
-            sleep 0.5
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:8000/oscilloscope.html >/dev/null; then
+              echo "server up after ${i} attempts"
+              exit 0
+            fi
+            sleep 0.25
           done
-          echo "server failed to start"; cat /tmp/server.log; exit 1
+          echo "server failed to come up:"
+          cat /tmp/server.log
+          exit 1
 
       - name: Run smoke test
-        run: node tests/web/smoke.mjs http://localhost:8000/oscilloscope.html
+        id: smoke
+        run: |
+          set -o pipefail
+          node tests/web/smoke.mjs http://localhost:8000/oscilloscope.html 2>&1 | tee /tmp/smoke.log
 
-      - name: Upload preview screenshot
+      - name: Capture failure log
+        if: failure()
+        run: |
+          mkdir -p tests/web/artifacts
+          cp /tmp/smoke.log  tests/web/artifacts/ 2>/dev/null || true
+          cp /tmp/server.log tests/web/artifacts/ 2>/dev/null || true
+          ls -la tests/web/artifacts/ || true
+
+      - name: Comment failure on PR
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const read = p => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } };
+            const smoke  = read('/tmp/smoke.log');
+            const server = read('/tmp/server.log');
+            let body = '### ❌ oscilloscope.html smoke test failed\n\nRun: ' +
+              `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n`;
+            if (smoke) {
+              body += '\n<details><summary>smoke.log</summary>\n\n```\n' +
+                smoke.slice(-15000) + '\n```\n</details>\n';
+            } else {
+              body += '\n_(smoke.log absent — failure was in setup/install/server step)_\n';
+            }
+            if (server) {
+              body += '\n<details><summary>server.log</summary>\n\n```\n' +
+                server.slice(-3000) + '\n```\n</details>\n';
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: oscilloscope-preview
+          name: oscilloscope-${{ github.run_id }}-${{ github.run_attempt }}
           path: tests/web/artifacts/
           if-no-files-found: ignore
           retention-days: 14
