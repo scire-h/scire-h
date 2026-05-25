@@ -153,13 +153,36 @@
    ========================================================= */
 
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
-let actx = null, master = null;
+let actx = null, master = null, pinkBuf = null;
+
+/* 100 ms pink noise -- Paul Kellet's filter approximation of Voss-McCartney.
+   We pre-render once and reuse the buffer for every accent burst. */
+function makePinkBuffer(ctx, seconds) {
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    b0 = 0.99886 * b0 + w * 0.0555179;
+    b1 = 0.99332 * b1 + w * 0.0750759;
+    b2 = 0.96900 * b2 + w * 0.1538520;
+    b3 = 0.86650 * b3 + w * 0.3104856;
+    b4 = 0.55000 * b4 + w * 0.5329522;
+    b5 = -0.7616 * b5 - w * 0.0168980;
+    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+    b6 = w * 0.115926;
+  }
+  return buf;
+}
+
 function ensureAudio() {
   if (actx) return;
   actx = new AudioCtx();
   master = actx.createGain();
   master.gain.value = 0.55;
   master.connect(actx.destination);
+  pinkBuf = makePinkBuffer(actx, 0.1);
 }
 function unlock() { ensureAudio(); if (actx.state === "suspended") actx.resume(); }
 window.addEventListener("pointerdown", unlock, { once: true });
@@ -171,13 +194,33 @@ const state = {
   subdivision: 1,    // ticks per beat: 1 (just the beats), 2 (8ths) or 4 (16ths)
 };
 
-/* sample-accurate sine "beep" -- 3 timbres for accent / beat / sub.
-   Beats 2-4 sit at the same level as the accent so a 1-2-3-4 count
-   reads as four equally-present clicks with the "1" raised in pitch. */
+/* sample-accurate click voices:
+     accent (beat 1)  -- short pink-noise burst, slight high-pass for "pft"
+     beat   (2,3,4)   -- sine beep at 1100 Hz, same level as the accent
+     sub    (8th/16th)-- sine beep at 660 Hz, quieter
+   Both noise and sine are scheduled via .start(when) so the timing is
+   sample-accurate. */
 function playClick(when, kind) {
-  const f = kind === "accent" ? 1760 : kind === "beat" ? 1100 : 660;
-  const a = kind === "accent" ? 0.95 : kind === "beat" ? 0.85 : 0.30;
-  const d = kind === "sub"    ? 0.018 : 0.040;
+  if (kind === "accent") {
+    const dur = 0.035;
+    const src = actx.createBufferSource();
+    src.buffer = pinkBuf;
+    /* slight high-pass so it reads as a "click", not a "shh" */
+    const hp = actx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 250;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(1.0,    when + 0.001);
+    g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+    src.connect(hp).connect(g).connect(master);
+    src.start(when);
+    src.stop(when + dur + 0.02);
+    return;
+  }
+  const f = kind === "beat" ? 1100 : 660;
+  const a = kind === "beat" ? 0.85 : 0.30;
+  const d = kind === "sub"  ? 0.018 : 0.040;
   const osc = actx.createOscillator();
   osc.type = "sine";
   osc.frequency.setValueAtTime(f, when);
