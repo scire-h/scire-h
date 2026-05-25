@@ -512,13 +512,17 @@ function chDriftCents(chIdx) {
 }
 
 /* TUNING knob picks a note within an octave (C..B); OCTAVE selector
-   picks which octave. C3 = MIDI 48 = 130.81 Hz. BEAT TUNE is
-   0..5 OCT additive upward detune (matches the panel's silk-screen). */
+   picks which octave. Direct FFT measurement of the SDS-2002 reference
+   (TUNING near A on the silk-screen, OCTAVE = 3, SWEEP OFF, LFO OFF)
+   gives a fundamental of 441 Hz = A4. That puts OCTAVE 3's C-position
+   at MIDI 60 = C4, not C3 -- so the base is 60, an octave higher
+   than the JUCE port was using before. BEAT TUNE is 0..5 OCT additive
+   upward detune (matches the panel's silk-screen). */
 function vcoFreq(tuning01, octave, beatTune01) {
   const noteSemis = Math.max(0, Math.min(12, tuning01 * 12));
   const octShift  = (octave - 3) * 12;
   const beatSemis = beatTune01 * 60;
-  const midi = 48 + noteSemis + octShift + beatSemis;
+  const midi = 60 + noteSemis + octShift + beatSemis;
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
@@ -574,10 +578,16 @@ function playChannel(ch, velocity=1) {
   const now    = actx.currentTime;
   const base   = vcoFreq(ch.vco, ch.octave, ch.beatTune);
   const atk    = 0.001 + Math.pow(ch.attack, 1.4) * 0.35;
-  const decay  = 0.03  + Math.pow(ch.sustain, 1.4) * 3.5;
+  /* Reference measurement: at SUSTAIN ≈ centre, the envelope shows
+     -6 dB at 452 ms (tau ≈ 650 ms). Web Audio's
+     exponentialRampToValueAtTime hits -6 dB at roughly 10.7 % of
+     its (peak -> end) span, so to get -6 dB at 450 ms with end=0.0008
+     and peak~0.5 we need a span around 4.2 s. Multiplier of 11 gives
+     0.379 * 11 ≈ 4.2 s at sustain=0.5. */
+  const decay  = 0.03  + Math.pow(ch.sustain, 1.4) * 11.0;
   const sense  = state.beatSense ? Math.max(0.15, velocity) : 1.0;
-  const peak   = (0.05 + ch.output * 0.95) *
-                 (0.25 + ch.senseLevel * 0.75) * sense;
+  const peak   = (0.10 + ch.output * 0.90) *
+                 (0.40 + ch.senseLevel * 0.60) * sense;
   const sweepT = 0.045;
 
   const vca = actx.createGain();
@@ -585,10 +595,12 @@ function playChannel(ch, velocity=1) {
   vca.gain.linearRampToValueAtTime(peak, now + atk);
   vca.gain.exponentialRampToValueAtTime(0.0008, now + atk + decay);
 
-  const sat = actx.createWaveShaper();
-  sat.curve = getSatCurve();
-  sat.oversample = "2x";
-  vca.connect(sat).connect(master);
+  /* No master saturation: the SDS-2002 reference is mathematically
+     clean (SIN has H2 at -118 dB and H3..H10 below -95 dB). The
+     tanh waveshaper we used before added a -38 dB 3rd harmonic to
+     every voice, which made even the pure-sine mode sound coloured.
+     Going straight to the master keeps SIN spectrally pure. */
+  vca.connect(master);
 
   if (ch.waveform !== "sin" && ch.attack < 0.05) {
     const click = actx.createBufferSource();
@@ -666,10 +678,15 @@ function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
   osc.stop(now + decay + 0.1);
 }
 
+/* Per-character noise voicings, derived from FFT measurement of the
+   SDS-2002 reference recordings. CYMBAL's spectrum is flat 100 Hz -
+   ~7 kHz then drops sharply (-24 dB at 12 kHz). A single 2-pole LP
+   at 6 kHz with Q ≈ 1.2 fits the shape better than the wide-open
+   10 kHz we had before. */
 const NOISE_VOICE = {
-  CYMBAL: { mode:"lowpass",  cutLo: 9000, cutHi:11000, q:0.7, bodyGain:0.0,  bodyFollow:0.0 },
+  CYMBAL: { mode:"lowpass",  cutLo: 4500, cutHi: 7500, q:1.2, bodyGain:0.0,  bodyFollow:0.0 },
   SNARE:  { mode:"bandpass", cutLo:  600, cutHi: 4200, q:2.4, bodyGain:0.35, bodyFollow:1.0 },
-  NOISE:  { mode:"lowpass",  cutLo: 3000, cutHi:10000, q:0.7, bodyGain:0.12, bodyFollow:0.0 },
+  NOISE:  { mode:"lowpass",  cutLo: 2000, cutHi: 7000, q:0.7, bodyGain:0.12, bodyFollow:0.0 },
 };
 
 function spawnNoise(base, sweepTime, ch, dest, decay) {
