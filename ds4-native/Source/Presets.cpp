@@ -8,8 +8,8 @@ struct ChanSpec {
     float vco, beatTune;
     int   octave;
     float attack, sustain;
-    int   waveform;          // 0:sin 1:tri 2:sqr 3:saw
-    bool  noiseOn;
+    int   waveform;          // 0:Cymbal 1:Pulse 2:Sin   (was 0:sin 1:tri 2:sqr 3:saw)
+    bool  noiseOn;           // legacy -- ignored by new Voice (Cymbal mode does the noise)
     float lfoRate, lfoDepth;
     bool  lfoOn;
     float sweep;
@@ -17,6 +17,11 @@ struct ChanSpec {
     float output, sense;
     bool  multiVCO;
 };
+
+/* Source aliases for readability in the preset table below. */
+constexpr int CYMBAL = 0;
+constexpr int PULSE  = 1;
+constexpr int SIN_   = 2;
 
 static void pushChan (std::vector<Entry>& out, int chIdx, const ChanSpec& c) {
     const auto p = P::chPrefix (chIdx);
@@ -54,56 +59,75 @@ static Preset makePreset (const juce::String& name,
 
 const std::vector<Preset>& factoryPresets() {
     static const std::vector<Preset> presets = {
-        /* 0 ---- INIT ---- everything at the APVTS default. */
+        /* 0 ---- INIT ---- SIN at middle-octave, no sweep. The most
+           neutral starting point: a clean sine you can hear cleanly. */
         makePreset ("Init",
-            { 0.5f, 0.0f, 3, 0.0f, 0.3f, 0, true,  0.3f, 0.5f, false, 0.5f, 2, 0.8f, 0.7f, false },
-            { 0.5f, 0.0f, 3, 0.0f, 0.3f, 0, true,  0.3f, 0.5f, false, 0.5f, 2, 0.8f, 0.7f, false },
-            { 0.5f, 0.0f, 3, 0.0f, 0.3f, 0, true,  0.3f, 0.5f, false, 0.5f, 2, 0.8f, 0.7f, false },
-            { 0.5f, 0.0f, 3, 0.0f, 0.3f, 0, true,  0.3f, 0.5f, false, 0.5f, 2, 0.8f, 0.7f, false }),
+            { 0.5f, 0.0f, 3, 0.0f, 0.3f, SIN_, false, 0.3f, 0.5f, false, 0.0f, 1, 0.8f, 0.7f, false },
+            { 0.5f, 0.0f, 3, 0.0f, 0.3f, SIN_, false, 0.3f, 0.5f, false, 0.0f, 1, 0.8f, 0.7f, false },
+            { 0.5f, 0.0f, 3, 0.0f, 0.3f, SIN_, false, 0.3f, 0.5f, false, 0.0f, 1, 0.8f, 0.7f, false },
+            { 0.5f, 0.0f, 3, 0.0f, 0.3f, SIN_, false, 0.3f, 0.5f, false, 0.0f, 1, 0.8f, 0.7f, false }),
 
-        /* 1 ---- SYNDRUM CLASSIC ---- iconic disco-era 'pew' kit. */
+        /* 1 ---- SYNDRUM CLASSIC ---- the iconic disco-era 'PEW!' kit
+           that all four sources of the reference were designed for:
+           SIN with a big downward sweep. */
         makePreset ("Syndrum Classic",
-            /* Ch1 cymbal */ { 0.78f, 0.0f, 4, 0.0f, 0.18f, 0, true,  0.3f, 0.5f, false, 0.45f, 2, 0.75f, 0.7f, false },
-            /* Ch2 hi-tom */ { 0.72f, 0.0f, 4, 0.0f, 0.28f, 0, false, 0.3f, 0.5f, false, 0.55f, 2, 0.80f, 0.7f, false },
-            /* Ch3 lo-tom */ { 0.58f, 0.0f, 3, 0.0f, 0.32f, 0, false, 0.3f, 0.5f, false, 0.60f, 2, 0.85f, 0.7f, false },
-            /* Ch4 kick   */ { 0.35f, 0.0f, 2, 0.0f, 0.30f, 0, false, 0.3f, 0.5f, false, 0.60f, 2, 0.95f, 0.7f, false }),
+            /* Ch1 hi-tom */ { 0.85f, 0.0f, 4, 0.0f, 0.18f, SIN_, false, 0.3f, 0.5f, false, 0.55f, 2, 0.78f, 0.7f, false },
+            /* Ch2 mid    */ { 0.65f, 0.0f, 4, 0.0f, 0.22f, SIN_, false, 0.3f, 0.5f, false, 0.55f, 2, 0.80f, 0.7f, false },
+            /* Ch3 lo-tom */ { 0.45f, 0.0f, 3, 0.0f, 0.28f, SIN_, false, 0.3f, 0.5f, false, 0.55f, 2, 0.85f, 0.7f, false },
+            /* Ch4 kick   */ { 0.25f, 0.0f, 2, 0.0f, 0.32f, SIN_, false, 0.3f, 0.5f, false, 0.55f, 2, 0.92f, 0.7f, false }),
 
-        /* 2 ---- BIG TOMS ---- triangle waveform, longer decay. */
-        makePreset ("Big Toms",
-            { 0.70f, 0.12f, 4, 0.05f, 0.45f, 1, false, 0.3f, 0.5f, false, 0.55f, 2, 0.80f, 0.8f, false },
-            { 0.62f, 0.15f, 3, 0.05f, 0.50f, 1, false, 0.3f, 0.5f, false, 0.60f, 2, 0.82f, 0.8f, false },
-            { 0.50f, 0.18f, 3, 0.04f, 0.55f, 1, false, 0.3f, 0.5f, false, 0.65f, 2, 0.85f, 0.8f, false },
-            { 0.38f, 0.20f, 2, 0.04f, 0.60f, 1, false, 0.3f, 0.5f, false, 0.70f, 2, 0.90f, 0.8f, false }),
-
-        /* 3 ---- ELECTRO KIT ---- bright cymbal, snappy snare, thumpy kick. */
+        /* 2 ---- ELECTRO KIT ---- showcases all three sources at once:
+           CYMBAL noise on the top channels, PULSE for snare-like
+           clack, SIN for the kick. */
         makePreset ("Electro Kit",
-            /* Ch1 closed-hat */ { 0.85f, 0.0f, 5, 0.0f, 0.08f, 0, true,  0.3f, 0.5f, false, 0.25f, 2, 0.72f, 0.7f, false },
-            /* Ch2 open-hat   */ { 0.78f, 0.0f, 4, 0.0f, 0.32f, 0, true,  0.3f, 0.5f, false, 0.45f, 2, 0.70f, 0.7f, false },
-            /* Ch3 snare      */ { 0.50f, 0.0f, 3, 0.0f, 0.20f, 1, true,  0.3f, 0.5f, false, 0.30f, 2, 0.88f, 0.7f, false },
-            /* Ch4 kick       */ { 0.30f, 0.0f, 2, 0.0f, 0.28f, 0, false, 0.3f, 0.5f, false, 0.65f, 2, 0.98f, 0.7f, false }),
+            /* Ch1 closed-hat */ { 0.5f, 0.0f, 3, 0.0f, 0.08f, CYMBAL, true,  0.3f, 0.5f, false, 0.0f, 1, 0.70f, 0.7f, false },
+            /* Ch2 open-hat   */ { 0.5f, 0.0f, 3, 0.0f, 0.28f, CYMBAL, true,  0.3f, 0.5f, false, 0.0f, 1, 0.72f, 0.7f, false },
+            /* Ch3 snare      */ { 0.55f,0.0f, 3, 0.0f, 0.18f, PULSE,  true,  0.3f, 0.5f, false, 0.30f,2, 0.85f, 0.7f, false },
+            /* Ch4 kick       */ { 0.20f,0.0f, 2, 0.0f, 0.30f, SIN_,   false, 0.3f, 0.5f, false, 0.55f,2, 0.95f, 0.7f, false }),
 
-        /* 4 ---- COSMIC UP-SWEEP ---- all four channels rise, LFO wobble. */
+        /* 3 ---- BIG TOMS ---- SIN with longer SUSTAIN and slight
+           BEAT TUNE on top channels for a chorus-y body. */
+        makePreset ("Big Toms",
+            { 0.70f, 0.10f, 4, 0.0f, 0.45f, SIN_, false, 0.3f, 0.5f, false, 0.30f, 2, 0.80f, 0.8f, false },
+            { 0.60f, 0.12f, 3, 0.0f, 0.50f, SIN_, false, 0.3f, 0.5f, false, 0.35f, 2, 0.82f, 0.8f, false },
+            { 0.50f, 0.14f, 3, 0.0f, 0.55f, SIN_, false, 0.3f, 0.5f, false, 0.40f, 2, 0.85f, 0.8f, false },
+            { 0.40f, 0.16f, 2, 0.0f, 0.60f, SIN_, false, 0.3f, 0.5f, false, 0.45f, 2, 0.90f, 0.8f, false }),
+
+        /* 4 ---- COSMIC UP-SWEEP ---- SIN, all four ramps RISING
+           with LFO wobble on the way up. */
         makePreset ("Cosmic Up-Sweep",
-            { 0.30f, 0.0f, 2, 0.0f, 0.55f, 0, false, 0.55f, 0.65f, true, 0.75f, 0, 0.80f, 0.7f, false },
-            { 0.35f, 0.0f, 3, 0.0f, 0.60f, 1, false, 0.50f, 0.60f, true, 0.80f, 0, 0.80f, 0.7f, false },
-            { 0.40f, 0.0f, 3, 0.0f, 0.65f, 0, false, 0.45f, 0.55f, true, 0.85f, 0, 0.80f, 0.7f, false },
-            { 0.45f, 0.0f, 4, 0.0f, 0.70f, 0, false, 0.40f, 0.50f, true, 0.90f, 0, 0.80f, 0.7f, false }),
+            { 0.30f, 0.0f, 2, 0.0f, 0.55f, SIN_, false, 0.55f, 0.65f, true, 0.75f, 0, 0.80f, 0.7f, false },
+            { 0.35f, 0.0f, 3, 0.0f, 0.60f, SIN_, false, 0.50f, 0.60f, true, 0.80f, 0, 0.80f, 0.7f, false },
+            { 0.40f, 0.0f, 3, 0.0f, 0.65f, SIN_, false, 0.45f, 0.55f, true, 0.85f, 0, 0.80f, 0.7f, false },
+            { 0.45f, 0.0f, 4, 0.0f, 0.70f, SIN_, false, 0.40f, 0.50f, true, 0.90f, 0, 0.80f, 0.7f, false }),
 
-        /* 5 ---- DRONE PAD ---- no sweep, LFO modulates pitch, long tails. */
+        /* 5 ---- DRONE PAD ---- SIN, no sweep, LFO modulates pitch,
+           very long SUSTAIN and slow soft attack -- behaves more
+           like a pad than a drum. */
         makePreset ("Drone Pad",
-            { 0.50f, 0.0f, 4, 0.40f, 0.95f, 1, false, 0.25f, 0.55f, true, 0.0f, 1, 0.55f, 0.7f, false },
-            { 0.55f, 0.0f, 4, 0.40f, 0.95f, 0, false, 0.20f, 0.60f, true, 0.0f, 1, 0.55f, 0.7f, false },
-            { 0.62f, 0.0f, 3, 0.40f, 0.95f, 1, false, 0.15f, 0.65f, true, 0.0f, 1, 0.55f, 0.7f, false },
-            { 0.48f, 0.0f, 3, 0.40f, 0.95f, 0, false, 0.30f, 0.50f, true, 0.0f, 1, 0.55f, 0.7f, false },
+            { 0.50f, 0.0f, 4, 0.40f, 0.95f, SIN_, false, 0.25f, 0.55f, true, 0.0f, 1, 0.55f, 0.7f, false },
+            { 0.55f, 0.0f, 4, 0.40f, 0.95f, SIN_, false, 0.20f, 0.60f, true, 0.0f, 1, 0.55f, 0.7f, false },
+            { 0.62f, 0.0f, 3, 0.40f, 0.95f, SIN_, false, 0.15f, 0.65f, true, 0.0f, 1, 0.55f, 0.7f, false },
+            { 0.48f, 0.0f, 3, 0.40f, 0.95f, SIN_, false, 0.30f, 0.50f, true, 0.0f, 1, 0.55f, 0.7f, false },
             0.45f),
 
-        /* 6 ---- MULTI-VCO CASCADE DEMO ---- pull all four PULL switches:
-                                              each hit chains to the next. */
+        /* 6 ---- MULTI-VCO CASCADE ---- engage PULL on every channel
+           so triggering Ch_n also fires Ch_(n+1). All SIN so the
+           chord effect is clean. */
         makePreset ("Multi-VCO Cascade",
-            { 0.65f, 0.0f, 4, 0.0f, 0.20f, 0, false, 0.3f, 0.5f, false, 0.45f, 2, 0.75f, 0.7f, true },
-            { 0.55f, 0.0f, 4, 0.0f, 0.25f, 0, false, 0.3f, 0.5f, false, 0.50f, 2, 0.75f, 0.7f, true },
-            { 0.45f, 0.0f, 3, 0.0f, 0.30f, 0, false, 0.3f, 0.5f, false, 0.55f, 2, 0.75f, 0.7f, true },
-            { 0.35f, 0.0f, 2, 0.0f, 0.35f, 0, false, 0.3f, 0.5f, false, 0.60f, 2, 0.75f, 0.7f, true }),
+            { 0.65f, 0.0f, 4, 0.0f, 0.20f, SIN_, false, 0.3f, 0.5f, false, 0.45f, 2, 0.75f, 0.7f, true },
+            { 0.55f, 0.0f, 4, 0.0f, 0.25f, SIN_, false, 0.3f, 0.5f, false, 0.50f, 2, 0.75f, 0.7f, true },
+            { 0.45f, 0.0f, 3, 0.0f, 0.30f, SIN_, false, 0.3f, 0.5f, false, 0.55f, 2, 0.75f, 0.7f, true },
+            { 0.35f, 0.0f, 2, 0.0f, 0.35f, SIN_, false, 0.3f, 0.5f, false, 0.60f, 2, 0.75f, 0.7f, true }),
+
+        /* 7 ---- PURE CYMBAL ---- all four channels in CYMBAL mode at
+           different sustains so you can hear the broadband-LP noise
+           character alone. */
+        makePreset ("Cymbal Wash",
+            { 0.5f, 0.0f, 3, 0.0f, 0.15f, CYMBAL, true, 0.3f, 0.5f, false, 0.0f, 1, 0.65f, 0.7f, false },
+            { 0.5f, 0.0f, 3, 0.0f, 0.30f, CYMBAL, true, 0.3f, 0.5f, false, 0.0f, 1, 0.65f, 0.7f, false },
+            { 0.5f, 0.0f, 3, 0.0f, 0.50f, CYMBAL, true, 0.3f, 0.5f, false, 0.0f, 1, 0.65f, 0.7f, false },
+            { 0.5f, 0.0f, 3, 0.0f, 0.85f, CYMBAL, true, 0.3f, 0.5f, false, 0.0f, 1, 0.65f, 0.7f, false }),
     };
     return presets;
 }
