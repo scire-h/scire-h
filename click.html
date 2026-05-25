@@ -386,7 +386,7 @@ function envelope(when, peak, d, rel) {
   return g;
 }
 
-function playVoice(when, f, a, d, rel) {
+function playVoice(when, f, a, d, rel, kind) {
   const g = envelope(when, a, d, rel);
   g.connect(master);
   const tail = d + rel + 0.05;
@@ -410,9 +410,10 @@ function playVoice(when, f, a, d, rel) {
     osc.stop(when + tail);
   }
 
-  /* NOISE component -- a brief high-passed transient mixed in on top
-     of the tonal voice, gives the click a "kch" / breath edge. */
-  if (state.noise > 0) {
+  /* NOISE component -- accent positions only (beats 1 + half-bar).
+     A brief high-passed transient on top of the tonal voice gives
+     the downbeats a "kch / pft" edge while leaving 2-4/6-8 clean. */
+  if (state.noise > 0 && kind === "accent") {
     const transient = Math.min(d, 0.030);
     const ng = envelope(when, state.noise * a * 0.8, transient * 0.6, transient * 0.6);
     ng.connect(master);
@@ -433,7 +434,7 @@ function playClick(when, kind) {
   /* square / wood are louder per-unit than sine -- trim them. */
   const trim = (state.voice === "square") ? 0.45 : (state.voice === "wood") ? 0.7 : 1.0;
   const a = (kind === "accent" ? 0.85 : 0.55) * trim;
-  playVoice(when, f, a, state.decay, state.release);
+  playVoice(when, f, a, state.decay, state.release, kind);
 }
 
 /* visual flash scheduled at the audio time (UI doesn't need sample acc) */
