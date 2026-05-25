@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Click — scire-h</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --panel: #1a1a1a;
+    --ink: #eee;
+    --dim: #777;
+    --line: #2a2a2a;
+    --accent: #6fc;
+    --hot: #f64;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap {
+    width: 100%; max-width: 460px;
+    padding: 32px 22px;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 11px; letter-spacing: 0.45em;
+    color: var(--dim); text-align: center;
+  }
+  .bpm {
+    display: flex; align-items: baseline; justify-content: center; gap: 10px;
+    user-select: none;
+  }
+  .bpm .val {
+    font-size: 108px; font-weight: 600;
+    line-height: 1; letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .bpm .unit { font-size: 13px; letter-spacing: 0.3em; color: var(--dim); }
+  .nudge { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .nudge button {
+    background: #1c1c1c; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 9px 13px; font: inherit; font-size: 12px;
+    letter-spacing: 0.1em; cursor: pointer; min-width: 52px;
+  }
+  .nudge button:hover  { background: #262626; }
+  .nudge button:active { background: #303030; }
+  .nudge .tap { letter-spacing: 0.2em; }
+  input[type=range] {
+    width: 100%; accent-color: var(--accent);
+  }
+  .beats {
+    display: flex; gap: 12px; justify-content: center;
+    height: 20px; align-items: center;
+  }
+  .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #222; transition: background 60ms linear, transform 60ms linear;
+  }
+  .dot.on             { background: var(--accent); transform: scale(1.25); }
+  .dot.accent.on      { background: var(--hot);    transform: scale(1.35); }
+  .play {
+    width: 100%;
+    padding: 20px;
+    font: inherit; font-size: 15px; letter-spacing: 0.25em;
+    background: linear-gradient(#2a2a2a, #161616);
+    color: var(--ink);
+    border: 1px solid #2e2e2e; border-radius: 8px;
+    cursor: pointer;
+  }
+  .play:hover { background: linear-gradient(#333, #1c1c1c); }
+  .play.on    { background: linear-gradient(#1f4a3c, #103025); color: var(--accent); border-color: #1f5a48; }
+  .row {
+    display: flex; gap: 14px; align-items: center; justify-content: space-between;
+    font-size: 10px; letter-spacing: 0.25em; color: var(--dim);
+  }
+  .row .group { display: inline-flex; gap: 6px; align-items: center; }
+  .row select {
+    background: #1a1a1a; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 10px; font: inherit; font-size: 12px;
+    letter-spacing: 0.1em; cursor: pointer;
+  }
+  footer {
+    text-align: center;
+    font-size: 10px; color: #444; letter-spacing: 0.15em;
+    margin-top: 8px;
+  }
+  footer a { color: #666; text-decoration: none; }
+  footer a:hover { color: #aaa; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>CLICK</h1>
+
+    <div class="bpm">
+      <span class="val" id="bpmVal">120</span>
+      <span class="unit">BPM</span>
+    </div>
+
+    <div class="nudge">
+      <button id="m10">−10</button>
+      <button id="m1">−1</button>
+      <button id="p1">+1</button>
+      <button id="p10">+10</button>
+      <button class="tap" id="tap">TAP</button>
+    </div>
+
+    <input id="bpm" type="range" min="40" max="240" step="1" value="120" aria-label="BPM">
+
+    <div class="beats" id="beats"></div>
+
+    <button class="play" id="play">▶  START</button>
+
+    <div class="row">
+      <span class="group">
+        TIME
+        <select id="sig">
+          <option value="2">2/4</option>
+          <option value="3">3/4</option>
+          <option value="4" selected>4/4</option>
+          <option value="5">5/4</option>
+          <option value="6">6/8</option>
+          <option value="7">7/8</option>
+        </select>
+      </span>
+      <span class="group">
+        DIV
+        <select id="div">
+          <option value="1">1/4</option>
+          <option value="2">1/8</option>
+          <option value="4" selected>1/16</option>
+        </select>
+      </span>
+    </div>
+
+    <footer><a href="index.html">→ DS-4M synth</a></footer>
+  </div>
+
+<script>
+/* =========================================================
+   click.html  --  minimal precision metronome
+   Sample-accurate via oscillator.start(when); Web Worker
+   drives the lookahead so background tabs keep tempo too.
+   ========================================================= */
+
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let actx = null, master = null;
+function ensureAudio() {
+  if (actx) return;
+  actx = new AudioCtx();
+  master = actx.createGain();
+  master.gain.value = 0.55;
+  master.connect(actx.destination);
+}
+function unlock() { ensureAudio(); if (actx.state === "suspended") actx.resume(); }
+window.addEventListener("pointerdown", unlock, { once: true });
+window.addEventListener("keydown",     unlock, { once: true });
+
+const state = {
+  bpm: 120,
+  beatsPerBar: 4,    // 2..7
+  subdivision: 4,    // ticks per beat: 1, 2 or 4
+};
+
+/* sample-accurate sine "beep" -- 3 timbres for accent / beat / sub */
+function playClick(when, kind) {
+  const f = kind === "accent" ? 1760 : kind === "beat" ? 880 : 660;
+  const a = kind === "accent" ? 0.95 : kind === "beat" ? 0.6  : 0.25;
+  const d = kind === "sub"    ? 0.018 : 0.035;
+  const osc = actx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(f, when);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(a,      when + 0.001);
+  g.gain.exponentialRampToValueAtTime(0.0008, when + d);
+  osc.connect(g).connect(master);
+  osc.start(when);
+  osc.stop(when + d + 0.02);
+}
+
+/* visual flash scheduled at the audio time (UI doesn't need sample acc) */
+function flashBeat(beatIdx, when) {
+  const delay = Math.max(0, (when - actx.currentTime) * 1000);
+  setTimeout(() => {
+    const dots = document.querySelectorAll("#beats .dot");
+    dots.forEach((d, i) => d.classList.toggle("on", i === beatIdx));
+  }, delay);
+}
+
+/* ---------- transport: worker-driven lookahead ---------- */
+let worker = null;
+let isPlaying = false;
+let nextTickTime = 0;
+let stepInBar = 0;
+const SCHEDULE_AHEAD = 0.12;
+const LOOKAHEAD_MS   = 25;
+
+function ensureWorker() {
+  if (worker) return worker;
+  const src = `let id=null;onmessage=e=>{if(e.data==='start'){if(!id)id=setInterval(()=>postMessage('t'),${LOOKAHEAD_MS});}else if(e.data==='stop'){if(id){clearInterval(id);id=null;}}};`;
+  worker = new Worker(URL.createObjectURL(new Blob([src], { type: "application/javascript" })));
+  worker.onmessage = scheduler;
+  return worker;
+}
+
+function stepDuration() {
+  return 60.0 / state.bpm / state.subdivision;
+}
+
+function scheduler() {
+  if (!isPlaying || !actx) return;
+  const stepsPerBar = state.beatsPerBar * state.subdivision;
+  while (nextTickTime < actx.currentTime + SCHEDULE_AHEAD) {
+    const beatInBar = Math.floor(stepInBar / state.subdivision);
+    const onBeat    = (stepInBar % state.subdivision) === 0;
+    const kind = !onBeat ? "sub" : (beatInBar === 0 ? "accent" : "beat");
+    playClick(nextTickTime, kind);
+    if (onBeat) flashBeat(beatInBar, nextTickTime);
+    nextTickTime += stepDuration();
+    stepInBar = (stepInBar + 1) % stepsPerBar;
+  }
+}
+
+function start() {
+  ensureAudio();
+  if (actx.state === "suspended") actx.resume();
+  if (isPlaying) return;
+  isPlaying = true;
+  stepInBar = 0;
+  nextTickTime = actx.currentTime + 0.06;
+  ensureWorker().postMessage("start");
+  const b = document.getElementById("play");
+  b.textContent = "❚❚  STOP";
+  b.classList.add("on");
+  setMediaSession("playing");
+}
+function stop() {
+  if (worker) worker.postMessage("stop");
+  isPlaying = false;
+  const b = document.getElementById("play");
+  b.textContent = "▶  START";
+  b.classList.remove("on");
+  document.querySelectorAll("#beats .dot").forEach(d => d.classList.remove("on"));
+  setMediaSession("paused");
+}
+
+/* ---------- MediaSession  (OS media keys / lockscreen) ---------- */
+function setMediaSession(playback) {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title:  "Click",
+      artist: "scire-h",
+      album:  state.bpm + " BPM",
+    });
+    navigator.mediaSession.playbackState = playback;
+    navigator.mediaSession.setActionHandler("play",  start);
+    navigator.mediaSession.setActionHandler("pause", stop);
+    navigator.mediaSession.setActionHandler("stop",  stop);
+  } catch (e) { /* ignore */ }
+}
+
+/* ---------- UI ---------- */
+const $ = id => document.getElementById(id);
+const bpmInput = $("bpm");
+const bpmVal   = $("bpmVal");
+
+function setBpm(b) {
+  state.bpm = Math.max(40, Math.min(240, Math.round(b)));
+  bpmInput.value = state.bpm;
+  bpmVal.textContent = state.bpm;
+}
+bpmInput.addEventListener("input", () => setBpm(+bpmInput.value));
+$("m10").addEventListener("click", () => setBpm(state.bpm - 10));
+$("m1") .addEventListener("click", () => setBpm(state.bpm - 1));
+$("p1") .addEventListener("click", () => setBpm(state.bpm + 1));
+$("p10").addEventListener("click", () => setBpm(state.bpm + 10));
+
+$("play").addEventListener("click", () => isPlaying ? stop() : start());
+window.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.code === "Space") { e.preventDefault(); isPlaying ? stop() : start(); }
+});
+
+function buildBeats() {
+  const beats = $("beats");
+  beats.innerHTML = "";
+  for (let i = 0; i < state.beatsPerBar; i++) {
+    const d = document.createElement("div");
+    d.className = "dot" + (i === 0 ? " accent" : "");
+    beats.appendChild(d);
+  }
+}
+$("sig").addEventListener("change", () => {
+  state.beatsPerBar = +$("sig").value;
+  buildBeats();
+  stepInBar = 0;
+});
+$("div").addEventListener("change", () => {
+  state.subdivision = +$("div").value;
+  stepInBar = 0;
+});
+
+/* ---------- tap tempo (averages over the last 8 taps, 3 s window) ---------- */
+let taps = [];
+$("tap").addEventListener("click", () => {
+  const now = performance.now();
+  taps = taps.filter(t => now - t < 3000);
+  taps.push(now);
+  if (taps.length >= 2) {
+    let dt = 0;
+    for (let i = 1; i < taps.length; i++) dt += taps[i] - taps[i-1];
+    dt /= (taps.length - 1);
+    setBpm(60000 / dt);
+  }
+});
+
+/* ---------- visibility: resume context if browser suspended it ---------- */
+document.addEventListener("visibilitychange", () => {
+  if (actx && actx.state === "suspended") actx.resume();
+});
+
+buildBeats();
+</script>
+</body>
+</html>
