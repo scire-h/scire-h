@@ -111,13 +111,31 @@ await page.waitForTimeout(100);
 await page.click('#tabText');
 await page.waitForTimeout(100);
 
-// Re-render at 4K briefly to validate the high-res path doesn't throw.
+// Re-render at 4K briefly to validate the high-res path doesn't throw
+// AND that segment coordinates get rebuilt at the new resolution (a
+// missing buildSegments() call here would leave the beam tiny in a
+// corner of the 4K canvas, which is technically "no exception thrown"
+// but obviously wrong).
 await page.selectOption('#resolution', '3840x2160');
-await page.waitForTimeout(300);
+await page.waitForTimeout(900);
 const hiResOk = await page.evaluate(() => {
     const c = document.getElementById('screen');
-    return c.width === 3840 && c.height === 2160;
+    if (c.width !== 3840 || c.height !== 2160) {
+        return { sized: false, drew: false };
+    }
+    const ctx = c.getContext('2d');
+    // Sample a centred 1920x1080 window of the 4K canvas: if the beam
+    // got rebuilt for the new resolution, lit pixels should appear well
+    // beyond the top-left quadrant.
+    const cx = c.width / 2, cy = c.height / 2;
+    const probe = ctx.getImageData(cx - 800, cy - 450, 1600, 900).data;
+    let lit = 0;
+    for (let i = 0; i < probe.length; i += 4) {
+        if (probe[i] + probe[i + 1] + probe[i + 2] > 60) lit++;
+    }
+    return { sized: true, drew: lit > 200, litInCenter: lit };
 });
+console.log(`4K: sized=${hiResOk.sized}  drew=${hiResOk.drew}  litInCenter=${hiResOk.litInCenter}`);
 
 const shot = resolve(artifactsDir, 'preview.png');
 await page.screenshot({ path: shot, fullPage: false });
@@ -133,7 +151,8 @@ if (strokeCount < 1)      fail(`status parse: no strokes detected ("${status}")`
 if (unitCount   < 1)      fail(`status parse: zero path length ("${status}") -- contour pipeline collapsed`);
 if (!drewSomething)       fail(`canvas drew only ${drawReport.nonBlack} non-black pixels (expected >= ${minPixels})`);
 if (!greenDominant)       fail(`green not dominant in drawn pixels: ${JSON.stringify(drawReport)}`);
-if (!hiResOk)             fail(`4K resolution switch did not resize canvas (got w/h after switch)`);
+if (!hiResOk.sized)       fail(`4K resolution switch did not resize canvas`);
+if (!hiResOk.drew)        fail(`4K resolution switch resized canvas but beam didn't redraw at new scale (litInCenter=${hiResOk.litInCenter})`);
 
 if (failed) {
     console.error('\nSmoke test FAILED');

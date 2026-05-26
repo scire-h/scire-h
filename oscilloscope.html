@@ -450,6 +450,10 @@ function applyResolution() {
   phosphorCanvas.height = h;
   // Hard-clear phosphor
   phosphorCtx.clearRect(0, 0, w, h);
+  // Segment coordinates are baked in canvas pixels (see buildSegments),
+  // so a resolution change invalidates them. Rebuild from the existing
+  // contour cache, no need to re-trace the source.
+  if (state.contours) buildSegments();
   fitCanvasToStage();
 }
 function fitCanvasToStage() {
