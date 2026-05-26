@@ -59,6 +59,7 @@
     -webkit-font-smoothing: none;
     image-rendering: pixelated;
     user-select: none;
+    overflow-x: hidden;       /* prevent horizontal scroll from accidental overflow */
   }
   button, .chip, .seq-cell, .mem-btn, input[type=range], select, .tab, .strip, .knob{
     touch-action: manipulation;
@@ -524,6 +525,47 @@
   }
   .visuals{ display:grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
 
+  /* XY performance pad (kaossilator) */
+  .xy-toolbar{
+    display:flex; align-items:center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .xy-sel-row{
+    display:flex; align-items:center; gap:4px; flex-wrap: wrap;
+  }
+  .xy-axis-lbl{
+    font-size: 11px; font-weight: 700; color: var(--ink);
+    font-family: "Chicago","Geneva",sans-serif;
+  }
+  .xy-toolbar select{
+    padding: 2px 18px 2px 6px; font-size: 11px;
+    font-family: "Geneva","Lucida Grande",sans-serif;
+  }
+  .xy-pad{
+    width: 100%; height: 180px;
+    background: #fff;
+    border: 1px solid #000;
+    box-shadow: 2px 2px 0 #000;
+    position: relative;
+    touch-action: none;
+    cursor: crosshair;
+    overflow: hidden;
+  }
+  .xy-cross-h, .xy-cross-v{ position: absolute; background: #c0c0c0; pointer-events: none; }
+  .xy-cross-h{ left: 0; right: 0; top: 50%; height: 1px; }
+  .xy-cross-v{ top: 0; bottom: 0; left: 50%; width: 1px; }
+  .xy-dot{
+    width: 16px; height: 16px;
+    background: var(--acc);
+    border: 1px solid #000;
+    border-radius: 50%;
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 1px 1px 0 #000;
+    pointer-events: none;
+  }
+
   .hint{
     font-size: 11px; color: #000;
     letter-spacing: 0;
@@ -862,9 +904,13 @@
     .visuals{ grid-template-columns: 1fr; }
   }
   @media (max-width: 720px){
-    header{ padding-left: 8px; padding-right: 8px; padding-top: 14px; }
+    header{ padding-left: 8px; padding-right: 8px; padding-top: 14px; gap: 6px; }
     header .brand h1{ font-size: 12px; }
     header .brand .sub{ display: none; }
+    header .hdr-controls{ gap: 3px; }
+    header .hdr-controls button{ padding: 2px 6px; font-size: 10px; }
+    header .hdr-controls .sep{ margin: 0; height: 14px; }
+    header .status, header .recind{ font-size: 9px; }
     main{ padding: 6px; gap: 6px; }
     section.panel > *:not(h2){ margin-left: 8px; margin-right: 8px; }
     .tracks-strip{ grid-template-columns: repeat(4, 1fr); }
@@ -878,6 +924,13 @@
     .fx-params{ grid-template-columns: repeat(3, 1fr); }
     .knob svg{ width: 42px; height: 42px; }
     .pattern-row{ grid-template-columns: 30px 24px 34px 1fr; gap: 2px; }
+    .pattern-row .lbl, .pattern-row .ena, .pattern-row .modet{ font-size: 9px; }
+    .xy-pad{ height: 150px; }
+    .xy-toolbar{ gap: 4px; }
+    .xy-toolbar select{ max-width: 90px; font-size: 10px; }
+    .xy-axis-lbl{ font-size: 10px; }
+    .bpm-display{ font-size: 22px; min-width: 90px; padding: 2px 10px; }
+    .stage-block{ padding: 8px 10px; }
     section.panel{ padding: 14px 14px 18px; }
     .stage-block{ padding: 14px 14px; }
     .seq-cell{ min-height: 30px; aspect-ratio: auto; height: 34px; font-size: 10px; }
@@ -905,6 +958,8 @@
     <div class="sep"></div>
     <button class="danger" id="recBtn">● REC</button>
     <button id="recStop" disabled>■</button>
+    <div class="sep"></div>
+    <button id="bgBtn" title="background playback (mediasession + media stream)">BG</button>
     <div class="sep"></div>
     <div class="recind" id="recind">REC ●</div>
     <div class="status" id="status"><span class="dot"></span>Stop</div>
@@ -1067,6 +1122,34 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- XY performance pad (kaossilator style) -->
+    <div class="stage-block">
+      <div class="xy-toolbar">
+        <h2 style="font-size:11px; margin:0; color: var(--ink); font-family: 'Chicago','Geneva',sans-serif;">XY · Performance</h2>
+        <div class="seg" id="xyScopeSeg">
+          <button class="on" data-scope="master">Master</button>
+          <button data-scope="track">Selected</button>
+          <button data-scope="all">All</button>
+        </div>
+        <div class="xy-sel-row">
+          <span class="xy-axis-lbl">X</span>
+          <select id="xyXTarget"></select>
+          <span class="xy-axis-lbl">Y</span>
+          <select id="xyYTarget"></select>
+        </div>
+        <div class="seg" id="xyHoldSeg">
+          <button class="on" data-hold="0">Snap-back</button>
+          <button data-hold="1">Hold</button>
+        </div>
+      </div>
+      <div class="xy-pad" id="xyPad">
+        <div class="xy-cross-h"></div>
+        <div class="xy-cross-v"></div>
+        <div class="xy-dot" id="xyDot"></div>
+      </div>
+      <div class="meta" style="margin-top: 4px;">touch to perform — release returns to centre unless Hold</div>
     </div>
 
     <div class="canvas-wrap" style="height: 240px;">
@@ -1467,6 +1550,20 @@ const FX_TYPES = [
       { key:"depth",  min:0.3,  max:8, def:3,   fmt: v=>v.toFixed(1) },
       { key:"mix",    min:0,    max:1, def:1.0, fmt: v=>(v*100).toFixed(0)+" %" },
   ]},
+  { id:"flanger", label:"Flanger",  params: [
+      { key:"sync",   type:"choice", choices:["free","1/1","1/2","1/4","1/8"], def:"free" },
+      { key:"rate",   min:0.05, max:8,    def:0.4, fmt: v=>v.toFixed(2)+" Hz" },
+      { key:"depth",  min:0.0001, max:0.008, def:0.003, fmt: v=>(v*1000).toFixed(2)+" ms" },
+      { key:"fb",     min:0,    max:0.95, def:0.55, fmt: v=>(v*100).toFixed(0)+" %" },
+      { key:"mix",    min:0,    max:1,    def:0.5,  fmt: v=>(v*100).toFixed(0)+" %" },
+  ]},
+  { id:"phaser",  label:"Phaser",   params: [
+      { key:"sync",   type:"choice", choices:["free","1/1","1/2","1/4","1/8"], def:"free" },
+      { key:"rate",   min:0.05, max:8,    def:0.5,  fmt: v=>v.toFixed(2)+" Hz" },
+      { key:"depth",  min:0.1,  max:2,    def:1.0,  fmt: v=>v.toFixed(2) },
+      { key:"fb",     min:0,    max:0.92, def:0.5,  fmt: v=>(v*100).toFixed(0)+" %" },
+      { key:"mix",    min:0,    max:1,    def:0.6,  fmt: v=>(v*100).toFixed(0)+" %" },
+  ]},
 ];
 const FX_BY_ID = Object.fromEntries(FX_TYPES.map(f=>[f.id, f]));
 
@@ -1513,7 +1610,10 @@ function updateSyncedDelays(){
         if(slot.refs && slot.refs.dL)    slot.refs.dL.delayTime.setTargetAtTime(timeSec, now, 0.05);
         if(slot.refs && slot.refs.dR)    slot.refs.dR.delayTime.setTargetAtTime(timeSec, now, 0.05);
       }
-      // binaural rate sync handled implicitly — LFO reads computeFXRate every tick
+      if(slot.type === "phaser" || slot.type === "flanger"){
+        if(slot.refs && slot.refs.lfo) slot.refs.lfo.frequency.setTargetAtTime(computeFXRate(slot), now, 0.05);
+      }
+      // binaural rate sync is implicit — its JS LFO loop reads computeFXRate each tick
     }
   }
 }
@@ -1731,6 +1831,64 @@ function buildFX(slot){
       slot.refs = {panner, wet, dry};
       break;
     }
+    case "flanger": {
+      const dl = ctx.createDelay(0.05);
+      const fb = ctx.createGain();
+      const wet = ctx.createGain();
+      const dry = ctx.createGain();
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      const baseTime = 0.006;
+      dl.delayTime.value = baseTime;
+      lfo.type = "sine";
+      lfo.frequency.value = computeFXRate(slot);
+      lfoGain.gain.value = slot.params.depth;
+      lfo.connect(lfoGain).connect(dl.delayTime);
+      fb.gain.value = slot.params.fb;
+      wet.gain.value = slot.params.mix;
+      dry.gain.value = 1 - slot.params.mix;
+      slot.in.connect(dry).connect(slot.out);
+      slot.in.connect(dl);
+      dl.connect(fb).connect(dl);
+      dl.connect(wet).connect(slot.out);
+      lfo.start();
+      slot.nodes.push(dl, fb, wet, dry, lfo, lfoGain);
+      slot.refs = {dl, fb, wet, dry, lfo, lfoGain};
+      break;
+    }
+    case "phaser": {
+      const stages = 4;
+      const aps = [];
+      for(let i=0; i<stages; i++){
+        const ap = ctx.createBiquadFilter();
+        ap.type = "allpass";
+        ap.frequency.value = 400 * Math.pow(2, i);
+        ap.Q.value = 0.5;
+        aps.push(ap);
+      }
+      for(let i=0; i<stages-1; i++) aps[i].connect(aps[i+1]);
+      const fb = ctx.createGain();
+      const wet = ctx.createGain();
+      const dry = ctx.createGain();
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.type = "sine";
+      lfo.frequency.value = computeFXRate(slot);
+      lfoGain.gain.value = slot.params.depth * 800;
+      lfo.connect(lfoGain);
+      for(const ap of aps) lfoGain.connect(ap.frequency);
+      fb.gain.value = slot.params.fb;
+      wet.gain.value = slot.params.mix;
+      dry.gain.value = 1 - slot.params.mix;
+      slot.in.connect(dry).connect(slot.out);
+      slot.in.connect(aps[0]);
+      aps[stages-1].connect(fb).connect(aps[0]);
+      aps[stages-1].connect(wet).connect(slot.out);
+      lfo.start();
+      slot.nodes.push(...aps, fb, wet, dry, lfo, lfoGain);
+      slot.refs = {aps, fb, wet, dry, lfo, lfoGain};
+      break;
+    }
     case "gate": {
       const ana = ctx.createAnalyser();
       ana.fftSize = 256;
@@ -1836,6 +1994,21 @@ function applyFXParam(slot, key, v){
         r.dry.gain.setTargetAtTime(1-v, now, 0.02);
       }
       // mode / sync / rate / depth are read live by the LFO loop, no node updates needed
+      break;
+    case "flanger":
+    case "phaser":
+      if((key === "rate" || key === "sync") && r.lfo){
+        r.lfo.frequency.setTargetAtTime(computeFXRate(slot), now, 0.05);
+      }
+      if(key === "depth" && r.lfoGain){
+        const scale = (slot.type === "phaser") ? 800 : 1;
+        r.lfoGain.gain.setTargetAtTime(v * scale, now, 0.05);
+      }
+      if(key === "fb"  && r.fb)  r.fb.gain.setTargetAtTime(v, now, 0.02);
+      if(key === "mix" && r.wet){
+        r.wet.gain.setTargetAtTime(v, now, 0.02);
+        r.dry.gain.setTargetAtTime(1-v, now, 0.02);
+      }
       break;
   }
 }
@@ -2188,6 +2361,117 @@ function selectTrack(i){
   buildStrip();
 }
 
+/* ===== XY performance pad (kaossilator-style) ===== */
+const XY_TARGETS = {
+  lpf:    { label:"LPF",       scope:"master", apply: v => {
+            G.lpfHz = lerpLog(80, 18000, v); setSliderUI("lpf", G.lpfHz, fmtHz);
+            if(G.ctx) G.lpf.frequency.setTargetAtTime(G.lpfHz, G.ctx.currentTime, 0.02);
+          }},
+  rev:    { label:"Reverb",    scope:"master", apply: v => {
+            G.revMix = v*100; setSliderUI("rev", G.revMix, fmtPct);
+            if(G.ctx){ G.dry.gain.setTargetAtTime(1-v, G.ctx.currentTime, 0.05);
+                       G.wet.gain.setTargetAtTime(v,   G.ctx.currentTime, 0.05); }
+          }},
+  size:   { label:"Size",      scope:"track",  apply: (v,t) => { t.size = lerpLog(5, 300, v); if(t===CT()) setSliderUI("size", t.size, fmtMs); } },
+  pos:    { label:"Position",  scope:"track",  apply: (v,t) => { t.pos = v;             if(t===CT()) setSliderUI("pos", v, fmt3); } },
+  pit:    { label:"Pitch",     scope:"track",  apply: (v,t) => { t.pit = (v-0.5)*24;    if(t===CT()) setSliderUI("pit", t.pit, fmtST); } },
+  rate:   { label:"Density",   scope:"track",  apply: (v,t) => { t.rate = lerpLog(1, 80, v); if(t===CT()) setSliderUI("rate", t.rate, fmtGps); } },
+  spread: { label:"Pan Spread",scope:"track",  apply: (v,t) => { t.spread = v*100;      if(t===CT()) setSliderUI("spread", t.spread, fmtPct); } },
+  pitJit: { label:"Pit Jitter",scope:"track",  apply: (v,t) => { t.pitJit = v*24;       if(t===CT()) setSliderUI("pitJit", t.pitJit, v=>v.toFixed(1)+" st"); } },
+  scan:   { label:"Scan",      scope:"track",  apply: (v,t) => { t.scan = (v-0.5)*2;    if(t===CT()) setSliderUI("scan", t.scan, fmt3); } },
+};
+function lerpLog(a, b, v){
+  a = Math.max(a, 1e-9); b = Math.max(b, 1e-9);
+  return Math.exp(Math.log(a) + clamp(v,0,1) * (Math.log(b) - Math.log(a)));
+}
+const XY = { scope: "master", xTarget: "lpf", yTarget: "rev", hold: false, touching: false };
+
+function buildXYSelects(){
+  const xs = $("xyXTarget"), ys = $("xyYTarget");
+  xs.innerHTML = ""; ys.innerHTML = "";
+  const filter = (XY.scope === "master") ? "master" : "track";
+  const list = Object.keys(XY_TARGETS).filter(k => XY_TARGETS[k].scope === filter);
+  for(const k of list){
+    const o1 = document.createElement("option"); o1.value = k; o1.textContent = XY_TARGETS[k].label; xs.appendChild(o1);
+    const o2 = document.createElement("option"); o2.value = k; o2.textContent = XY_TARGETS[k].label; ys.appendChild(o2);
+  }
+  if(!list.includes(XY.xTarget)) XY.xTarget = list[0];
+  if(!list.includes(XY.yTarget)) XY.yTarget = list[1] || list[0];
+  xs.value = XY.xTarget;
+  ys.value = XY.yTarget;
+}
+function applyXY(x, y){
+  const xt = XY_TARGETS[XY.xTarget];
+  const yt = XY_TARGETS[XY.yTarget];
+  if(!xt || !yt) return;
+  if(XY.scope === "master"){
+    if(xt.scope === "master") xt.apply(x);
+    if(yt.scope === "master") yt.apply(y);
+  } else if(XY.scope === "track"){
+    const t = CT();
+    if(xt.scope === "track") xt.apply(x, t);
+    if(yt.scope === "track") yt.apply(y, t);
+  } else {
+    for(const t of tracks){
+      if(xt.scope === "track") xt.apply(x, t);
+      if(yt.scope === "track") yt.apply(y, t);
+    }
+  }
+}
+function moveXYDot(x, y){
+  const dot = $("xyDot");
+  dot.style.left = (x*100)+"%";
+  dot.style.top  = ((1-y)*100)+"%";
+}
+function attachXYPad(){
+  const pad = $("xyPad");
+  const compute = e => {
+    const r = pad.getBoundingClientRect();
+    const cx = e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX) ?? 0;
+    const cy = e.clientY ?? (e.touches && e.touches[0] && e.touches[0].clientY) ?? 0;
+    const x = clamp((cx - r.left) / r.width,  0, 1);
+    const y = 1 - clamp((cy - r.top)  / r.height, 0, 1);
+    moveXYDot(x, y);
+    applyXY(x, y);
+  };
+  pad.addEventListener("pointerdown", e => {
+    XY.touching = true;
+    try{ pad.setPointerCapture(e.pointerId); }catch(_){}
+    compute(e);
+    e.preventDefault();
+  });
+  pad.addEventListener("pointermove", e => { if(XY.touching) compute(e); });
+  const release = ()=>{
+    XY.touching = false;
+    if(!XY.hold){
+      moveXYDot(0.5, 0.5);
+      applyXY(0.5, 0.5);
+    }
+  };
+  pad.addEventListener("pointerup",          release);
+  pad.addEventListener("pointercancel",      release);
+  pad.addEventListener("lostpointercapture", release);
+
+  document.querySelectorAll("#xyScopeSeg button").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      document.querySelectorAll("#xyScopeSeg button").forEach(x=>x.classList.remove("on"));
+      b.classList.add("on");
+      XY.scope = b.dataset.scope;
+      buildXYSelects();
+    });
+  });
+  document.querySelectorAll("#xyHoldSeg button").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      document.querySelectorAll("#xyHoldSeg button").forEach(x=>x.classList.remove("on"));
+      b.classList.add("on");
+      XY.hold = b.dataset.hold === "1";
+    });
+  });
+  $("xyXTarget").addEventListener("change", ()=>{ XY.xTarget = $("xyXTarget").value; });
+  $("xyYTarget").addEventListener("change", ()=>{ XY.yTarget = $("xyYTarget").value; });
+  buildXYSelects();
+}
+
 /* ===== FX slot UI ===== */
 function populateFXSelects(){
   document.querySelectorAll(".fx-slot select.fx-type").forEach(sel=>{
@@ -2382,6 +2666,49 @@ $("playBtn").addEventListener("click", async ()=>{
 });
 $("stopBtn").addEventListener("click", ()=>{ G.running = false; setStatus(false); });
 $("tapBtn").addEventListener("click", tap);
+
+/* ---------- background playback ---------- */
+let G_bgAudio = null, G_bgDest = null;
+$("bgBtn").addEventListener("click", async ()=>{
+  await ensureAudio();
+  if(G_bgDest){
+    teardownBackground();
+    $("bgBtn").classList.remove("active");
+  } else {
+    setupBackground();
+    $("bgBtn").classList.add("active");
+  }
+});
+function setupBackground(){
+  if(G_bgDest) return;
+  G_bgDest = G.ctx.createMediaStreamDestination();
+  G.master.connect(G_bgDest);
+  G_bgAudio = document.createElement("audio");
+  G_bgAudio.srcObject = G_bgDest.stream;
+  G_bgAudio.autoplay = true;
+  G_bgAudio.playsInline = true;
+  G_bgAudio.style.display = "none";
+  document.body.appendChild(G_bgAudio);
+  // detach the silent web-audio output so we don't double the level
+  try{ G.master.disconnect(G.ctx.destination); }catch(_){}
+  G_bgAudio.play().catch(()=>{});
+  if("mediaSession" in navigator){
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: "GRANULAR", artist: "scire-h", album: "4-track granulator",
+    });
+    navigator.mediaSession.setActionHandler("play",  ()=>{ if(!G.running) $("playBtn").click(); });
+    navigator.mediaSession.setActionHandler("pause", ()=>{ if( G.running) $("stopBtn").click(); });
+  }
+}
+function teardownBackground(){
+  if(G_bgAudio){ try{ G_bgAudio.pause(); }catch(_){} G_bgAudio.remove(); G_bgAudio = null; }
+  if(G_bgDest){ try{ G.master.disconnect(G_bgDest); }catch(_){} G_bgDest = null; }
+  try{ G.master.connect(G.ctx.destination); }catch(_){}
+  if("mediaSession" in navigator){
+    try{ navigator.mediaSession.setActionHandler("play",  null); }catch(_){}
+    try{ navigator.mediaSession.setActionHandler("pause", null); }catch(_){}
+  }
+}
 
 function setStatus(on){
   const e = $("status");
@@ -4156,6 +4483,7 @@ window.addEventListener("load", ()=>{
   buildPatternGrid();
   populateFXSelects();
   knobifyAll();
+  attachXYPad();
   refreshUIForTrack();
   updateBpmDisplay();
   updateRecStatusText();
