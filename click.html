@@ -208,14 +208,14 @@
         <select id="key">
           <option value="C">C</option>
           <option value="C#">C#</option>
-          <option value="D">D</option>
+          <option value="D" selected>D</option>
           <option value="D#">D#</option>
           <option value="E">E</option>
           <option value="F">F</option>
           <option value="F#">F#</option>
           <option value="G">G</option>
           <option value="G#">G#</option>
-          <option value="A" selected>A</option>
+          <option value="A">A</option>
           <option value="A#">A#</option>
           <option value="B">B</option>
         </select>
@@ -224,8 +224,8 @@
         OCT
         <select id="oct">
           <option value="-2">−2</option>
-          <option value="-1">−1</option>
-          <option value="0" selected>0</option>
+          <option value="-1" selected>−1</option>
+          <option value="0">0</option>
           <option value="1">+1</option>
           <option value="2">+2</option>
         </select>
@@ -233,18 +233,18 @@
       <span class="group">
         VOICE
         <select id="voice">
-          <option value="sine" selected>SINE</option>
+          <option value="sine">SINE</option>
           <option value="triangle">TRI</option>
           <option value="square">SQR</option>
-          <option value="wood">WOOD</option>
+          <option value="wood" selected>WOOD</option>
         </select>
       </span>
       <span class="group">
         NTYPE
         <select id="nzType">
           <option value="white">WHT</option>
-          <option value="pink" selected>PNK</option>
-          <option value="brown">BRN</option>
+          <option value="pink">PNK</option>
+          <option value="brown" selected>BRN</option>
           <option value="bright">BRT</option>
         </select>
       </span>
@@ -413,18 +413,18 @@ const state = {
   bpm: 120,
   beatsPerBar: 4,    // 2..7
   subdivision: 2,    // ticks per beat: 1 (1/4), 2 (1/8) or 4 (1/16)
-  key: "A",          // tonal pitch for the beat/sub clicks (12 chromatic notes)
-  octave: 0,         // octave shift for both accent + click (-2..+2)
+  key: "D",          // tonal pitch for the beat/sub clicks (12 chromatic notes)
+  octave: -1,        // octave shift for both accent + click (-2..+2)
   pan: 0,            // -1 (full L) .. +1 (full R)
-  volume: 0.55,      // 0..1 -- master gain
+  volume: 1.00,      // 0..1 -- master gain
   decay: 0.040,      // seconds -- body of the click  (peak -> 10%)
-  release: 0.060,    // seconds -- tail of the click  (10%  -> 0)
-  cutoff: 20000,     // Hz -- per-voice lowpass resting cutoff (20 kHz ~= bypass)
-  resonance: 0.707,  // BiquadFilter Q -- raise for ringing / synth-y filter
-  envAmount: 0.0,    // 0..1 -- how much the click envelope opens cutoff upward
-  noise: 0.0,        // 0..1 -- noise transient mixed into every accent
-  noiseType: "pink", // white | pink | brown | bright (HP-filtered white)
-  voice: "sine",     // sine | triangle | square | wood
+  release: 0.049,    // seconds -- tail of the click  (10%  -> 0)
+  cutoff: 279,       // Hz -- per-voice lowpass resting cutoff
+  resonance: 6.74,   // BiquadFilter Q (= 0.5 + (32/100)*19.5)
+  envAmount: 0.36,   // 0..1 -- how much the click envelope opens cutoff upward
+  noise: 0.05,       // 0..1 -- noise transient mixed into every accent
+  noiseType: "brown",// white | pink | brown | bright (HP-filtered white)
+  voice: "wood",     // sine | triangle | square | wood
 };
 
 /* MIDI note number for a (note name, octave) -- C4 = 60, A4 = 69 */
@@ -749,7 +749,7 @@ function knobFromCutoff(hz) {
 }
 
 const KNOBS = [
-  { id: "kVOL", label: "VOL",  min:   0, max: 100, default: 55,
+  { id: "kVOL", label: "VOL",  min:   0, max: 100, default: 100,
     format: v => Math.round(v),
     read: () => state.volume * 100,
     onChange: v => {
@@ -767,23 +767,23 @@ const KNOBS = [
     format: v => Math.round(v),
     read: () => state.decay * 1000,
     onChange: v => { state.decay = v / 1000; } },
-  { id: "kREL", label: "REL",  min:   0, max: 500, default: 60,
+  { id: "kREL", label: "REL",  min:   0, max: 500, default: 49,
     format: v => Math.round(v),
     read: () => state.release * 1000,
     onChange: v => { state.release = v / 1000; } },
-  { id: "kCUT", label: "CUT",  min:   0, max: 100, default: 100,
+  { id: "kCUT", label: "CUT",  min:   0, max: 100, default: knobFromCutoff(279),
     format: v => cutoffFromKnob(v),
     read: () => knobFromCutoff(state.cutoff),
     onChange: v => { state.cutoff = cutoffFromKnob(v); } },
-  { id: "kRES", label: "RESO", min:   0, max: 100, default: 0,
+  { id: "kRES", label: "RESO", min:   0, max: 100, default: 32,
     format: v => Math.round(v),
     read: () => (state.resonance - 0.5) / 19.5 * 100,
     onChange: v => { state.resonance = 0.5 + (v / 100) * 19.5; } },
-  { id: "kENV", label: "ENV",  min:   0, max: 100, default: 0,
+  { id: "kENV", label: "ENV",  min:   0, max: 100, default: 36,
     format: v => Math.round(v),
     read: () => state.envAmount * 100,
     onChange: v => { state.envAmount = v / 100; } },
-  { id: "kNZ",  label: "NOISE",min:   0, max: 100, default: 0,
+  { id: "kNZ",  label: "NOISE",min:   0, max: 100, default: 5,
     format: v => Math.round(v),
     read: () => state.noise * 100,
     onChange: v => { state.noise = v / 100; } },
