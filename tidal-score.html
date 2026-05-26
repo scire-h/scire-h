@@ -307,6 +307,14 @@ function initAudio() {
   startDrone();
 }
 
+/* random stereo placement per event — gallery-ready spatial spread */
+function panNode(spread) {
+  const p = actx.createStereoPanner();
+  p.pan.value = (Math.random() * 2 - 1) * spread;
+  p.connect(master);
+  return p;
+}
+
 function makeNoise(seconds) {
   const len = Math.floor(actx.sampleRate * seconds);
   const buf = actx.createBuffer(1, len, actx.sampleRate);
@@ -372,7 +380,7 @@ function playInsect(intensity) {
     env.gain.setValueAtTime(peak, now + dur - 0.15);
     env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
 
-    osc.connect(bp).connect(trem).connect(env).connect(master);
+    osc.connect(bp).connect(trem).connect(env).connect(panNode(0.85));
     osc.start(now); vib.start(now); trillOsc.start(now);
     osc.stop(now + dur + 0.05); vib.stop(now + dur + 0.05); trillOsc.stop(now + dur + 0.05);
   } else {
@@ -407,7 +415,7 @@ function playInsect(intensity) {
     env.gain.setValueAtTime(peak, now + dur - 0.25);
     env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
 
-    src.connect(bp).connect(trem).connect(env).connect(master);
+    src.connect(bp).connect(trem).connect(env).connect(panNode(0.85));
     src.start(now); shim.start(now);
     src.stop(now + dur + 0.05); shim.stop(now + dur + 0.05);
   }
@@ -459,7 +467,7 @@ function playScrape(intensity) {
   env.gain.setValueAtTime(peak, now + dur - 0.6);
   env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
 
-  src.connect(bp).connect(grit).connect(lp).connect(env).connect(master);
+  src.connect(bp).connect(grit).connect(lp).connect(env).connect(panNode(0.7));
   src.start(now); lfo.start(now);
   src.stop(now + dur + 0.05); lfo.stop(now + dur + 0.05);
 
@@ -511,7 +519,7 @@ function playTubeWind(intensity) {
   env.gain.setValueAtTime(peak, now + dur - 1.0);
   env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
 
-  merge.connect(env).connect(master);
+  merge.connect(env).connect(panNode(0.55));
   src.start(now);
   src.stop(now + dur + 0.05);
 
