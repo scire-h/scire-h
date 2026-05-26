@@ -539,7 +539,8 @@ function makeChannel(idx, label) {
     octave:     3,      // 1..5
     attack:     0.0,    // 0..1 -> 1 ms .. 350 ms
     sustain:    0.4,    // 0..1 -> 30 ms .. 3.5 s
-    waveform:   "sin",  // "cymbal" | "pulse" | "sin"
+    waveform:   "sin",  // VCO shape: "sin" | "tri" | "sqr" | "saw"
+    noiseOn:    false,  // mix the channel-specific noise voice on top of the VCO
     lfoRate:    0.3,
     lfoDepth:   0.5,
     lfoOn:      false,
@@ -562,10 +563,10 @@ const state = {
   ],
 };
 /* sensible default voicings, one per channel */
-Object.assign(state.channels[0], { vco:0.85, octave:4, sweep:0.55, sweepDir:"down", waveform:"sin",    sustain:0.18 });
-Object.assign(state.channels[1], { vco:0.65, octave:4, sweep:0.55, sweepDir:"down", waveform:"sin",    sustain:0.22 });
-Object.assign(state.channels[2], { vco:0.45, octave:3, sweep:0.30, sweepDir:"down", waveform:"pulse",  sustain:0.18 });
-Object.assign(state.channels[3], { vco:0.25, octave:2, sweep:0.55, sweepDir:"down", waveform:"sin",    sustain:0.32 });
+Object.assign(state.channels[0], { vco:0.85, octave:4, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:true,  sustain:0.18 }); // cymbal: sine + cymbal-noise mix
+Object.assign(state.channels[1], { vco:0.65, octave:4, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:true,  sustain:0.22 }); // cymbal: sine + cymbal-noise mix
+Object.assign(state.channels[2], { vco:0.45, octave:3, sweep:0.30, sweepDir:"down", waveform:"sqr", noiseOn:true,  sustain:0.18 }); // snare: square + snare-noise mix
+Object.assign(state.channels[3], { vco:0.25, octave:2, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, sustain:0.32 }); // kick: pure sine
 
 /* =========================================================
    VOICE (same engine as the panel-style HTML; not the UI)
@@ -602,6 +603,9 @@ function playChannel(ch, velocity=1) {
      Going straight to the master keeps SIN spectrally pure. */
   vca.connect(master);
 
+  /* Stick-attack transient (mostly for snare-like sounds where ATTACK
+     is at MIN). Skipped on pure SIN since the reference shows a clean
+     rise. Routed through VCA so OUTPUT / SENSE / DECAY shape it. */
   if (ch.waveform !== "sin" && ch.attack < 0.05) {
     const click = actx.createBufferSource();
     const len   = Math.floor(actx.sampleRate * 0.012);
@@ -621,24 +625,32 @@ function playChannel(ch, velocity=1) {
     click.stop(now + 0.02);
   }
 
-  if (ch.waveform === "cymbal") {
+  /* VCO with the selected waveform (always plays). */
+  spawnVCO(base, sweepT, ch, vca, decay, 0);
+  if (ch.multiVCO) {
+    spawnVCO(base, sweepT, ch, vca, decay, +7);
+    spawnVCO(base, sweepT, ch, vca, decay, -7);
+    const neighbor = state.channels[(ch.idx + 2) % 4];
+    const nf = vcoFreq(neighbor.vco, neighbor.octave, neighbor.beatTune);
+    spawnVCO(nf, sweepT, ch, vca, decay, 0);
+  }
+
+  /* Optional noise mix on top of the VCO. The channel's role label
+     (CYMBAL / SNARE / NOISE) picks the noise voice's filter character. */
+  if (ch.noiseOn) {
     spawnNoise(base, sweepT, ch, vca, decay);
-  } else {
-    spawnVCO(base, sweepT, ch, vca, decay, 0);
-    if (ch.multiVCO) {
-      spawnVCO(base, sweepT, ch, vca, decay, +7);
-      spawnVCO(base, sweepT, ch, vca, decay, -7);
-      const neighbor = state.channels[(ch.idx + 2) % 4];
-      const nf = vcoFreq(neighbor.vco, neighbor.octave, neighbor.beatTune);
-      spawnVCO(nf, sweepT, ch, vca, decay, 0);
-    }
   }
 }
+
+/* Map the panel's waveform name to the Web Audio OscillatorNode type.
+   These four are the standard analog drum-synth shapes (Pollard
+   Syndrum, Simmons SDS, Toyo Gakki DS-4). */
+const WAVE_MAP = { sin:"sine", tri:"triangle", sqr:"square", saw:"sawtooth" };
 
 function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
   const now = actx.currentTime;
   const osc = actx.createOscillator();
-  osc.type = (ch.waveform === "pulse") ? "square" : "sine";
+  osc.type = WAVE_MAP[ch.waveform] || "sine";
 
   const hitDrift  = (Math.random() - 0.5) * 6;
   const slowDrift = chDriftCents(ch.idx);
@@ -671,8 +683,13 @@ function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
     lfo.stop(now + decay + 0.2);
   }
 
+  /* Per-waveform attenuation so the harmonic-rich shapes don't tower
+     over sine. tri / sqr / saw have progressively more harmonic energy. */
   const lev = actx.createGain();
-  lev.gain.value = (ch.waveform === "pulse") ? 0.45 : 1.0;
+  lev.gain.value = (ch.waveform === "sqr") ? 0.45
+                : (ch.waveform === "saw") ? 0.55
+                : (ch.waveform === "tri") ? 0.85
+                                          : 1.00;
   osc.connect(lev).connect(dest);
   osc.start(now);
   osc.stop(now + decay + 0.1);
@@ -862,20 +879,41 @@ function buildParams() {
   wrap.innerHTML = "";
   const ch = state.channels[state.activeCh];
 
-  /* --- SOURCE --- */
-  const srcSec = el("div", "section");
-  srcSec.appendChild(el("h3", null, `SOURCE <span class="right">${ch.label} channel</span>`));
-  srcSec.appendChild(segRow(
-    ["cymbal","pulse","sin"], ["CYMBAL","PULSE","SIN"],
-    () => ch.waveform, v => { ch.waveform = v; }
+  /* --- WAVEFORM (4 standard analog drum-synth shapes) --- */
+  const wfSec = el("div", "section");
+  wfSec.appendChild(el("h3", null, `WAVEFORM <span class="right">VCO shape</span>`));
+  wfSec.appendChild(segRow(
+    ["sin","tri","sqr","saw"], ["∿ SIN","△ TRI","⊓ SQR","⋀ SAW"],
+    () => ch.waveform, v => { ch.waveform = v; buildParams(); }
   ));
-  const srcHint = (
-    ch.waveform === "cymbal" ? "広帯域ノイズ単独 (VCO 停止、10kHz LP)" :
-    ch.waveform === "pulse"  ? "矩形波単独 (50% duty, 帯域制限)" :
-                                "純粋サイン波単独"
+  const wfHint = (
+    ch.waveform === "sin" ? "純粋サイン波 (倍音なし)" :
+    ch.waveform === "tri" ? "三角波 (奇数倍音、1/n² 減衰)" :
+    ch.waveform === "sqr" ? "矩形波 (奇数倍音、1/n 減衰、明るい)" :
+                             "鋸歯状波 (全倍音、最も明るい)"
   );
-  srcSec.appendChild(el("div", "info", srcHint));
-  wrap.appendChild(srcSec);
+  wfSec.appendChild(el("div", "info", wfHint));
+  wrap.appendChild(wfSec);
+
+  /* --- NOISE MIX (independent toggle, channel-specific colour) --- */
+  const nzSec = el("div", "section");
+  nzSec.appendChild(el("h3", null, `NOISE MIX <span class="right">${ch.label} colour</span>`));
+  const nzRow = el("div");
+  nzRow.style.display = "flex";
+  nzRow.style.alignItems = "center";
+  nzRow.style.gap = "8px";
+  nzRow.appendChild(toggleButton(
+    ch.noiseOn ? "NOISE ON" : "NOISE OFF",
+    () => ch.noiseOn,
+    v => { ch.noiseOn = v; buildParams(); }
+  ));
+  nzSec.appendChild(nzRow);
+  const nzHint =
+    ch.label === "CYMBAL" ? "シャラ系広帯域ノイズ (4.5-7.5kHz LP)" :
+    ch.label === "SNARE"  ? "中域 BP + 胴鳴り (600-4200Hz)" :
+                             "低域広帯域ノイズ (2-7kHz LP)";
+  nzSec.appendChild(el("div", "info", ch.noiseOn ? nzHint : "ノイズなし (VCO のみ)"));
+  wrap.appendChild(nzSec);
 
   /* --- PITCH --- */
   const pitch = el("div", "section");
@@ -1001,19 +1039,19 @@ const PRESETS = {
   electro: {
     _name: "Electro Kit",
     _apply() {
-      setCh(0, { vco:0.5, octave:3, attack:0, sustain:0.08, sweep:0.0,  sweepDir:"off",  waveform:"cymbal", output:0.55, lfoOn:false, multiVCO:false });
-      setCh(1, { vco:0.5, octave:3, attack:0, sustain:0.28, sweep:0.0,  sweepDir:"off",  waveform:"cymbal", output:0.55, lfoOn:false, multiVCO:false });
-      setCh(2, { vco:0.55,octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"pulse",  output:0.75, lfoOn:false, multiVCO:false });
-      setCh(3, { vco:0.25,octave:2, attack:0, sustain:0.30, sweep:0.55, sweepDir:"down", waveform:"sin",    output:0.92, lfoOn:false, multiVCO:false });
+      setCh(0, { vco:0.5, octave:3, attack:0, sustain:0.08, sweep:0.0,  sweepDir:"off",  waveform:"sin", noiseOn:true,  output:0.55, lfoOn:false, multiVCO:false });
+      setCh(1, { vco:0.5, octave:3, attack:0, sustain:0.28, sweep:0.0,  sweepDir:"off",  waveform:"sin", noiseOn:true,  output:0.55, lfoOn:false, multiVCO:false });
+      setCh(2, { vco:0.55,octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"sqr", noiseOn:false, output:0.75, lfoOn:false, multiVCO:false });
+      setCh(3, { vco:0.25,octave:2, attack:0, sustain:0.30, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.92, lfoOn:false, multiVCO:false });
     },
   },
   cymbalWash: {
     _name: "Cymbal Wash",
     _apply() {
-      setCh(0, { vco:0.5, octave:3, attack:0, sustain:0.15, sweep:0.0, sweepDir:"off", waveform:"cymbal", output:0.65, lfoOn:false, multiVCO:false });
-      setCh(1, { vco:0.5, octave:3, attack:0, sustain:0.30, sweep:0.0, sweepDir:"off", waveform:"cymbal", output:0.65, lfoOn:false, multiVCO:false });
-      setCh(2, { vco:0.5, octave:3, attack:0, sustain:0.50, sweep:0.0, sweepDir:"off", waveform:"cymbal", output:0.65, lfoOn:false, multiVCO:false });
-      setCh(3, { vco:0.5, octave:3, attack:0, sustain:0.85, sweep:0.0, sweepDir:"off", waveform:"cymbal", output:0.65, lfoOn:false, multiVCO:false });
+      setCh(0, { vco:0.5, octave:3, attack:0, sustain:0.15, sweep:0.0, sweepDir:"off", waveform:"sin", noiseOn:true,  output:0.65, lfoOn:false, multiVCO:false });
+      setCh(1, { vco:0.5, octave:3, attack:0, sustain:0.30, sweep:0.0, sweepDir:"off", waveform:"sin", noiseOn:true,  output:0.65, lfoOn:false, multiVCO:false });
+      setCh(2, { vco:0.5, octave:3, attack:0, sustain:0.50, sweep:0.0, sweepDir:"off", waveform:"sin", noiseOn:true,  output:0.65, lfoOn:false, multiVCO:false });
+      setCh(3, { vco:0.5, octave:3, attack:0, sustain:0.85, sweep:0.0, sweepDir:"off", waveform:"sin", noiseOn:true,  output:0.65, lfoOn:false, multiVCO:false });
     },
   },
   cosmic: {
