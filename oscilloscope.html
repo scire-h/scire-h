@@ -818,8 +818,6 @@ function buildSegments() {
   state.segments = segs;
   state.totalLength = total;
 }
-// Rebuild segment cache whenever resolution changes.
-$('resolution').addEventListener('change', () => buildSegments());
 
 // ========================================================================
 // Rendering
