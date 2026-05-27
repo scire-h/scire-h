@@ -118,7 +118,7 @@
   ];
 
   // ---- ランタイムデータ ----
-  let leaves = [];   // 葉
+  let trees = [];    // 樹（枝の階層 + 葉）
   let bokeh = [];    // 木漏れ日の光斑
   let sunX = 0, sunY = 0;  // 太陽位置
   let parallaxX = 0, parallaxY = 0; // 端末傾き
@@ -126,45 +126,82 @@
 
   function rand(a, b) { return a + Math.random() * (b - a); }
 
+  // 枝を再帰生成（子枝・葉も含む）
+  function buildBranch(x1, y1, angle, len, thickness, depth) {
+    const x2 = x1 + Math.cos(angle) * len;
+    const y2 = y1 + Math.sin(angle) * len;
+    const br = {
+      x1, y1, x2, y2,
+      thickness,
+      depth,
+      phase: rand(0, Math.PI * 2),
+      // 先端ほど大きく揺れる
+      swayAmp: 0.4 + depth * 0.7,
+      children: [],
+      leaves: [],
+    };
+    if (depth < 6 && len > 18) {
+      const av = rand(0.22, 0.55);
+      const lf = rand(0.62, 0.82);
+      br.children.push(buildBranch(x2, y2, angle + av,        len * lf, thickness * 0.66, depth + 1));
+      br.children.push(buildBranch(x2, y2, angle - av,        len * lf, thickness * 0.66, depth + 1));
+      if (Math.random() < 0.45) {
+        br.children.push(buildBranch(x2, y2, angle + rand(-0.10, 0.10), len * 0.85, thickness * 0.82, depth + 1));
+      }
+    }
+    // 葉：枝先と、ある程度奥の枝の中腹にも
+    const isTip = br.children.length === 0;
+    const tipCount = isTip ? (8 + Math.floor(Math.random() * 6)) : 0;
+    const midCount = (depth >= 2 && !isTip) ? (2 + Math.floor(Math.random() * 3)) : 0;
+    // 直行ベクトル（葉の中腹散らし用）
+    const dx = (x2 - x1), dy = (y2 - y1);
+    const dlen = Math.hypot(dx, dy) || 1;
+    const px = -dy / dlen, py = dx / dlen;
+    function pushLeaf(anchorX, anchorY, spread) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * spread;
+      br.leaves.push({
+        ox: anchorX + Math.cos(a) * r,
+        oy: anchorY + Math.sin(a) * r,
+        size: rand(13, 24) * (0.85 + depth * 0.05),
+        rot: rand(0, Math.PI * 2),
+        shape: leafShapes[(Math.random() * leafShapes.length) | 0],
+        flutterPhase: rand(0, Math.PI * 2),
+        flutterSpeed: rand(2.0, 4.5),
+        flutterAmp: rand(0.05, 0.16),
+        rim: rand(0.05, 0.16),
+      });
+    }
+    // 葉は枝の x2 を基準（drawLeaves で br.x2+sway に加算）
+    for (let i = 0; i < tipCount; i++) pushLeaf(0, 0, 32);
+    for (let i = 0; i < midCount; i++) {
+      // 枝の中腹からの相対座標
+      const t = rand(-0.6, -0.15);  // x2 から始原方向に戻る
+      const along = t * dlen;
+      const ax = Math.cos(angle) * along;
+      const ay = Math.sin(angle) * along;
+      const side = rand(-12, 12);
+      pushLeaf(ax + px * side, ay + py * side, 8);
+    }
+    return br;
+  }
+
   function rebuild() {
     sunX = W * 0.55;
     sunY = H * 0.18;
 
-    // 葉：枝に沿って集まるように、いくつかの「房」を作る
-    leaves = [];
-    const area = W * H;
-    const clusters = Math.round(area / 18000);     // クラスター数（密度）
-    const perCluster = 7;
-    for (let c = 0; c < clusters; c++) {
-      const cx = rand(-W*0.1, W*1.1);
-      const cy = rand(-H*0.1, H*0.95);
-      const baseDepth = rand(0, 1);          // 0:奥(小・速い揺れ) 1:手前(大・遅い揺れ)
-      for (let i = 0; i < perCluster; i++) {
-        const depth = Math.max(0, Math.min(1, baseDepth + rand(-0.15, 0.15)));
-        const spread = 70 + depth * 50;
-        leaves.push({
-          x: cx + rand(-spread, spread),
-          y: cy + rand(-spread*0.7, spread*0.7),
-          size: rand(14, 34) * (0.6 + depth * 0.8),
-          rot: rand(0, Math.PI * 2),
-          shape: leafShapes[(Math.random() * leafShapes.length) | 0],
-          depth,
-          swayAmp: rand(2, 7),
-          swayPhase: rand(0, Math.PI * 2),
-          swaySpeed: rand(0.4, 0.9),
-          flutterAmp: rand(0.04, 0.14),
-          flutterPhase: rand(0, Math.PI * 2),
-          flutterSpeed: rand(2.0, 4.5),
-          // 葉先のかすかな透過光
-          rim: rand(0.05, 0.18),
-        });
-      }
-    }
-    // 奥行き順に描画
-    leaves.sort((a, b) => a.depth - b.depth);
+    // ---- 樹を配置 ----
+    trees = [];
+    // 主役：左下から伸びる大木
+    trees.push(buildBranch(W * 0.18, H * 1.02, -Math.PI/2 - 0.12, H * 0.32, 28, 0));
+    // 右下から伸びる中木
+    trees.push(buildBranch(W * 0.88, H * 1.04, -Math.PI/2 + 0.14, H * 0.27, 22, 0));
+    // 奥の小ぶりな樹（中央後ろ）
+    trees.push(buildBranch(W * 0.55, H * 1.10, -Math.PI/2 - 0.02, H * 0.22, 16, 0));
 
-    // 光斑：葉の隙間から漏れる光（円形 bokeh）
+    // ---- 光斑：葉の隙間から漏れる光（円形 bokeh） ----
     bokeh = [];
+    const area = W * H;
     const bokehCount = Math.round(area / 26000);
     for (let i = 0; i < bokehCount; i++) {
       // 太陽寄りに集めるが、全画面に散らす
@@ -250,37 +287,60 @@
     bCtx.globalCompositeOperation = 'source-over';
   }
 
-  function drawLeaves(t) {
-    lCtx.clearRect(0, 0, W, H);
-    for (const lf of leaves) {
-      // 揺れ
-      const swayBase = Math.sin(t * lf.swaySpeed + lf.swayPhase);
-      const sway = swayBase * lf.swayAmp + wind * 18 * (1 - lf.depth * 0.5);
+  // 枝を再帰描画（先端ほど揺れる：親の sway を累積して渡す）
+  function drawBranches(br, t, accSway) {
+    const mySway = Math.sin(t * 0.55 + br.phase) * br.swayAmp * (1 + wind * 3);
+    const tipSway = accSway + mySway;
+    const px = parallaxX * (3 + br.depth * 4);
+    const py = parallaxY * (2 + br.depth * 2);
+
+    lCtx.strokeStyle = `rgba(2, 8, 5, 0.97)`;
+    lCtx.lineCap = 'round';
+    lCtx.lineWidth = br.thickness;
+    lCtx.beginPath();
+    lCtx.moveTo(br.x1 + accSway + px, br.y1 + py);
+    const mx = (br.x1 + br.x2) / 2 + (accSway + tipSway) * 0.5 + px;
+    const my = (br.y1 + br.y2) / 2 + py;
+    lCtx.quadraticCurveTo(mx, my, br.x2 + tipSway + px, br.y2 + py);
+    lCtx.stroke();
+
+    for (const child of br.children) {
+      drawBranches(child, t, tipSway);
+    }
+    return tipSway;
+  }
+
+  function drawLeavesForBranch(br, t, accSway) {
+    const mySway = Math.sin(t * 0.55 + br.phase) * br.swayAmp * (1 + wind * 3);
+    const tipSway = accSway + mySway;
+    const px = parallaxX * (6 + br.depth * 6);
+    const py = parallaxY * (3 + br.depth * 4);
+
+    for (const lf of br.leaves) {
       const flutter = Math.sin(t * lf.flutterSpeed + lf.flutterPhase) * lf.flutterAmp
-                    + wind * 0.4 * Math.sin(lf.flutterPhase);
-      // パララックス（手前ほど大きく動く）
-      const px = parallaxX * (8 + lf.depth * 14);
-      const py = parallaxY * (4 + lf.depth * 8);
-
+                    + wind * 0.35 * Math.sin(lf.flutterPhase);
       lCtx.save();
-      lCtx.translate(lf.x + sway + px, lf.y + py);
+      lCtx.translate(br.x2 + tipSway + lf.ox + px, br.y2 + lf.oy + py);
       lCtx.rotate(lf.rot + flutter);
-
-      // 葉の本体（ほぼ黒シルエット）
-      lCtx.fillStyle = `rgba(3, 10, 5, ${0.88 + lf.depth * 0.10})`;
+      lCtx.fillStyle = 'rgba(3, 10, 5, 0.94)';
       lf.shape(lCtx, lf.size);
-
-      // 葉縁のうっすらした透過光（backlit）
+      // 葉縁のかすかな透過光
       lCtx.globalCompositeOperation = 'lighter';
-      lCtx.strokeStyle = `rgba(150, 210, 110, ${lf.rim * (0.5 + (1 - lf.depth) * 0.5)})`;
-      lCtx.lineWidth = 0.8;
-      lf.shape(lCtx, lf.size * 1.02);
-      // stroke は path を再生成しないと出ないので、shape を上書き：上の shape は fill のみ。
-      // 代わりに小さく明るい再 fill で疑似リムを出す
+      lCtx.fillStyle = `rgba(140, 200, 100, ${lf.rim * 0.18})`;
+      lf.shape(lCtx, lf.size * 1.04);
       lCtx.globalCompositeOperation = 'source-over';
-
       lCtx.restore();
     }
+    for (const child of br.children) {
+      drawLeavesForBranch(child, t, tipSway);
+    }
+  }
+
+  function drawTrees(t) {
+    lCtx.clearRect(0, 0, W, H);
+    // 枝 → 葉 の順で2パス
+    for (const root of trees) drawBranches(root, t, 0);
+    for (const root of trees) drawLeavesForBranch(root, t, 0);
   }
 
   // ---- 主ループ ----
@@ -295,7 +355,7 @@
     drawSky();
     drawBokeh(t);
     drawBloom();
-    drawLeaves(t);
+    drawTrees(t);
 
     requestAnimationFrame(frame);
   }
