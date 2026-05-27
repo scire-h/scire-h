@@ -473,6 +473,8 @@ let master = null;
 let reverb = null;       // { convolver, wet }
 let noiseBufs = null;    // { white, pink, brown }
 let droneNodes = null;
+let outputBridge = null; // <audio> element fed by a MediaStreamDestination,
+                         // so iOS/macOS screen recording captures the piece
 let running = false;
 const T0 = performance.now() / 1000;
 const counts  = {}; ALL_KINDS.forEach(k => counts[k]  = 0);
@@ -502,7 +504,31 @@ function initAudio() {
   const wet = actx.createGain();
   wet.gain.value = params.master.revMix;
   master.connect(convolver).connect(wet).connect(lim);
-  lim.connect(actx.destination);
+
+  /* Output routing: send the limiter through a MediaStreamDestination
+     and play it back via a hidden <audio> element. iOS / macOS screen
+     recording classifies <audio> as "media playback" and captures it,
+     whereas AudioContext.destination output is often skipped. Falls
+     back to the direct destination if the API is missing. */
+  let bridged = false;
+  try {
+    if (typeof actx.createMediaStreamDestination === "function") {
+      const dest = actx.createMediaStreamDestination();
+      lim.connect(dest);
+      const audioEl = document.createElement("audio");
+      audioEl.id = "audio-bridge";
+      audioEl.autoplay = true;
+      audioEl.playsInline = true;
+      audioEl.srcObject = dest.stream;
+      audioEl.style.cssText =
+        "position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;";
+      document.body.appendChild(audioEl);
+      outputBridge = audioEl;
+      bridged = true;
+    }
+  } catch (_) { /* fall through to direct routing */ }
+  if (!bridged) lim.connect(actx.destination);
+
   reverb = { convolver, wet };
 
   master.gain.linearRampToValueAtTime(params.master.vol, actx.currentTime + 1.5);
@@ -1920,6 +1946,12 @@ const startEl = document.getElementById("start");
 
 async function startAudio() {
   if (!actx) initAudio();
+  /* Kick the <audio> bridge inside the user gesture before any await,
+     so iOS Safari's autoplay policy lets it through. */
+  if (outputBridge) {
+    const p = outputBridge.play();
+    if (p && p.catch) p.catch(() => {});
+  }
   if (actx.state === "suspended") await actx.resume();
   if (!running) {
     startEl.classList.add("hidden");
