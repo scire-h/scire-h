@@ -3,239 +3,333 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#1a2818">
+<meta name="theme-color" content="#1a1208">
 <title>木漏れ日</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     overflow: hidden;
-    background: #0f1a0d;
+    background: #050803;
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
-  .stage {
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse at 50% 0%, #6b8a4a 0%, #2d4a2a 35%, #0f1a0d 80%);
-    overflow: hidden;
-  }
-
-  /* 外光：白いふんわりした光源（後ろから差し込む） */
-  .sun {
-    position: absolute;
-    top: -10%;
-    left: 50%;
-    width: 80vmin;
-    height: 80vmin;
-    transform: translateX(-50%);
-    background: radial-gradient(circle,
-      rgba(255, 246, 200, 0.9) 0%,
-      rgba(255, 230, 150, 0.55) 20%,
-      rgba(255, 220, 130, 0.25) 40%,
-      rgba(255, 200, 100, 0) 70%);
-    filter: blur(40px);
-    animation: sunShimmer 8s ease-in-out infinite alternate;
-    pointer-events: none;
-  }
-  @keyframes sunShimmer {
-    0%   { opacity: 0.85; transform: translateX(-52%) scale(1); }
-    50%  { opacity: 1;    transform: translateX(-48%) scale(1.05); }
-    100% { opacity: 0.9;  transform: translateX(-50%) scale(0.98); }
-  }
-
-  /* 光の粒（木漏れ日の床への光斑） */
-  .light-spots {
+  #stage { position: fixed; inset: 0; }
+  canvas {
     position: absolute;
     inset: 0;
-    pointer-events: none;
-    filter: blur(8px);
-    mix-blend-mode: screen;
-  }
-  .spot {
-    position: absolute;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,240,180,0.7), rgba(255,220,120,0));
-    animation: drift var(--dur, 12s) ease-in-out infinite alternate;
-  }
-  @keyframes drift {
-    0%   { transform: translate(0,0) scale(1);   opacity: 0.4; }
-    50%  { transform: translate(var(--dx,20px), var(--dy,15px)) scale(1.15); opacity: 0.9; }
-    100% { transform: translate(calc(var(--dx,20px) * -0.6), calc(var(--dy,15px) * 0.4)) scale(0.95); opacity: 0.5; }
-  }
-
-  /* 葉のレイヤー */
-  .leaves {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-  .leaves svg {
-    position: absolute;
     width: 100%;
     height: 100%;
-    overflow: visible;
+    display: block;
   }
-
-  /* 奥のレイヤー（ぼけ強め・暗め） */
-  .layer-back  { filter: blur(6px)  brightness(0.35); opacity: 0.85;
-                 animation: sway 9s ease-in-out infinite alternate; transform-origin: 50% 0; }
-  /* 中間レイヤー */
-  .layer-mid   { filter: blur(3px)  brightness(0.18); opacity: 0.95;
-                 animation: sway 7s ease-in-out infinite alternate-reverse; transform-origin: 50% 0; }
-  /* 前のレイヤー（シルエット濃いめ） */
-  .layer-front { filter: blur(1.5px) brightness(0.05); opacity: 1;
-                 animation: sway 5s ease-in-out infinite alternate; transform-origin: 50% 0; }
-
-  @keyframes sway {
-    0%   { transform: translate(-1%, 0)   rotate(-0.6deg); }
-    50%  { transform: translate( 1%, -0.5%) rotate( 0.4deg); }
-    100% { transform: translate(-0.5%, 0.3%) rotate(-0.3deg); }
+  /* 葉のキャンバスは軽くソフトフォーカス */
+  #leaves { filter: blur(0.6px); }
+  /* 光のキャンバスをほんのり広げて bloom 風に */
+  #bloom {
+    mix-blend-mode: screen;
+    filter: blur(18px);
+    opacity: 0.55;
+    pointer-events: none;
   }
-
-  /* かすかなビネット */
   .vignette {
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.55) 100%);
+    background: radial-gradient(ellipse at 50% 25%, transparent 35%, rgba(0,0,0,0.55) 100%);
     pointer-events: none;
   }
-
-  /* タップで光が増す */
-  .stage.tap .sun { animation-duration: 2s; }
-
-  /* 操作ヒント */
   .hint {
     position: absolute;
-    bottom: max(16px, env(safe-area-inset-bottom));
-    left: 0; right: 0;
-    text-align: center;
-    color: rgba(255,255,255,0.35);
-    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
-    font-size: 12px;
-    letter-spacing: 0.1em;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    left: 0; right: 0; text-align: center;
+    color: rgba(255,240,200,0.35);
+    font: 11px/1 -apple-system, "Hiragino Sans", sans-serif;
+    letter-spacing: 0.2em;
     pointer-events: none;
     user-select: none;
   }
 </style>
 </head>
 <body>
-<div class="stage" id="stage">
-
-  <div class="sun"></div>
-
-  <div class="light-spots" id="spots"></div>
-
-  <!-- 葉のシルエット（広葉樹） -->
-  <div class="leaves">
-    <!-- 奥 -->
-    <svg class="layer-back" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
-      <g id="back-leaves" fill="#0a140a"></g>
-    </svg>
-    <!-- 中 -->
-    <svg class="layer-mid" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
-      <g id="mid-leaves" fill="#050c05"></g>
-    </svg>
-    <!-- 前 -->
-    <svg class="layer-front" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
-      <g id="front-leaves" fill="#000"></g>
-    </svg>
-  </div>
-
+<div id="stage">
+  <canvas id="sky"></canvas>
+  <canvas id="bloom"></canvas>
+  <canvas id="leaves"></canvas>
   <div class="vignette"></div>
-  <div class="hint">タップで風が吹く</div>
+  <div class="hint">TAP&nbsp;:&nbsp;WIND</div>
 </div>
-
 <script>
-  // 広葉樹の葉っぱ形（楕円ベース、先端が尖るシルエット）
-  function leafPath(cx, cy, w, h, rot) {
-    // 葉っぱ型: 上下に尖った楕円
-    const path = `M ${cx} ${cy - h/2}
-                  C ${cx + w/2} ${cy - h/2}, ${cx + w/2} ${cy + h/2}, ${cx} ${cy + h/2}
-                  C ${cx - w/2} ${cy + h/2}, ${cx - w/2} ${cy - h/2}, ${cx} ${cy - h/2} Z`;
-    return `<path d="${path}" transform="rotate(${rot} ${cx} ${cy})"/>`;
-  }
+(() => {
+  const sky    = document.getElementById('sky');
+  const bloom  = document.getElementById('bloom');
+  const leavesCv = document.getElementById('leaves');
+  const sCtx = sky.getContext('2d');
+  const bCtx = bloom.getContext('2d');
+  const lCtx = leavesCv.getContext('2d');
 
-  // 不規則なクラスター（小枝に付く複数の葉）
-  function leafCluster(cx, cy, scale) {
-    let s = '';
-    const n = 5 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = Math.random() * 60 * scale;
-      const x = cx + Math.cos(a) * r;
-      const y = cy + Math.sin(a) * r * 0.7;
-      const w = (30 + Math.random() * 40) * scale;
-      const h = (50 + Math.random() * 60) * scale;
-      const rot = Math.random() * 360;
-      s += leafPath(x, y, w, h, rot);
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth;
+    H = innerHeight;
+    for (const cv of [sky, bloom, leavesCv]) {
+      cv.width  = Math.floor(W * DPR);
+      cv.height = Math.floor(H * DPR);
     }
-    return s;
+    sCtx.setTransform(DPR,0,0,DPR,0,0);
+    bCtx.setTransform(DPR,0,0,DPR,0,0);
+    lCtx.setTransform(DPR,0,0,DPR,0,0);
+    rebuild();
   }
 
-  // レイヤーごとに葉を配置（上部に集中させて木の枝らしく）
-  function fillLayer(id, count, scale, yMax) {
-    const el = document.getElementById(id);
-    let html = '';
-    for (let i = 0; i < count; i++) {
-      const cx = Math.random() * 1100 - 50;
-      const cy = Math.random() * yMax - 50;
-      html += leafCluster(cx, cy, scale);
+  // ---- 葉のシルエット（広葉樹 / 非対称、種類を3パターン用意） ----
+  // 単位サイズで描く。後で scale/rotate して使う。
+  const leafShapes = [
+    // 楕円系（桂・桜風）
+    (ctx, s) => {
+      ctx.beginPath();
+      ctx.moveTo(0, -s);
+      ctx.bezierCurveTo( s*0.55, -s*0.85,  s*0.65, -s*0.1,  s*0.50,  s*0.40);
+      ctx.bezierCurveTo( s*0.35,  s*0.78,  s*0.12,  s*0.95, 0,        s);
+      ctx.bezierCurveTo(-s*0.12,  s*0.95, -s*0.35,  s*0.78, -s*0.50,  s*0.40);
+      ctx.bezierCurveTo(-s*0.65, -s*0.1, -s*0.55, -s*0.85, 0,        -s);
+      ctx.fill();
+    },
+    // 三裂葉（楓風）
+    (ctx, s) => {
+      ctx.beginPath();
+      ctx.moveTo(0, -s);
+      ctx.bezierCurveTo( s*0.30, -s*0.85,  s*0.80, -s*0.55,  s*0.95, -s*0.10);
+      ctx.bezierCurveTo( s*0.55, -s*0.05,  s*0.65,  s*0.25,  s*0.45,  s*0.45);
+      ctx.bezierCurveTo( s*0.30,  s*0.65,  s*0.15,  s*0.85, 0,        s);
+      ctx.bezierCurveTo(-s*0.15,  s*0.85, -s*0.30,  s*0.65, -s*0.45,  s*0.45);
+      ctx.bezierCurveTo(-s*0.65,  s*0.25, -s*0.55, -s*0.05, -s*0.95, -s*0.10);
+      ctx.bezierCurveTo(-s*0.80, -s*0.55, -s*0.30, -s*0.85, 0,       -s);
+      ctx.fill();
+    },
+    // 細長葉（柳〜笹風）
+    (ctx, s) => {
+      ctx.beginPath();
+      ctx.moveTo(0, -s);
+      ctx.bezierCurveTo( s*0.30, -s*0.5,  s*0.32,  s*0.5, 0,  s);
+      ctx.bezierCurveTo(-s*0.32,  s*0.5, -s*0.30, -s*0.5, 0, -s);
+      ctx.fill();
+    },
+  ];
+
+  // ---- ランタイムデータ ----
+  let leaves = [];   // 葉
+  let bokeh = [];    // 木漏れ日の光斑
+  let sunX = 0, sunY = 0;  // 太陽位置
+  let parallaxX = 0, parallaxY = 0; // 端末傾き
+  let wind = 0;      // 風の強さ（タップで増加、減衰）
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  function rebuild() {
+    sunX = W * 0.55;
+    sunY = H * 0.18;
+
+    // 葉：枝に沿って集まるように、いくつかの「房」を作る
+    leaves = [];
+    const area = W * H;
+    const clusters = Math.round(area / 18000);     // クラスター数（密度）
+    const perCluster = 7;
+    for (let c = 0; c < clusters; c++) {
+      const cx = rand(-W*0.1, W*1.1);
+      const cy = rand(-H*0.1, H*0.95);
+      const baseDepth = rand(0, 1);          // 0:奥(小・速い揺れ) 1:手前(大・遅い揺れ)
+      for (let i = 0; i < perCluster; i++) {
+        const depth = Math.max(0, Math.min(1, baseDepth + rand(-0.15, 0.15)));
+        const spread = 70 + depth * 50;
+        leaves.push({
+          x: cx + rand(-spread, spread),
+          y: cy + rand(-spread*0.7, spread*0.7),
+          size: rand(14, 34) * (0.6 + depth * 0.8),
+          rot: rand(0, Math.PI * 2),
+          shape: leafShapes[(Math.random() * leafShapes.length) | 0],
+          depth,
+          swayAmp: rand(2, 7),
+          swayPhase: rand(0, Math.PI * 2),
+          swaySpeed: rand(0.4, 0.9),
+          flutterAmp: rand(0.04, 0.14),
+          flutterPhase: rand(0, Math.PI * 2),
+          flutterSpeed: rand(2.0, 4.5),
+          // 葉先のかすかな透過光
+          rim: rand(0.05, 0.18),
+        });
+      }
     }
-    el.innerHTML = html;
+    // 奥行き順に描画
+    leaves.sort((a, b) => a.depth - b.depth);
+
+    // 光斑：葉の隙間から漏れる光（円形 bokeh）
+    bokeh = [];
+    const bokehCount = Math.round(area / 26000);
+    for (let i = 0; i < bokehCount; i++) {
+      // 太陽寄りに集めるが、全画面に散らす
+      const ang = rand(0, Math.PI * 2);
+      const dist = Math.pow(Math.random(), 0.6) * Math.min(W, H) * 0.7;
+      const x = sunX + Math.cos(ang) * dist;
+      const y = sunY + Math.sin(ang) * dist * 1.2;
+      const dxToSun = Math.hypot(x - sunX, y - sunY);
+      const closeness = 1 - Math.min(1, dxToSun / (Math.max(W, H) * 0.7));
+      bokeh.push({
+        x, y,
+        r: rand(18, 70) * (0.7 + closeness * 0.8),
+        brightness: 0.35 + closeness * 0.55,
+        tint: rand(0, 1),  // 0=暖白 1=ややオレンジ
+        wobblePhase: rand(0, Math.PI * 2),
+        wobbleSpeed: rand(0.3, 0.9),
+        wobbleAmp: rand(2, 6),
+      });
+    }
+    // 大きい光斑を後で描画（前にくる）
+    bokeh.sort((a, b) => a.r - b.r);
   }
 
-  fillLayer('back-leaves',  18, 1.4, 700);
-  fillLayer('mid-leaves',   14, 1.1, 550);
-  fillLayer('front-leaves',  9, 0.9, 420);
+  // ---- 描画 ----
+  function drawSky() {
+    // 空（実際は梢の隙間から見える明るい層）
+    const g = sCtx.createRadialGradient(sunX, sunY, 0, sunX, sunY, Math.max(W, H) * 0.95);
+    g.addColorStop(0.00, '#fffbe8');
+    g.addColorStop(0.10, '#fff0c0');
+    g.addColorStop(0.30, '#e9b86a');
+    g.addColorStop(0.55, '#8a5a2a');
+    g.addColorStop(0.85, '#2a1b0c');
+    g.addColorStop(1.00, '#0c0703');
+    sCtx.fillStyle = g;
+    sCtx.fillRect(0, 0, W, H);
 
-  // 床に落ちる光斑
-  const spots = document.getElementById('spots');
-  const spotCount = 14;
-  let spotsHtml = '';
-  for (let i = 0; i < spotCount; i++) {
-    const size = 40 + Math.random() * 100;
-    const left = Math.random() * 100;
-    const top  = 30 + Math.random() * 65;
-    const dx = (Math.random() - 0.5) * 60;
-    const dy = (Math.random() - 0.5) * 40;
-    const dur = 6 + Math.random() * 10;
-    const delay = -Math.random() * 10;
-    spotsHtml += `<div class="spot" style="
-      width:${size}px;height:${size}px;
-      left:${left}%;top:${top}%;
-      --dx:${dx}px;--dy:${dy}px;
-      --dur:${dur}s;
-      animation-delay:${delay}s;
-    "></div>`;
+    // 太陽コア
+    const sg = sCtx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 140);
+    sg.addColorStop(0, 'rgba(255,255,240,1)');
+    sg.addColorStop(0.4, 'rgba(255,235,180,0.55)');
+    sg.addColorStop(1, 'rgba(255,210,120,0)');
+    sCtx.fillStyle = sg;
+    sCtx.beginPath();
+    sCtx.arc(sunX, sunY, 140, 0, Math.PI * 2);
+    sCtx.fill();
   }
-  spots.innerHTML = spotsHtml;
 
-  // タップで一瞬風が強くなる
-  const stage = document.getElementById('stage');
+  function drawBokeh(t) {
+    // 光斑を screen 合成で
+    sCtx.globalCompositeOperation = 'screen';
+    for (const b of bokeh) {
+      const wob = Math.sin(t * b.wobbleSpeed + b.wobblePhase) * b.wobbleAmp;
+      const x = b.x + wob + parallaxX * 4;
+      const y = b.y + Math.cos(t * b.wobbleSpeed * 0.7 + b.wobblePhase) * b.wobbleAmp * 0.4 + parallaxY * 4;
+      const g = sCtx.createRadialGradient(x, y, 0, x, y, b.r);
+      const warm = b.tint;
+      const r = 255, gC = Math.round(245 - warm * 30), bC = Math.round(210 - warm * 90);
+      g.addColorStop(0,    `rgba(${r},${gC},${bC},${b.brightness})`);
+      g.addColorStop(0.55, `rgba(${r},${gC-15},${bC-30},${b.brightness*0.35})`);
+      g.addColorStop(1,    `rgba(${r},${gC-30},${bC-60},0)`);
+      sCtx.fillStyle = g;
+      sCtx.beginPath();
+      sCtx.arc(x, y, b.r, 0, Math.PI * 2);
+      sCtx.fill();
+    }
+    sCtx.globalCompositeOperation = 'source-over';
+  }
+
+  function drawBloom() {
+    // bloom 用：明るい光斑だけ別キャンバスに描く（CSS でぼかして加算）
+    bCtx.clearRect(0, 0, W, H);
+    bCtx.globalCompositeOperation = 'lighter';
+    for (const b of bokeh) {
+      if (b.brightness < 0.5) continue;
+      const g = bCtx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * 1.6);
+      g.addColorStop(0, `rgba(255,240,200,${b.brightness * 0.7})`);
+      g.addColorStop(1, 'rgba(255,200,120,0)');
+      bCtx.fillStyle = g;
+      bCtx.beginPath();
+      bCtx.arc(b.x, b.y, b.r * 1.6, 0, Math.PI * 2);
+      bCtx.fill();
+    }
+    bCtx.globalCompositeOperation = 'source-over';
+  }
+
+  function drawLeaves(t) {
+    lCtx.clearRect(0, 0, W, H);
+    for (const lf of leaves) {
+      // 揺れ
+      const swayBase = Math.sin(t * lf.swaySpeed + lf.swayPhase);
+      const sway = swayBase * lf.swayAmp + wind * 18 * (1 - lf.depth * 0.5);
+      const flutter = Math.sin(t * lf.flutterSpeed + lf.flutterPhase) * lf.flutterAmp
+                    + wind * 0.4 * Math.sin(lf.flutterPhase);
+      // パララックス（手前ほど大きく動く）
+      const px = parallaxX * (8 + lf.depth * 14);
+      const py = parallaxY * (4 + lf.depth * 8);
+
+      lCtx.save();
+      lCtx.translate(lf.x + sway + px, lf.y + py);
+      lCtx.rotate(lf.rot + flutter);
+
+      // 葉の本体（ほぼ黒シルエット）
+      lCtx.fillStyle = `rgba(3, 10, 5, ${0.88 + lf.depth * 0.10})`;
+      lf.shape(lCtx, lf.size);
+
+      // 葉縁のうっすらした透過光（backlit）
+      lCtx.globalCompositeOperation = 'lighter';
+      lCtx.strokeStyle = `rgba(150, 210, 110, ${lf.rim * (0.5 + (1 - lf.depth) * 0.5)})`;
+      lCtx.lineWidth = 0.8;
+      lf.shape(lCtx, lf.size * 1.02);
+      // stroke は path を再生成しないと出ないので、shape を上書き：上の shape は fill のみ。
+      // 代わりに小さく明るい再 fill で疑似リムを出す
+      lCtx.globalCompositeOperation = 'source-over';
+
+      lCtx.restore();
+    }
+  }
+
+  // ---- 主ループ ----
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    const t = now / 1000;
+
+    wind *= Math.pow(0.6, dt); // 減衰
+
+    drawSky();
+    drawBokeh(t);
+    drawBloom();
+    drawLeaves(t);
+
+    requestAnimationFrame(frame);
+  }
+
+  // ---- インタラクション ----
   function gust() {
-    stage.classList.add('tap');
-    document.querySelectorAll('.layer-back, .layer-mid, .layer-front').forEach(el => {
-      el.style.animationDuration = '1.2s';
-    });
-    setTimeout(() => {
-      stage.classList.remove('tap');
-      document.querySelector('.layer-back').style.animationDuration = '9s';
-      document.querySelector('.layer-mid').style.animationDuration = '7s';
-      document.querySelector('.layer-front').style.animationDuration = '5s';
-    }, 1400);
+    wind = Math.min(1.5, wind + 0.9);
   }
-  stage.addEventListener('touchstart', gust, { passive: true });
-  stage.addEventListener('click', gust);
+  addEventListener('touchstart', gust, { passive: true });
+  addEventListener('click', gust);
 
-  // デバイスの向き(傾き)で太陽の位置を少し動かす（任意・対応端末のみ）
-  window.addEventListener('deviceorientation', (e) => {
-    const g = e.gamma || 0;  // 左右の傾き -90 .. 90
-    const sun = document.querySelector('.sun');
-    sun.style.left = (50 + g * 0.3) + '%';
+  // 端末の傾き
+  let permRequested = false;
+  function enableTilt() {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function' &&
+        !permRequested) {
+      permRequested = true;
+      DeviceOrientationEvent.requestPermission().catch(() => {});
+    }
+  }
+  addEventListener('touchend', enableTilt, { once: true });
+  addEventListener('deviceorientation', (e) => {
+    const g = (e.gamma || 0) / 45;   // -1..1
+    const b = ((e.beta || 0) - 45) / 45;
+    parallaxX = Math.max(-1, Math.min(1, g));
+    parallaxY = Math.max(-1, Math.min(1, b));
   });
+
+  // 初期化
+  resize();
+  addEventListener('resize', resize);
+  requestAnimationFrame(frame);
+})();
 </script>
 </body>
 </html>
