@@ -472,6 +472,7 @@ const params = {
   master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0 },
   eq:           { low: 0, mid: 0, high: 0 },  // dB, master 3-band
   score:        { mix: 0 },                   // 0 = tide sine, 1 = hand-drawn curve
+  grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
   suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
@@ -550,6 +551,8 @@ let master = null;
 let limiter = null;      // exposed for the recorder tap
 let reverb = null;       // { convolver, wet }
 let eqNodes = null;      // { low, mid, high } biquads in series before lim
+let grainBus = null;     // { send, convolver, out } — granular reverb aux
+                         // bus tapped by scrape & wind voices
 let noiseBufs = null;    // { white, pink, brown }
 let droneNodes = null;
 let silentPrimer = null; // hidden <audio> looping silence so iOS/macOS
@@ -622,6 +625,19 @@ function initAudio() {
 
   reverb = { convolver, wet };
 
+  /* Granular aux bus — scrape & wind voices tap their envelopes
+     into grainBus.send; the convolver renders a long, sparkly
+     stereo IR; grainBus.out scales the result before it joins the
+     limiter alongside the dry and main-wet paths. */
+  const grSend = actx.createGain();
+  grSend.gain.value = 1.0;          // unity into the bus; loudness is grainBus.out
+  const grConv = actx.createConvolver();
+  grConv.buffer = makeGranularIR(params.grain.size, params.grain.sparkle);
+  const grOut  = actx.createGain();
+  grOut.gain.value = params.grain.send;
+  grSend.connect(grConv).connect(grOut).connect(lim);
+  grainBus = { send: grSend, convolver: grConv, out: grOut };
+
   master.gain.linearRampToValueAtTime(params.master.vol, actx.currentTime + 1.5);
 
   noiseBufs = {
@@ -649,6 +665,48 @@ function makeIR(durationSec, decay) {
     for (let i = earlyLen; i < len; i++) {
       const t = (i - earlyLen) / (len - earlyLen);
       d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+    }
+  }
+  return buf;
+}
+
+/* Granular-character impulse response: an exponentially decaying noise
+   bed with a cloud of short sine grains scattered throughout. The
+   grains are what gives the tail its sparkle / "cloud" feel rather
+   than the smooth wash of a plain noise IR. Stereo-decorrelated. */
+function makeGranularIR(durationSec, sparkle) {
+  const sr = actx.sampleRate;
+  const len = Math.max(2048, Math.floor(sr * Math.max(0.5, durationSec)));
+  const buf = actx.createBuffer(2, len, sr);
+  const decay = 3.2;
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    /* base decaying noise bed (quiet) */
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay) * 0.08;
+    }
+    /* sparse early reflections in the first 60 ms */
+    const early = Math.min(len, Math.floor(sr * 0.06));
+    for (let k = 0; k < 5; k++) {
+      const i = Math.floor(Math.random() * early);
+      d[i] += (Math.random() * 2 - 1) * 0.35 * (1 - i / early);
+    }
+    /* granular cloud — tiny windowed sine grains at random times and
+       pitches. Density scales with sparkle. */
+    const grainCount = Math.floor(sr * 0.018 * Math.max(0.05, sparkle));
+    for (let g = 0; g < grainCount; g++) {
+      const centre = Math.floor(Math.random() * len);
+      const gLen   = Math.max(32, Math.floor(sr * (0.004 + Math.random() * 0.012)));
+      const env    = Math.pow(1 - centre / len, 1.4);
+      const freq   = 400 + Math.random() * 6800;
+      const amp    = (0.10 + 0.18 * Math.random()) * env * sparkle;
+      for (let i = 0; i < gLen; i++) {
+        const idx = centre + i - (gLen >> 1);
+        if (idx < 0 || idx >= len) continue;
+        const w = 0.5 - 0.5 * Math.cos((TWO_PI * i) / (gLen - 1)); // Hann
+        d[idx] += amp * w * Math.sin((TWO_PI * freq * i) / sr);
+      }
     }
   }
   return buf;
@@ -1199,7 +1257,9 @@ function playScrape(intensity) {
   env.gain.setValueAtTime(peak, now + dur - 0.6);
   env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
 
-  src.connect(bp).connect(grain).connect(lp).connect(env).connect(panNode(0.7, params.scrape.pan));
+  src.connect(bp).connect(grain).connect(lp).connect(env);
+  env.connect(panNode(0.7, params.scrape.pan));
+  if (grainBus) env.connect(grainBus.send);
   src.start(now); lfo.start(now);
   src.stop(now + dur + 0.05); lfo.stop(now + dur + 0.05);
 
@@ -1251,7 +1311,9 @@ function playTubeWind(intensity) {
   env.gain.setValueAtTime(peak, now + dur - 1.0);
   env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
 
-  merge.connect(env).connect(panNode(0.55, params.wind.pan));
+  merge.connect(env);
+  env.connect(panNode(0.55, params.wind.pan));
+  if (grainBus) env.connect(grainBus.send);
   src.start(now);
   src.stop(now + dur + 0.05);
 
@@ -1519,6 +1581,12 @@ const SECTIONS = [
       { id:"low",  lbl:"Low 200",   min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
       { id:"mid",  lbl:"Mid 1.5k",  min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
       { id:"high", lbl:"High 5k",   min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
+    ] },
+  { id: "grain", name: "Grain", color: "var(--scrape)",
+    knobs: [
+      { id:"send",    lbl:"Send",    min:0,   max:1.5, def:0.45, fmt: fmt2 },
+      { id:"size",    lbl:"Size",    min:1,   max:10,  def:5.0,  fmt: v => v.toFixed(1)+"s" },
+      { id:"sparkle", lbl:"Sparkle", min:0,   max:2,   def:0.6,  fmt: fmt2 },
     ] },
   { id: "score", type: "score", name: "Score", color: "var(--fg)" },
   { id: "preset", type: "preset", name: "Preset", color: "var(--fg)" },
@@ -2422,6 +2490,7 @@ function updateMixUI() {
 
 /* push knob value into live audio params where it must take effect immediately */
 let revSizeTimer = null;
+let grainIRTimer = null;
 function applyParam(secId, knobId) {
   if (!actx) return;
   const now = actx.currentTime;
@@ -2448,6 +2517,18 @@ function applyParam(secId, knobId) {
     if (target) {
       target.gain.cancelScheduledValues(now);
       target.gain.linearRampToValueAtTime(params.eq[knobId], now + 0.05);
+    }
+  } else if (secId === "grain" && grainBus) {
+    if (knobId === "send") {
+      grainBus.out.gain.cancelScheduledValues(now);
+      grainBus.out.gain.linearRampToValueAtTime(params.grain.send, now + 0.08);
+    } else if (knobId === "size" || knobId === "sparkle") {
+      /* IR rebuild is expensive — debounce */
+      if (grainIRTimer) clearTimeout(grainIRTimer);
+      grainIRTimer = setTimeout(() => {
+        grainBus.convolver.buffer = makeGranularIR(params.grain.size, params.grain.sparkle);
+        grainIRTimer = null;
+      }, 120);
     }
   } else if (secId === "drone" && droneNodes) {
     if (knobId === "lvl") {
