@@ -1642,9 +1642,14 @@ function buildPresetSection(root, sec) {
     b.addEventListener("click", handler);
     return b;
   };
-  row.appendChild(mk("Save",  savePatch));
-  row.appendChild(mk("Reset", resetPatch));
-  row.appendChild(mk("Share", copyShareURL));
+  /* row 1: in-browser persistence */
+  row.appendChild(mk("Save",   savePatch));
+  row.appendChild(mk("Load",   loadPatchAction));
+  row.appendChild(mk("Reset",  resetPatch));
+  /* row 2: portable, cross-device */
+  row.appendChild(mk("Export", exportPatch));
+  row.appendChild(mk("Import", importPatch));
+  row.appendChild(mk("Share",  copyShareURL));
   group.appendChild(row);
 
   const status = document.createElement("div");
@@ -1740,9 +1745,66 @@ function loadPatchFromStorage() {
   }
 }
 
+/* Load button: explicitly restore the localStorage save right now. */
+function loadPatchAction() {
+  if (loadPatchFromStorage()) setStatus("Loaded " + fmtClock());
+  else setStatus("No save found");
+}
+
 function resetPatch() {
   applyFactoryPatch();
   setStatus("Factory");
+}
+
+/* Download the current patch as a JSON file so it survives across
+   devices, browsers and history-clears. */
+function exportPatch() {
+  try {
+    const json = JSON.stringify(snapshotPatch(), null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.href = url;
+    a.download = "tidal-score-" + ts + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    setStatus("Exported");
+  } catch (e) {
+    setStatus("Export failed");
+  }
+}
+
+/* Open a file picker, load JSON, apply the patch. */
+function importPatch() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json,.json";
+  input.style.display = "none";
+  document.body.appendChild(input);
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    if (!f) { document.body.removeChild(input); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const patch = JSON.parse(reader.result);
+        applyPatchObject(patch);
+        setStatus("Imported");
+      } catch (e) {
+        setStatus("Invalid file");
+      }
+      document.body.removeChild(input);
+    };
+    reader.onerror = () => {
+      setStatus("Read failed");
+      document.body.removeChild(input);
+    };
+    reader.readAsText(f);
+  });
+  input.click();
 }
 
 async function copyShareURL() {
