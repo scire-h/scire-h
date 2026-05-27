@@ -13,9 +13,10 @@
     --faint: rgba(236, 236, 236, 0.28);
     --rule: rgba(236, 236, 236, 0.08);
     --insect: #f4f4f4;
-    --scrape: #b8b8b8;
-    --wind:   #8a8a8a;
-    --drone:  #5e5e5e;
+    --rasp:   #d8d8d8;
+    --scrape: #b0b0b0;
+    --wind:   #828282;
+    --drone:  #5a5a5a;
   }
   html, body {
     background: var(--bg);
@@ -30,21 +31,14 @@
   }
   body { font-feature-settings: "kern" 1, "tnum" 0; }
   .num { font-feature-settings: "tnum" 1; }
-  .caps {
-    text-transform: uppercase;
-    letter-spacing: 0.28em;
-    font-size: 9px;
-    font-weight: 400;
-    color: var(--faint);
-  }
 
   /* ----- LAYOUT ----- */
   .stage {
     display: grid;
     grid-template-rows: auto 1fr auto;
     height: 100vh;
-    padding: 36px 56px;
-    gap: 28px;
+    padding: 32px 48px;
+    gap: 22px;
   }
 
   /* ----- HEADER ----- */
@@ -53,28 +47,28 @@
     grid-template-columns: 1fr auto;
     align-items: end;
     gap: 40px;
-    padding-bottom: 22px;
+    padding-bottom: 18px;
     border-bottom: 1px solid var(--rule);
   }
-  .title-block .opus { font-size: 10px; letter-spacing: 0.32em; color: var(--faint); text-transform: uppercase; margin-bottom: 10px; }
+  .title-block .opus { font-size: 10px; letter-spacing: 0.32em; color: var(--faint); text-transform: uppercase; margin-bottom: 8px; }
   .title-block h1 {
-    font-size: 44px; font-weight: 200; letter-spacing: -0.025em; line-height: 1;
+    font-size: 40px; font-weight: 200; letter-spacing: -0.025em; line-height: 1;
   }
   .title-block .sub {
-    font-size: 12px; color: var(--dim); margin-top: 14px; max-width: 56ch; line-height: 1.55;
+    font-size: 12px; color: var(--dim); margin-top: 12px; max-width: 56ch; line-height: 1.5;
   }
   .meta {
     display: grid; grid-template-columns: repeat(3, auto); gap: 4px 36px;
     align-items: end; text-align: right;
   }
   .meta .k { font-size: 9px; letter-spacing: 0.28em; color: var(--faint); text-transform: uppercase; }
-  .meta .v { font-size: 22px; font-weight: 200; font-feature-settings: "tnum" 1; line-height: 1.05; }
+  .meta .v { font-size: 20px; font-weight: 200; font-feature-settings: "tnum" 1; line-height: 1.05; }
 
   /* ----- MAIN ----- */
   main {
     display: grid;
-    grid-template-columns: 1fr 300px;
-    gap: 40px;
+    grid-template-columns: 1fr 340px;
+    gap: 36px;
     min-height: 0;
   }
   .canvas-wrap {
@@ -93,48 +87,87 @@
     font-size: 9px; letter-spacing: 0.2em; color: var(--faint); text-transform: uppercase;
     padding: 4px 6px; background: var(--bg);
   }
-  .yaxis {
-    position: absolute; left: 8px; top: 0; bottom: 0;
-    display: flex; flex-direction: column; justify-content: space-between;
-    pointer-events: none;
-  }
-  .yaxis span { font-size: 9px; color: var(--faint); letter-spacing: 0.15em; }
 
-  /* ----- SIDEBAR / SCORE ----- */
-  aside { display: flex; flex-direction: column; gap: 28px; min-height: 0; }
-  .score-section { display: flex; flex-direction: column; gap: 10px; }
-  .score-section h3 { font-size: 9px; letter-spacing: 0.32em; color: var(--faint); text-transform: uppercase; font-weight: 400; }
-  .voice-row {
-    display: grid; grid-template-columns: 16px 1fr auto; gap: 12px;
-    align-items: baseline;
-    padding: 10px 0; border-bottom: 1px solid var(--rule);
+  /* ----- CONTROL PANEL (aside) ----- */
+  aside {
+    min-height: 0; overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
   }
-  .voice-dot {
+  aside::-webkit-scrollbar { width: 6px; }
+  aside::-webkit-scrollbar-thumb { background: var(--rule); }
+
+  .ctl-group { padding: 14px 0 16px; border-bottom: 1px solid var(--rule); }
+  .ctl-group:first-child { padding-top: 0; }
+  .ctl-group:last-child { border-bottom: none; padding-bottom: 4px; }
+  .ctl-head {
+    display: grid; grid-template-columns: 14px 1fr auto; gap: 10px;
+    align-items: center; margin-bottom: 12px;
+  }
+  .ctl-head .dot {
     width: 7px; height: 7px; border-radius: 50%;
-    transform: translateY(3px);
     transition: box-shadow 0.18s, transform 0.18s;
   }
-  .voice-dot.on { box-shadow: 0 0 0 4px rgba(255,255,255,0.06); transform: translateY(3px) scale(1.25); }
-  .voice-name { font-size: 12px; font-weight: 300; }
-  .voice-desc { font-size: 10px; color: var(--dim); margin-top: 3px; line-height: 1.4; }
-  .voice-count { font-size: 10px; color: var(--faint); font-feature-settings: "tnum" 1; }
-
-  .log {
-    flex: 1; min-height: 0; overflow: hidden;
-    display: flex; flex-direction: column-reverse;
-    font-size: 10px; color: var(--dim); line-height: 1.7;
-    font-feature-settings: "tnum" 1;
-    border-top: 1px solid var(--rule); padding-top: 10px;
+  .ctl-head .dot.on { box-shadow: 0 0 0 4px rgba(255,255,255,0.07); transform: scale(1.3); }
+  .ctl-head .dot.idle { background: var(--faint); }
+  .ctl-head .name {
+    font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--fg);
+    font-weight: 400;
   }
-  .log .ln { display: grid; grid-template-columns: 64px 12px 1fr; gap: 8px; }
-  .log .ln .t { color: var(--faint); }
-  .log .ln .b { font-size: 8px; transform: translateY(-1px); }
+  .ctl-head .cnt {
+    font-size: 10px; color: var(--faint); font-feature-settings: "tnum" 1;
+    letter-spacing: 0.04em;
+  }
+
+  /* ----- KNOBS ----- */
+  .knob-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 8px 4px;
+  }
+  .knob-row.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .knob-row.cols-1 { grid-template-columns: 1fr; }
+  .knob {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    user-select: none; -webkit-user-select: none;
+  }
+  .knob .dial {
+    width: 36px; height: 36px;
+    border: 1px solid var(--rule);
+    border-radius: 50%;
+    position: relative;
+    cursor: ns-resize;
+    touch-action: none;
+    transition: border-color 0.15s, background 0.15s;
+    background: rgba(255,255,255,0.005);
+  }
+  .knob .dial::after {
+    content: "";
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 1px; height: 14px;
+    background: var(--fg);
+    transform-origin: 50% 100%;
+    transform: translate(-50%, -100%) rotate(var(--angle, -135deg));
+  }
+  .knob .dial:hover, .knob .dial.dragging {
+    border-color: var(--dim);
+    background: rgba(255,255,255,0.015);
+  }
+  .knob .lbl {
+    font-size: 8px; letter-spacing: 0.22em; color: var(--faint); text-transform: uppercase;
+  }
+  .knob .val {
+    font-size: 10px; color: var(--fg);
+    font-feature-settings: "tnum" 1;
+    letter-spacing: 0.02em;
+  }
 
   /* ----- FOOTER ----- */
   footer {
     display: grid; grid-template-columns: 1fr 1fr 1fr;
     align-items: center;
-    padding-top: 18px;
+    padding-top: 14px;
     border-top: 1px solid var(--rule);
     font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--faint);
   }
@@ -162,10 +195,12 @@
   .start .note { font-size: 10px; color: var(--faint); letter-spacing: 0.05em; max-width: 40ch; text-align: center; line-height: 1.6; }
 
   @media (max-width: 900px) {
-    .stage { padding: 24px; }
+    html, body { overflow: auto; height: auto; }
+    .stage { height: auto; min-height: 100vh; padding: 20px; gap: 18px; }
     main { grid-template-columns: 1fr; }
-    aside { max-height: 240px; }
-    .title-block h1 { font-size: 32px; }
+    .canvas-wrap { min-height: 280px; }
+    aside { overflow: visible; }
+    .title-block h1 { font-size: 30px; }
     header { grid-template-columns: 1fr; }
     .meta { text-align: left; grid-template-columns: repeat(3, 1fr); }
   }
@@ -180,7 +215,7 @@
       <h1>Tidal&nbsp;Score</h1>
       <div class="sub">
         Synthetic insects, scraping bodies and hollow winds, conducted by a sine of the sea.
-        The piece writes itself between flood and ebb.
+        Fifteen dials below shape the score; the tide schedules it.
       </div>
     </div>
     <div class="meta">
@@ -207,52 +242,11 @@
       <div id="start" class="start">
         <div class="label">A Sound Piece</div>
         <div class="play">START</div>
-        <div class="note">Headphones recommended. Audio begins on tap. Compressed tide cycle: six minutes.</div>
+        <div class="note">Headphones recommended. Audio begins on tap. Drag knobs vertically to shape the score.</div>
       </div>
     </div>
 
-    <aside>
-      <div class="score-section">
-        <h3>Score / Voices</h3>
-        <div class="voice-row">
-          <div class="voice-dot" id="d-insect" style="background: var(--insect);"></div>
-          <div>
-            <div class="voice-name">Insects</div>
-            <div class="voice-desc">Squared chirps, dense at high water</div>
-          </div>
-          <div class="voice-count num" id="c-insect">0</div>
-        </div>
-        <div class="voice-row">
-          <div class="voice-dot" id="d-scrape" style="background: var(--scrape);"></div>
-          <div>
-            <div class="voice-name">Scraping</div>
-            <div class="voice-desc">Brown noise on exposed rock, at the ebb</div>
-          </div>
-          <div class="voice-count num" id="c-scrape">0</div>
-        </div>
-        <div class="voice-row">
-          <div class="voice-dot" id="d-wind" style="background: var(--wind);"></div>
-          <div>
-            <div class="voice-name">Tube&nbsp;Wind</div>
-            <div class="voice-desc">Formant breath during the rising flood</div>
-          </div>
-          <div class="voice-count num" id="c-wind">0</div>
-        </div>
-        <div class="voice-row">
-          <div class="voice-dot" id="d-drone" style="background: var(--drone);"></div>
-          <div>
-            <div class="voice-name">Drone</div>
-            <div class="voice-desc">A continuous low hum below it all</div>
-          </div>
-          <div class="voice-count num" id="c-drone">∞</div>
-        </div>
-      </div>
-
-      <div class="score-section" style="flex: 1; min-height: 0;">
-        <h3>Events</h3>
-        <div class="log" id="log"></div>
-      </div>
-    </aside>
+    <aside id="ctl-panel"><!-- populated by JS --></aside>
   </main>
 
   <footer>
@@ -267,23 +261,32 @@
 
 /* ==================================================================
    TIDAL SCORE
-   A Web Audio sound piece conducted by a tidal sine wave.
+   A Web Audio sound piece conducted by a tidal sine wave,
+   shaped by fifteen dials.
    ================================================================== */
 
-const CYCLE_SECONDS = 360;   // 6-minute compressed M2 tide
 const TWO_PI = Math.PI * 2;
 
-/* --- state --- */
+/* --- runtime state, driven by knobs --- */
+const params = {
+  master: { vol: 0.7, cycleMin: 6.0 },
+  drone:  { lvl: 1.0 },
+  insect: { density: 1.0, lvl: 1.0, bright: 1.0 },
+  rasp:   { density: 1.0, lvl: 1.0, rate:   1.0 },
+  scrape: { density: 1.0, lvl: 1.0, grit:   1.0 },
+  wind:   { density: 1.0, lvl: 1.0, tube:   1.0 },
+};
+
 let actx = null;
 let master = null;
 let noiseBuf = null;
 let droneNodes = null;
 let running = false;
 const T0 = performance.now() / 1000;
-const counts = { insect: 0, scrape: 0, wind: 0 };
-const events = [];               // { t, kind }  for canvas markers
-const nextDue = { insect: 0, scrape: 0, wind: 0 };
-const flash = { insect: 0, scrape: 0, wind: 0, drone: 0 };
+const counts = { insect: 0, rasp: 0, scrape: 0, wind: 0 };
+const events = [];
+const nextDue = { insect: 0, rasp: 0, scrape: 0, wind: 0 };
+const flash = { insect: 0, rasp: 0, scrape: 0, wind: 0, drone: 0 };
 
 /* ==================================================================
    AUDIO ENGINE
@@ -292,7 +295,6 @@ function initAudio() {
   actx = new (window.AudioContext || window.webkitAudioContext)();
   master = actx.createGain();
   master.gain.value = 0.0;
-  // soft brick to keep peaks tame on small speakers
   const lim = actx.createDynamicsCompressor();
   lim.threshold.value = -8;
   lim.knee.value = 4;
@@ -301,13 +303,12 @@ function initAudio() {
   lim.release.value = 0.08;
   master.connect(lim);
   lim.connect(actx.destination);
-  master.gain.linearRampToValueAtTime(0.7, actx.currentTime + 1.5);
+  master.gain.linearRampToValueAtTime(params.master.vol, actx.currentTime + 1.5);
 
   noiseBuf = makeNoise(4.0);
   startDrone();
 }
 
-/* random stereo placement per event — gallery-ready spatial spread */
 function panNode(spread) {
   const p = actx.createStereoPanner();
   p.pan.value = (Math.random() * 2 - 1) * spread;
@@ -319,7 +320,6 @@ function makeNoise(seconds) {
   const len = Math.floor(actx.sampleRate * seconds);
   const buf = actx.createBuffer(1, len, actx.sampleRate);
   const d = buf.getChannelData(0);
-  // pink noise (Paul Kellet)
   let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
   for (let i = 0; i < len; i++) {
     const w = Math.random() * 2 - 1;
@@ -335,21 +335,21 @@ function makeNoise(seconds) {
   return buf;
 }
 
-/* ---------- VOICE: INSECT (cricket / cicada) ---------- */
+/* ---------- VOICE: INSECT ---------- */
 function playInsect(intensity) {
   const now = actx.currentTime;
   const cricket = Math.random() < 0.65;
+  const bright = params.insect.bright;
+  const lvl    = params.insect.lvl;
 
   if (cricket) {
-    // squared chirp with rapid tremolo, narrow bandpass
-    const carrier = 2800 + Math.random() * 2600;
+    const carrier = (2800 + Math.random() * 2600) * bright;
     const trill   = 18 + Math.random() * 22;
     const dur     = 0.35 + Math.random() * 1.4;
 
     const osc = actx.createOscillator();
     osc.type = "square";
     osc.frequency.value = carrier;
-    // micro vibrato
     const vib = actx.createOscillator();
     vib.frequency.value = trill * 0.5;
     const vibAmt = actx.createGain();
@@ -361,20 +361,18 @@ function playInsect(intensity) {
     bp.frequency.value = carrier;
     bp.Q.value = 9;
 
-    // trill amplitude
     const trillOsc = actx.createOscillator();
     trillOsc.type = "sine";
     trillOsc.frequency.value = trill;
     const trillG = actx.createGain();
     trillG.gain.value = 0.5;
     trillOsc.connect(trillG);
-
     const trem = actx.createGain();
-    trem.gain.value = 0.5;            // baseline
+    trem.gain.value = 0.5;
     trillG.connect(trem.gain);
 
     const env = actx.createGain();
-    const peak = 0.07 * intensity;
+    const peak = 0.07 * intensity * lvl;
     env.gain.setValueAtTime(0, now);
     env.gain.linearRampToValueAtTime(peak, now + 0.04);
     env.gain.setValueAtTime(peak, now + dur - 0.15);
@@ -384,9 +382,8 @@ function playInsect(intensity) {
     osc.start(now); vib.start(now); trillOsc.start(now);
     osc.stop(now + dur + 0.05); vib.stop(now + dur + 0.05); trillOsc.stop(now + dur + 0.05);
   } else {
-    // cicada: filtered noise burst with FM-ish whistle layer
     const dur = 0.8 + Math.random() * 1.6;
-    const f   = 2400 + Math.random() * 2000;
+    const f   = (2400 + Math.random() * 2000) * bright;
 
     const src = actx.createBufferSource();
     src.buffer = noiseBuf;
@@ -398,7 +395,6 @@ function playInsect(intensity) {
     bp.frequency.value = f;
     bp.Q.value = 11;
 
-    // amplitude shimmer
     const shim = actx.createOscillator();
     shim.frequency.value = 40 + Math.random() * 60;
     const shimG = actx.createGain();
@@ -409,7 +405,7 @@ function playInsect(intensity) {
     shimG.connect(trem.gain);
 
     const env = actx.createGain();
-    const peak = 0.05 * intensity;
+    const peak = 0.05 * intensity * lvl;
     env.gain.setValueAtTime(0, now);
     env.gain.linearRampToValueAtTime(peak, now + 0.18);
     env.gain.setValueAtTime(peak, now + dur - 0.25);
@@ -425,49 +421,87 @@ function playInsect(intensity) {
   counts.insect++;
 }
 
+/* ---------- VOICE: RASP ---------- */
+/* short sine bursts in rapid sequence — leaf chewing / wing stridulation */
+function playRasp(intensity) {
+  const start = actx.currentTime;
+  const nTicks = 4 + Math.floor(Math.random() * 16);
+  const baseFreq = 1800 + Math.random() * 2800;
+  const drift = (Math.random() < 0.5 ? -1 : 1) * (0.10 + Math.random() * 0.30);
+  const pan = panNode(0.85);
+  const lvl  = params.rasp.lvl;
+  const rate = params.rasp.rate;
+
+  let t = start;
+  for (let i = 0; i < nTicks; i++) {
+    const phase = nTicks === 1 ? 0 : i / (nTicks - 1);
+    const freq  = baseFreq * (1 + drift * phase) + (Math.random() - 0.5) * 150;
+    const tickDur = 0.0025 + Math.random() * 0.006;
+
+    const osc = actx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = Math.max(80, freq);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.22 * intensity * lvl, t + 0.0008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tickDur);
+    osc.connect(g).connect(pan);
+    osc.start(t);
+    osc.stop(t + tickDur + 0.002);
+
+    /* spacing: jittery, accelerates mid-burst (parabolic dip) */
+    const accel = 1 - 0.45 * Math.sin(phase * Math.PI);
+    const spacing = (0.012 + 0.030 * Math.random()) * accel / rate;
+    t += spacing;
+  }
+
+  flash.rasp = 1;
+  registerEvent("rasp");
+  counts.rasp++;
+}
+
 /* ---------- VOICE: SCRAPING ---------- */
 function playScrape(intensity) {
   const now = actx.currentTime;
   const dur = 1.6 + Math.random() * 2.4;
+  const grit = params.scrape.grit;
+  const lvl  = params.scrape.lvl;
 
   const src = actx.createBufferSource();
   src.buffer = noiseBuf;
   src.loop = true;
   src.playbackRate.value = 0.5 + Math.random() * 0.4;
 
-  // resonant low/mid bandpass — material rubbed against rock
   const bp = actx.createBiquadFilter();
   bp.type = "bandpass";
   const fStart = 220 + Math.random() * 280;
   const fEnd   = fStart * (0.6 + Math.random() * 0.8);
   bp.frequency.setValueAtTime(fStart, now);
   bp.frequency.linearRampToValueAtTime(fEnd, now + dur);
-  bp.Q.value = 9 + Math.random() * 6;
+  bp.Q.value = (9 + Math.random() * 6) * grit;
 
-  // grit: a fast amplitude jitter via LFO
   const lfo = actx.createOscillator();
   lfo.type = "sawtooth";
-  lfo.frequency.value = 14 + Math.random() * 24;
+  lfo.frequency.value = (14 + Math.random() * 24) * grit;
   const lfoG = actx.createGain();
   lfoG.gain.value = 0.6;
   lfo.connect(lfoG);
-  const grit = actx.createGain();
-  grit.gain.value = 0.7;
-  lfoG.connect(grit.gain);
+  const grain = actx.createGain();
+  grain.gain.value = 0.7;
+  lfoG.connect(grain.gain);
 
-  // gentle high-cut so it doesn't sting
   const lp = actx.createBiquadFilter();
   lp.type = "lowpass";
   lp.frequency.value = 2400;
 
   const env = actx.createGain();
-  const peak = 0.18 * intensity;
+  const peak = 0.18 * intensity * lvl;
   env.gain.setValueAtTime(0, now);
   env.gain.linearRampToValueAtTime(peak, now + 0.4);
   env.gain.setValueAtTime(peak, now + dur - 0.6);
   env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
 
-  src.connect(bp).connect(grit).connect(lp).connect(env).connect(panNode(0.7));
+  src.connect(bp).connect(grain).connect(lp).connect(env).connect(panNode(0.7));
   src.start(now); lfo.start(now);
   src.stop(now + dur + 0.05); lfo.stop(now + dur + 0.05);
 
@@ -480,19 +514,20 @@ function playScrape(intensity) {
 function playTubeWind(intensity) {
   const now = actx.currentTime;
   const dur = 3.0 + Math.random() * 4.0;
-  const fund = 180 + Math.random() * 220;
+  const tube = params.wind.tube;
+  const lvl  = params.wind.lvl;
+  const fund = (180 + Math.random() * 220) * tube;
 
   const src = actx.createBufferSource();
   src.buffer = noiseBuf;
   src.loop = true;
 
-  // hollow tube → narrow bandpass at fundamental + 3rd & 5th harmonics
   const merge = actx.createGain();
   merge.gain.value = 1.0;
   const partials = [
-    { f: fund,       q: 24, g: 1.0  },
-    { f: fund * 3,   q: 28, g: 0.55 },
-    { f: fund * 5,   q: 30, g: 0.30 },
+    { f: fund,     q: 24, g: 1.0  },
+    { f: fund * 3, q: 28, g: 0.55 },
+    { f: fund * 5, q: 30, g: 0.30 },
   ];
   partials.forEach(p => {
     const bp = actx.createBiquadFilter();
@@ -503,7 +538,6 @@ function playTubeWind(intensity) {
     g.gain.value = p.g;
     src.connect(bp).connect(g).connect(merge);
 
-    // slow breath modulation per partial
     const lfo = actx.createOscillator();
     lfo.frequency.value = 0.2 + Math.random() * 0.4;
     const lfoG = actx.createGain();
@@ -513,7 +547,7 @@ function playTubeWind(intensity) {
   });
 
   const env = actx.createGain();
-  const peak = 0.32 * intensity;
+  const peak = 0.32 * intensity * lvl;
   env.gain.setValueAtTime(0, now);
   env.gain.linearRampToValueAtTime(peak, now + 0.8);
   env.gain.setValueAtTime(peak, now + dur - 1.0);
@@ -531,42 +565,46 @@ function playTubeWind(intensity) {
 /* ---------- DRONE ---------- */
 function startDrone() {
   const now = actx.currentTime;
-  const out = actx.createGain();
-  out.gain.value = 0.14;
+  const inner = actx.createGain();
+  inner.gain.value = 0.14;
 
-  // two detuned low sines
   const a = actx.createOscillator(); a.type = "sine"; a.frequency.value = 55;
   const b = actx.createOscillator(); b.type = "sine"; b.frequency.value = 55.5;
   const c = actx.createOscillator(); c.type = "sine"; c.frequency.value = 110.2;
   const cg = actx.createGain(); cg.gain.value = 0.4;
   c.connect(cg);
 
-  // gentle swell
   const swell = actx.createOscillator();
   swell.frequency.value = 0.03;
   const swellG = actx.createGain();
   swellG.gain.value = 0.07;
-  swell.connect(swellG).connect(out.gain);
+  swell.connect(swellG).connect(inner.gain);
 
-  a.connect(out); b.connect(out); cg.connect(out);
-  out.connect(master);
+  a.connect(inner); b.connect(inner); cg.connect(inner);
+
+  /* outer gain is the knob-controlled level */
+  const droneOut = actx.createGain();
+  droneOut.gain.value = params.drone.lvl;
+  inner.connect(droneOut).connect(master);
+
   a.start(now); b.start(now); c.start(now); swell.start(now);
-
-  droneNodes = { out };
+  droneNodes = { inner, droneOut };
   flash.drone = 1;
 }
 
 /* ==================================================================
    TIDAL CONDUCTOR
    ================================================================== */
+function cycleSeconds() { return params.master.cycleMin * 60; }
+
 function tideLevel(tSec) {
-  // primary M2 sine plus a slow long-period drift (S2-ish) for character
-  const m2 = Math.sin(TWO_PI * tSec / CYCLE_SECONDS);
-  const s2 = 0.18 * Math.sin(TWO_PI * tSec / (CYCLE_SECONDS * 2.7) + 1.1);
+  const C = cycleSeconds();
+  const m2 = Math.sin(TWO_PI * tSec / C);
+  const s2 = 0.18 * Math.sin(TWO_PI * tSec / (C * 2.7) + 1.1);
   return Math.max(-1, Math.min(1, m2 + s2));
 }
 function tideDerivative(tSec) {
-  const e = 0.5;
+  const e = Math.max(0.2, cycleSeconds() * 0.001);
   return (tideLevel(tSec + e) - tideLevel(tSec - e)) / (2 * e);
 }
 
@@ -576,17 +614,14 @@ function phaseLabel(level, deriv) {
   return deriv > 0 ? "FLOOD" : "EBB";
 }
 
-/* probability rates (events/sec) as a function of tide */
 function rates(level, deriv) {
   const rising  = Math.max(0, deriv);
   const falling = Math.max(0, -deriv);
   return {
-    // insects: bright at high tide
-    insect: 0.05 + 1.4 * Math.max(0, level) ** 1.6,
-    // scraping: at low tide, with extra at the ebb
-    scrape: 0.05 + 0.9 * Math.max(0, -level) ** 1.4 + 0.4 * falling,
-    // tube wind: peaks at the rising flood mid-point
-    wind:   0.03 + 0.9 * rising * (1 - level * level) ** 0.5,
+    insect: (0.05 + 1.4 * Math.max(0, level) ** 1.6) * params.insect.density,
+    rasp:   (0.10 + 1.0 * Math.max(0, level + 0.25) ** 1.1) * params.rasp.density,
+    scrape: (0.05 + 0.9 * Math.max(0, -level) ** 1.4 + 0.4 * falling) * params.scrape.density,
+    wind:   (0.03 + 0.9 * rising * Math.sqrt(Math.max(0, 1 - level * level))) * params.wind.density,
   };
 }
 
@@ -597,17 +632,16 @@ function maybeTrigger(now) {
   const der = tideDerivative(t);
   const r = rates(lvl, der);
 
-  for (const kind of ["insect", "scrape", "wind"]) {
+  for (const kind of ["insect", "rasp", "scrape", "wind"]) {
     if (now >= nextDue[kind]) {
-      const rate = Math.max(0.001, r[kind]);
-      // intensity scales with rate too — louder when the score calls for more
+      const rate = Math.max(0.0005, r[kind]);
       const intensity = 0.5 + Math.min(1.4, rate) * 0.6;
-      if (kind === "insect") playInsect(intensity);
+      if      (kind === "insect") playInsect(intensity);
+      else if (kind === "rasp")   playRasp(intensity);
       else if (kind === "scrape") playScrape(intensity);
-      else playTubeWind(intensity);
-      // schedule next event from exponential distribution
+      else                        playTubeWind(intensity);
       const wait = -Math.log(1 - Math.random()) / rate;
-      nextDue[kind] = now + Math.max(0.15, wait);
+      nextDue[kind] = now + Math.max(0.1, wait);
     }
   }
 }
@@ -634,7 +668,6 @@ function draw(nowMs) {
   const t = nowMs / 1000 - T0;
   ctx.clearRect(0, 0, W, H);
 
-  // background gradient by tide level
   const lvl = tideLevel(t);
   const g = ctx.createLinearGradient(0, 0, 0, H);
   const top = Math.max(0, lvl);
@@ -643,7 +676,6 @@ function draw(nowMs) {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
-  // y-grid: 0 line + ±0.5
   ctx.strokeStyle = "rgba(255,255,255,0.05)";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -655,12 +687,9 @@ function draw(nowMs) {
     ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke();
   }
 
-  // window: show ±1 cycle around "now", center vertical line
-  const span = CYCLE_SECONDS;
+  const span = cycleSeconds();
   const t0 = t - span / 2;
-  const t1 = t + span / 2;
 
-  // x-grid: hour-ticks (each 1/12 of cycle ≈ "hour")
   ctx.strokeStyle = "rgba(255,255,255,0.04)";
   for (let i = 0; i <= 12; i++) {
     const tt = t0 + (i / 12) * span;
@@ -668,7 +697,6 @@ function draw(nowMs) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
   }
 
-  // tide curve over the window
   ctx.strokeStyle = "rgba(236,236,236,0.85)";
   ctx.lineWidth = 1.1;
   ctx.beginPath();
@@ -680,37 +708,198 @@ function draw(nowMs) {
   }
   ctx.stroke();
 
-  // event markers
   const cutoff = t0;
   while (events.length && events[0].t < cutoff) events.shift();
-  const colorOf = { insect: "rgba(244,244,244,", scrape: "rgba(184,184,184,", wind: "rgba(138,138,138," };
+  const colorOf = {
+    insect: "rgba(244,244,244,",
+    rasp:   "rgba(216,216,216,",
+    scrape: "rgba(176,176,176,",
+    wind:   "rgba(130,130,130,",
+  };
   for (const e of events) {
     const x = (e.t - t0) / span * W;
     const ev_lvl = tideLevel(e.t);
     const y = H/2 - ev_lvl * (H * 0.42);
-    const age = (t - e.t) / span;     // 0 just now → 1 leaving frame
+    const age = (t - e.t) / span;
     const alpha = Math.max(0, 0.9 - age * 0.9);
     ctx.fillStyle = colorOf[e.kind] + alpha + ")";
     ctx.beginPath();
-    const r = e.kind === "wind" ? 5 : (e.kind === "scrape" ? 3.5 : 2);
+    const r = e.kind === "wind" ? 5 : e.kind === "scrape" ? 3.5 : e.kind === "rasp" ? 2.2 : 2;
     ctx.arc(x, y, r, 0, TWO_PI);
     ctx.fill();
   }
 
-  // NOW line
   ctx.strokeStyle = "rgba(236,236,236,0.55)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   const xn = W / 2;
   ctx.moveTo(xn, 0); ctx.lineTo(xn, H); ctx.stroke();
-  // NOW dot
   const yn = H/2 - lvl * (H * 0.42);
   ctx.fillStyle = "#fff";
   ctx.beginPath(); ctx.arc(xn, yn, 3.5, 0, TWO_PI); ctx.fill();
-  // NOW label
   ctx.fillStyle = "rgba(236,236,236,0.55)";
   ctx.font = "9px Helvetica Neue, Helvetica, Arial, sans-serif";
   ctx.fillText("NOW", xn + 6, 14);
+}
+
+/* ==================================================================
+   CONTROL PANEL — build & bind 15 knobs
+   ================================================================== */
+const SECTIONS = [
+  { id: "master", name: "Master", color: "var(--fg)",
+    knobs: [
+      { id:"vol",   lbl:"Volume", min:0,   max:1,    def:0.7, fmt: v => v.toFixed(2) },
+      { id:"cycleMin", lbl:"Cycle", min:1, max:30,   def:6.0, step:0.5, fmt: v => v.toFixed(1)+"m" },
+    ] },
+  { id: "drone",  name: "Drone",   color: "var(--drone)",
+    knobs: [
+      { id:"lvl", lbl:"Level", min:0, max:1.5, def:1.0, fmt: v => v.toFixed(2) },
+    ] },
+  { id: "insect", name: "Insects", color: "var(--insect)",
+    knobs: [
+      { id:"density", lbl:"Density",    min:0,   max:3,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"lvl",     lbl:"Level",      min:0,   max:2,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"bright",  lbl:"Brightness", min:0.5, max:2,   def:1.0, fmt: v => v.toFixed(2) },
+    ] },
+  { id: "rasp",   name: "Rasp",    color: "var(--rasp)",
+    knobs: [
+      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"rate",    lbl:"Rate",    min:0.5, max:2,   def:1.0, fmt: v => v.toFixed(2) },
+    ] },
+  { id: "scrape", name: "Scrape",  color: "var(--scrape)",
+    knobs: [
+      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"grit",    lbl:"Grit",    min:0.3, max:2,   def:1.0, fmt: v => v.toFixed(2) },
+    ] },
+  { id: "wind",   name: "Wind",    color: "var(--wind)",
+    knobs: [
+      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"tube",    lbl:"Tube",    min:0.4, max:2,   def:1.0, fmt: v => v.toFixed(2) },
+    ] },
+];
+
+const knobRefs = {};   // section -> id -> { el, render }
+const dotEls   = {};   // section -> dot element
+const cntEls   = {};   // section -> count element
+
+function buildPanel() {
+  const root = document.getElementById("ctl-panel");
+  for (const sec of SECTIONS) {
+    const group = document.createElement("div");
+    group.className = "ctl-group";
+
+    const head = document.createElement("div");
+    head.className = "ctl-head";
+    head.innerHTML = `
+      <div class="dot" style="background:${sec.color}"></div>
+      <div class="name">${sec.name}</div>
+      <div class="cnt num" data-cnt="${sec.id}">${sec.id === "master" || sec.id === "drone" ? "" : "0"}</div>
+    `;
+    group.appendChild(head);
+    dotEls[sec.id] = head.querySelector(".dot");
+    cntEls[sec.id] = head.querySelector(".cnt");
+
+    const row = document.createElement("div");
+    row.className = "knob-row" + (sec.knobs.length === 1 ? " cols-1" : sec.knobs.length === 2 ? " cols-2" : "");
+    for (const k of sec.knobs) {
+      const knobEl = document.createElement("div");
+      knobEl.className = "knob";
+      knobEl.innerHTML = `
+        <div class="dial" role="slider" aria-label="${sec.name} ${k.lbl}"></div>
+        <div class="lbl">${k.lbl}</div>
+        <div class="val">—</div>
+      `;
+      row.appendChild(knobEl);
+      const ref = bindKnob(knobEl, sec.id, k);
+      knobRefs[sec.id] = knobRefs[sec.id] || {};
+      knobRefs[sec.id][k.id] = ref;
+    }
+    group.appendChild(row);
+    root.appendChild(group);
+  }
+}
+
+function bindKnob(el, secId, def) {
+  const ANG_MIN = -135, ANG_MAX = 135;
+  const dial = el.querySelector(".dial");
+  const valEl = el.querySelector(".val");
+
+  function get() { return params[secId][def.id]; }
+  function set(v) {
+    if (def.step) v = Math.round(v / def.step) * def.step;
+    v = Math.max(def.min, Math.min(def.max, v));
+    params[secId][def.id] = v;
+    applyParam(secId, def.id);
+  }
+  function render() {
+    const v = get();
+    const norm = (v - def.min) / (def.max - def.min);
+    const angle = ANG_MIN + norm * (ANG_MAX - ANG_MIN);
+    dial.style.setProperty("--angle", angle + "deg");
+    valEl.textContent = def.fmt(v);
+  }
+
+  /* init from default */
+  params[secId][def.id] = def.def;
+  render();
+
+  let dragging = false, startY = 0, startV = 0;
+  dial.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    dial.classList.add("dragging");
+    startY = e.clientY;
+    startV = get();
+    try { dial.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+  });
+  dial.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const dy = startY - e.clientY;
+    const fine = e.shiftKey ? 0.2 : 1;
+    const range = def.max - def.min;
+    let v = startV + (dy / 200) * range * fine;
+    set(v);
+    render();
+  });
+  function endDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    dial.classList.remove("dragging");
+    try { if (dial.hasPointerCapture(e.pointerId)) dial.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+  dial.addEventListener("pointerup", endDrag);
+  dial.addEventListener("pointercancel", endDrag);
+  dial.addEventListener("lostpointercapture", endDrag);
+  dial.addEventListener("dblclick", () => { set(def.def); render(); });
+  /* wheel for desktop fine-tuning */
+  dial.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const range = def.max - def.min;
+    const step = range * (e.shiftKey ? 0.005 : 0.02);
+    set(get() - Math.sign(e.deltaY) * step);
+    render();
+  }, { passive: false });
+
+  return { render, get, set };
+}
+
+/* push knob value into live audio params where it must take effect immediately */
+function applyParam(secId, knobId) {
+  if (!actx) return;
+  if (secId === "master" && knobId === "vol") {
+    master.gain.cancelScheduledValues(actx.currentTime);
+    master.gain.linearRampToValueAtTime(params.master.vol, actx.currentTime + 0.05);
+  } else if (secId === "drone" && knobId === "lvl" && droneNodes) {
+    droneNodes.droneOut.gain.cancelScheduledValues(actx.currentTime);
+    droneNodes.droneOut.gain.linearRampToValueAtTime(params.drone.lvl, actx.currentTime + 0.1);
+  }
+  /* others read from params at trigger time — no live update needed */
+  if (secId === "master" && knobId === "cycleMin") {
+    document.getElementById("f-cycle").textContent = fmtMS(cycleSeconds());
+  }
 }
 
 /* ==================================================================
@@ -719,15 +908,7 @@ function draw(nowMs) {
 const m_time = document.getElementById("m-time");
 const m_level = document.getElementById("m-level");
 const m_phase = document.getElementById("m-phase");
-const c_insect = document.getElementById("c-insect");
-const c_scrape = document.getElementById("c-scrape");
-const c_wind   = document.getElementById("c-wind");
-const d_insect = document.getElementById("d-insect");
-const d_scrape = document.getElementById("d-scrape");
-const d_wind   = document.getElementById("d-wind");
-const d_drone  = document.getElementById("d-drone");
-const log_el   = document.getElementById("log");
-const f_cycle  = document.getElementById("f-cycle");
+const f_cycle = document.getElementById("f-cycle");
 
 const startEl = document.getElementById("start");
 startEl.addEventListener("click", async () => {
@@ -735,9 +916,9 @@ startEl.addEventListener("click", async () => {
   if (actx.state === "suspended") await actx.resume();
   startEl.classList.add("hidden");
   running = true;
-  // first events arrive after a short grace period
   const now = performance.now() / 1000;
   nextDue.insect = now + 1.2;
+  nextDue.rasp   = now + 0.4;
   nextDue.scrape = now + 0.6;
   nextDue.wind   = now + 2.0;
 });
@@ -754,19 +935,10 @@ function fmtMS(sec) {
   const s = String(Math.floor(sec % 60)).padStart(2, "0");
   return `${m}:${s}`;
 }
-f_cycle.textContent = fmtMS(CYCLE_SECONDS);
 
-const KIND_LABEL = { insect: "INSECT", scrape: "SCRAPE", wind: "WIND  " };
-const KIND_GLYPH = { insect: "·", scrape: "—", wind: "○" };
 function registerEvent(kind) {
   const t = performance.now() / 1000 - T0;
   events.push({ t, kind });
-  // log line
-  const line = document.createElement("div");
-  line.className = "ln";
-  line.innerHTML = `<span class="t">${fmtTime(t)}</span><span class="b" style="color:var(--${kind})">${KIND_GLYPH[kind]}</span><span>${KIND_LABEL[kind]}&nbsp;&nbsp;tide&nbsp;${tideLevel(t).toFixed(2)}</span>`;
-  log_el.prepend(line);
-  while (log_el.childElementCount > 60) log_el.lastChild.remove();
 }
 
 function tickUI(nowMs) {
@@ -777,14 +949,15 @@ function tickUI(nowMs) {
   m_level.textContent = (lvl >= 0 ? "+" : "") + lvl.toFixed(3);
   m_phase.textContent = phaseLabel(lvl, der);
 
-  c_insect.textContent = counts.insect;
-  c_scrape.textContent = counts.scrape;
-  c_wind.textContent   = counts.wind;
+  if (cntEls.insect) cntEls.insect.textContent = counts.insect;
+  if (cntEls.rasp)   cntEls.rasp.textContent   = counts.rasp;
+  if (cntEls.scrape) cntEls.scrape.textContent = counts.scrape;
+  if (cntEls.wind)   cntEls.wind.textContent   = counts.wind;
 
-  // decay flashes
-  for (const k of ["insect","scrape","wind","drone"]) {
+  for (const k of ["insect","rasp","scrape","wind","drone"]) {
     flash[k] = Math.max(0, flash[k] - 0.04);
-    const el = { insect: d_insect, scrape: d_scrape, wind: d_wind, drone: d_drone }[k];
+    const el = dotEls[k];
+    if (!el) continue;
     if (flash[k] > 0.5) el.classList.add("on"); else el.classList.remove("on");
   }
 }
@@ -798,6 +971,9 @@ function frame(nowMs) {
   if (running) maybeTrigger(performance.now() / 1000);
   requestAnimationFrame(frame);
 }
+
+buildPanel();
+f_cycle.textContent = fmtMS(cycleSeconds());
 resize();
 requestAnimationFrame(frame);
 </script>
