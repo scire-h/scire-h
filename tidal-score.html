@@ -125,8 +125,14 @@
     display: grid; grid-template-columns: repeat(3, 1fr);
     gap: 8px 4px;
   }
-  .knob-row.cols-2 { grid-template-columns: repeat(2, 1fr); }
   .knob-row.cols-1 { grid-template-columns: 1fr; }
+  .knob-row.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .knob-row.cols-4 { grid-template-columns: repeat(4, 1fr); gap: 8px 2px; }
+  .knob-row.cols-5 { grid-template-columns: repeat(5, 1fr); gap: 8px 2px; }
+  .knob-row.cols-5 .knob .dial,
+  .knob-row.cols-4 .knob .dial { width: 32px; height: 32px; }
+  .knob-row.cols-5 .knob .dial::after,
+  .knob-row.cols-4 .knob .dial::after { height: 12px; }
   .knob {
     display: flex; flex-direction: column; align-items: center; gap: 5px;
     user-select: none; -webkit-user-select: none;
@@ -214,9 +220,9 @@
       <div class="opus">Op. 01 &nbsp;·&nbsp; for the tide</div>
       <h1>Tidal&nbsp;Score</h1>
       <div class="sub">
-        Bell crickets, pine crickets and the wind through a hollow stem —
-        a quiet Japanese summer night, conducted by a sine of the sea.
-        Fifteen dials below shape the score; the tide schedules it.
+        Seven night insects — suzumushi, matsumushi, korogi, higurashi,
+        kanetataki, kantan and umaoi — with scraping bodies and the wind
+        through a hollow stem, all conducted by a sine of the sea.
       </div>
     </div>
     <div class="meta">
@@ -270,16 +276,17 @@ const TWO_PI = Math.PI * 2;
 
 /* --- runtime state, driven by knobs --- */
 const params = {
-  master: { vol: 0.7, cycleMin: 6.0 },
-  drone:  { lvl: 1.0 },
-  insect: { density: 1.0, lvl: 1.0, bright: 1.0 },
-  rasp:   { density: 1.0, lvl: 1.0, rate:   1.0 },
-  scrape: { density: 1.0, lvl: 1.0, grit:   1.0 },
-  wind:   { density: 1.0, lvl: 1.0, tube:   1.0 },
+  master: { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8 },
+  drone:  { lvl: 1.0, pan: 0.0 },
+  insect: { density: 1.0, lvl: 1.0, bright: 1.0, pan: 0.0 },
+  rasp:   { density: 1.0, lvl: 1.0, rate:   1.0, pan: 0.0 },
+  scrape: { density: 1.0, lvl: 1.0, grit:   1.0, pan: 0.0 },
+  wind:   { density: 1.0, lvl: 1.0, tube:   1.0, pan: 0.0 },
 };
 
 let actx = null;
 let master = null;
+let reverb = null;       // { convolver, wet }
 let noiseBuf = null;
 let droneNodes = null;
 let running = false;
@@ -302,17 +309,53 @@ function initAudio() {
   lim.ratio.value = 14;
   lim.attack.value = 0.003;
   lim.release.value = 0.08;
+
+  /* dry path: master -> limiter */
   master.connect(lim);
+  /* wet path: master -> convolver -> wet gain -> limiter (parallel send) */
+  const convolver = actx.createConvolver();
+  convolver.buffer = makeIR(params.master.revSize, 2.6);
+  const wet = actx.createGain();
+  wet.gain.value = params.master.revMix;
+  master.connect(convolver).connect(wet).connect(lim);
   lim.connect(actx.destination);
+  reverb = { convolver, wet };
+
   master.gain.linearRampToValueAtTime(params.master.vol, actx.currentTime + 1.5);
 
   noiseBuf = makeNoise(4.0);
   startDrone();
 }
 
-function panNode(spread) {
+/* Algorithmic impulse response: exp-decaying white noise, stereo decorrelated */
+function makeIR(durationSec, decay) {
+  const sr = actx.sampleRate;
+  const len = Math.max(512, Math.floor(sr * Math.max(0.1, durationSec)));
+  const buf = actx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    /* early reflections: small sparse impulses in the first 60 ms, then diffuse tail */
+    const earlyLen = Math.min(len, Math.floor(sr * 0.06));
+    for (let i = 0; i < earlyLen; i++) d[i] = 0;
+    for (let k = 0; k < 4; k++) {
+      const i = Math.floor(Math.random() * earlyLen);
+      d[i] += (Math.random() * 2 - 1) * 0.4 * (1 - i / earlyLen);
+    }
+    for (let i = earlyLen; i < len; i++) {
+      const t = (i - earlyLen) / (len - earlyLen);
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+    }
+  }
+  return buf;
+}
+
+/* Per-event StereoPanner: per-voice center + random spread × global width */
+function panNode(spread, center = 0) {
   const p = actx.createStereoPanner();
-  p.pan.value = (Math.random() * 2 - 1) * spread;
+  const w = params.master.width;
+  let pan = center + (Math.random() * 2 - 1) * spread * w;
+  if (pan < -1) pan = -1; else if (pan > 1) pan = 1;
+  p.pan.value = pan;
   p.connect(master);
   return p;
 }
@@ -347,12 +390,18 @@ function playInsect(intensity) {
   const start = actx.currentTime;
   const lvl    = params.insect.lvl;
   const bright = params.insect.bright;
-  const pan    = panNode(0.9);
+  const pan    = panNode(0.9, params.insect.pan);
 
-  const variant = Math.random();
-  if (variant < 0.50) playSuzumushi(start, intensity, lvl, bright, pan);
-  else if (variant < 0.78) playMatsumushi(start, intensity, lvl, bright, pan);
-  else                     playKorogi(start, intensity, lvl, bright, pan);
+  const v = Math.random();
+  /*  30% suzumushi  18% kanetataki  15% matsumushi  15% korogi
+      10% higurashi   8% kantan       4% umaoi                 */
+  if      (v < 0.30) playSuzumushi (start, intensity, lvl, bright, pan);
+  else if (v < 0.48) playKanetataki(start, intensity, lvl, bright, pan);
+  else if (v < 0.63) playMatsumushi(start, intensity, lvl, bright, pan);
+  else if (v < 0.78) playKorogi    (start, intensity, lvl, bright, pan);
+  else if (v < 0.88) playHigurashi (start, intensity, lvl, bright, pan);
+  else if (v < 0.96) playKantan    (start, intensity, lvl, bright, pan);
+  else               playUmaoi     (start, intensity, lvl, bright, pan);
 
   flash.insect = 1;
   registerEvent("insect");
@@ -426,6 +475,158 @@ function playKorogi(start, intensity, lvl, bright, pan) {
   }
 }
 
+/* カネタタキ — tiny high bell, sparse single or double strikes */
+function playKanetataki(start, intensity, lvl, bright, pan) {
+  const strikes = 1 + Math.floor(Math.random() * 3);          // 1–3
+  const baseF   = (6700 + Math.random() * 700) * bright;       // ~6.7–7.4 kHz
+  let t = start;
+  for (let i = 0; i < strikes; i++) {
+    const freq = baseF + (Math.random() - 0.5) * 80;
+    const dur  = 0.025 + Math.random() * 0.025;                // ~25–50 ms
+    const peak = 0.085 * intensity * lvl;
+    bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.05 }, pan);
+    t += dur + 0.18 + Math.random() * 0.32;                    // long, irregular rests
+  }
+}
+
+/* ヒグラシ — descending flute-like phrase "kana-kana-kana" */
+function playHigurashi(start, intensity, lvl, bright, pan) {
+  const tones = 3 + Math.floor(Math.random() * 4);             // 3–6
+  const baseStart = (2400 + Math.random() * 200) * bright;
+  const baseEnd   = baseStart * 0.72;                          // descend ~28%
+  let t = start;
+  for (let i = 0; i < tones; i++) {
+    const phase = tones === 1 ? 0 : i / (tones - 1);
+    const dur   = 0.13 + Math.random() * 0.06;
+    const fS    = baseStart + (Math.random() - 0.5) * 60;
+    const fE    = baseEnd   + (Math.random() - 0.5) * 50;
+    const peak  = 0.13 * intensity * lvl;
+
+    const osc = actx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(fS, t);
+    osc.frequency.linearRampToValueAtTime(fE, t + dur);
+
+    /* two faint upper partials for the flute timbre */
+    const env = actx.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.02);
+    env.gain.setValueAtTime(peak, t + dur - 0.04);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+
+    osc.connect(env);
+    for (const h of [{m:2, g:0.10}, {m:3, g:0.04}]) {
+      const o = actx.createOscillator();
+      o.type = "sine";
+      o.frequency.setValueAtTime(fS * h.m, t);
+      o.frequency.linearRampToValueAtTime(fE * h.m, t + dur);
+      const g = actx.createGain(); g.gain.value = h.g;
+      o.connect(g).connect(env);
+      o.start(t); o.stop(t + dur + 0.02);
+    }
+    env.connect(pan);
+    osc.start(t); osc.stop(t + dur + 0.02);
+
+    /* accelerate mid-phrase, resolve at the end */
+    const gap = 0.06 + 0.10 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.04;
+    t += dur + gap;
+  }
+}
+
+/* カンタン — soft continuous rolling trill, AM-modulated pure tone */
+function playKantan(start, intensity, lvl, bright, pan) {
+  const dur    = 1.0 + Math.random() * 1.5;                    // 1.0–2.5 s
+  const baseF  = (3900 + Math.random() * 350) * bright;
+  const amRate = 22 + Math.random() * 8;                       // 22–30 Hz roll
+  const peak   = 0.085 * intensity * lvl;
+
+  const osc = actx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.value = baseF;
+  const osc2 = actx.createOscillator();
+  osc2.type = "sine";
+  osc2.frequency.value = baseF * 2;
+  const g2 = actx.createGain(); g2.gain.value = 0.06;
+  osc2.connect(g2);
+
+  /* AM around 0.5 ± 0.5 — modulates from silence to peak */
+  const amOsc = actx.createOscillator();
+  amOsc.type = "sine";
+  amOsc.frequency.value = amRate;
+  const amDepth = actx.createGain(); amDepth.gain.value = 0.5;
+  amOsc.connect(amDepth);
+  const am = actx.createGain(); am.gain.value = 0.5;
+  amDepth.connect(am.gain);
+
+  const env = actx.createGain();
+  env.gain.setValueAtTime(0, start);
+  env.gain.linearRampToValueAtTime(peak, start + 0.15);
+  env.gain.setValueAtTime(peak, start + dur - 0.30);
+  env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
+
+  osc.connect(am); g2.connect(am);
+  am.connect(env).connect(pan);
+
+  osc.start(start);  osc.stop(start + dur + 0.05);
+  osc2.start(start); osc2.stop(start + dur + 0.05);
+  amOsc.start(start); amOsc.stop(start + dur + 0.05);
+}
+
+/* ウマオイ — "sui-cho!" two-tone descending pair, occasionally repeated */
+function playUmaoi(start, intensity, lvl, bright, pan) {
+  const pairs = Math.random() < 0.30 ? 2 : 1;
+  let t = start;
+  for (let p = 0; p < pairs; p++) {
+    /* "sui" — short bright upglide */
+    const suiF  = (3200 + Math.random() * 200) * bright;
+    const suiDur = 0.075 + Math.random() * 0.025;
+    {
+      const osc = actx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(suiF, t);
+      osc.frequency.linearRampToValueAtTime(suiF * 1.06, t + suiDur);
+      const env = actx.createGain();
+      const peak = 0.11 * intensity * lvl;
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(peak, t + 0.012);
+      env.gain.exponentialRampToValueAtTime(0.0005, t + suiDur);
+      const h = actx.createOscillator();
+      h.type = "sine";
+      h.frequency.setValueAtTime(suiF * 2, t);
+      h.frequency.linearRampToValueAtTime(suiF * 2 * 1.06, t + suiDur);
+      const hg = actx.createGain(); hg.gain.value = 0.06;
+      h.connect(hg).connect(env);
+      osc.connect(env).connect(pan);
+      osc.start(t); osc.stop(t + suiDur + 0.02);
+      h.start(t);   h.stop(t + suiDur + 0.02);
+    }
+    t += suiDur + 0.04;
+    /* "cho" — longer descending tone with vibrato */
+    const choF   = suiF * 0.92;
+    const choDur = 0.16 + Math.random() * 0.05;
+    {
+      const osc = actx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(choF, t);
+      osc.frequency.linearRampToValueAtTime(choF * 0.86, t + choDur);
+      const vib = actx.createOscillator();
+      vib.frequency.value = 12 + Math.random() * 4;
+      const vibG = actx.createGain(); vibG.gain.value = 9;
+      vib.connect(vibG).connect(osc.frequency);
+      const env = actx.createGain();
+      const peak = 0.12 * intensity * lvl;
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(peak, t + 0.018);
+      env.gain.setValueAtTime(peak, t + choDur - 0.04);
+      env.gain.exponentialRampToValueAtTime(0.0005, t + choDur);
+      osc.connect(env).connect(pan);
+      osc.start(t); osc.stop(t + choDur + 0.02);
+      vib.start(t); vib.stop(t + choDur + 0.02);
+    }
+    t += choDur + 0.35 + Math.random() * 0.30;
+  }
+}
+
 /* ---------- VOICE: RASP ---------- */
 /* short sine bursts in rapid sequence — leaf chewing / wing stridulation */
 function playRasp(intensity) {
@@ -433,7 +634,7 @@ function playRasp(intensity) {
   const nTicks = 4 + Math.floor(Math.random() * 16);
   const baseFreq = 1800 + Math.random() * 2800;
   const drift = (Math.random() < 0.5 ? -1 : 1) * (0.10 + Math.random() * 0.30);
-  const pan = panNode(0.85);
+  const pan = panNode(0.85, params.rasp.pan);
   const lvl  = params.rasp.lvl;
   const rate = params.rasp.rate;
 
@@ -506,7 +707,7 @@ function playScrape(intensity) {
   env.gain.setValueAtTime(peak, now + dur - 0.6);
   env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
 
-  src.connect(bp).connect(grain).connect(lp).connect(env).connect(panNode(0.7));
+  src.connect(bp).connect(grain).connect(lp).connect(env).connect(panNode(0.7, params.scrape.pan));
   src.start(now); lfo.start(now);
   src.stop(now + dur + 0.05); lfo.stop(now + dur + 0.05);
 
@@ -558,7 +759,7 @@ function playTubeWind(intensity) {
   env.gain.setValueAtTime(peak, now + dur - 1.0);
   env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
 
-  merge.connect(env).connect(panNode(0.55));
+  merge.connect(env).connect(panNode(0.55, params.wind.pan));
   src.start(now);
   src.stop(now + dur + 0.05);
 
@@ -587,13 +788,15 @@ function startDrone() {
 
   a.connect(inner); b.connect(inner); cg.connect(inner);
 
-  /* outer gain is the knob-controlled level */
+  /* outer gain + pan are knob-controlled */
   const droneOut = actx.createGain();
   droneOut.gain.value = params.drone.lvl;
-  inner.connect(droneOut).connect(master);
+  const dronePan = actx.createStereoPanner();
+  dronePan.pan.value = params.drone.pan;
+  inner.connect(droneOut).connect(dronePan).connect(master);
 
   a.start(now); b.start(now); c.start(now); swell.start(now);
-  droneNodes = { inner, droneOut };
+  droneNodes = { inner, droneOut, dronePan };
   flash.drone = 1;
 }
 
@@ -750,39 +953,50 @@ function draw(nowMs) {
 /* ==================================================================
    CONTROL PANEL — build & bind 15 knobs
    ================================================================== */
+const fmt2 = v => v.toFixed(2);
+const fmtPan = v => Math.abs(v) < 0.005 ? "  C" : (v < 0 ? "L" + Math.round(-v * 100) : "R" + Math.round(v * 100));
+
 const SECTIONS = [
   { id: "master", name: "Master", color: "var(--fg)",
     knobs: [
-      { id:"vol",   lbl:"Volume", min:0,   max:1,    def:0.7, fmt: v => v.toFixed(2) },
-      { id:"cycleMin", lbl:"Cycle", min:1, max:30,   def:6.0, step:0.5, fmt: v => v.toFixed(1)+"m" },
+      { id:"vol",      lbl:"Volume", min:0,   max:1,    def:0.7,  fmt: fmt2 },
+      { id:"cycleMin", lbl:"Cycle",  min:1,   max:30,   def:6.0,  step:0.5, fmt: v => v.toFixed(1)+"m" },
+      { id:"width",    lbl:"Width",  min:0,   max:1,    def:1.0,  fmt: fmt2 },
+      { id:"revMix",   lbl:"Reverb", min:0,   max:1,    def:0.30, fmt: fmt2 },
+      { id:"revSize",  lbl:"Size",   min:0.3, max:6,    def:2.8,  fmt: v => v.toFixed(1)+"s" },
     ] },
   { id: "drone",  name: "Drone",   color: "var(--drone)",
     knobs: [
-      { id:"lvl", lbl:"Level", min:0, max:1.5, def:1.0, fmt: v => v.toFixed(2) },
+      { id:"lvl", lbl:"Level", min:0,    max:1.5, def:1.0, fmt: fmt2 },
+      { id:"pan", lbl:"Pan",   min:-1,   max:1,   def:0.0, fmt: fmtPan },
     ] },
   { id: "insect", name: "Insects", color: "var(--insect)",
     knobs: [
-      { id:"density", lbl:"Density",    min:0,   max:3,   def:1.0, fmt: v => v.toFixed(2) },
-      { id:"lvl",     lbl:"Level",      min:0,   max:2,   def:1.0, fmt: v => v.toFixed(2) },
-      { id:"bright",  lbl:"Brightness", min:0.5, max:2,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"density", lbl:"Density",    min:0,   max:3,   def:1.0, fmt: fmt2 },
+      { id:"lvl",     lbl:"Level",      min:0,   max:2,   def:1.0, fmt: fmt2 },
+      { id:"bright",  lbl:"Brightness", min:0.5, max:2,   def:1.0, fmt: fmt2 },
+      { id:"pan",     lbl:"Pan",        min:-1,  max:1,   def:0.0, fmt: fmtPan },
     ] },
   { id: "rasp",   name: "Rasp",    color: "var(--rasp)",
     knobs: [
-      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: v => v.toFixed(2) },
-      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: v => v.toFixed(2) },
-      { id:"rate",    lbl:"Rate",    min:0.5, max:2,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
+      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
+      { id:"rate",    lbl:"Rate",    min:0.5, max:2,   def:1.0, fmt: fmt2 },
+      { id:"pan",     lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
     ] },
   { id: "scrape", name: "Scrape",  color: "var(--scrape)",
     knobs: [
-      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: v => v.toFixed(2) },
-      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: v => v.toFixed(2) },
-      { id:"grit",    lbl:"Grit",    min:0.3, max:2,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
+      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
+      { id:"grit",    lbl:"Grit",    min:0.3, max:2,   def:1.0, fmt: fmt2 },
+      { id:"pan",     lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
     ] },
   { id: "wind",   name: "Wind",    color: "var(--wind)",
     knobs: [
-      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: v => v.toFixed(2) },
-      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: v => v.toFixed(2) },
-      { id:"tube",    lbl:"Tube",    min:0.4, max:2,   def:1.0, fmt: v => v.toFixed(2) },
+      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
+      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
+      { id:"tube",    lbl:"Tube",    min:0.4, max:2,   def:1.0, fmt: fmt2 },
+      { id:"pan",     lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
     ] },
 ];
 
@@ -808,7 +1022,9 @@ function buildPanel() {
     cntEls[sec.id] = head.querySelector(".cnt");
 
     const row = document.createElement("div");
-    row.className = "knob-row" + (sec.knobs.length === 1 ? " cols-1" : sec.knobs.length === 2 ? " cols-2" : "");
+    const n = sec.knobs.length;
+    const cols = n === 1 ? 1 : n === 2 ? 2 : n === 4 ? 4 : n === 5 ? 5 : 3;
+    row.className = "knob-row cols-" + cols;
     for (const k of sec.knobs) {
       const knobEl = document.createElement("div");
       knobEl.className = "knob";
@@ -892,19 +1108,38 @@ function bindKnob(el, secId, def) {
 }
 
 /* push knob value into live audio params where it must take effect immediately */
+let revSizeTimer = null;
 function applyParam(secId, knobId) {
   if (!actx) return;
-  if (secId === "master" && knobId === "vol") {
-    master.gain.cancelScheduledValues(actx.currentTime);
-    master.gain.linearRampToValueAtTime(params.master.vol, actx.currentTime + 0.05);
-  } else if (secId === "drone" && knobId === "lvl" && droneNodes) {
-    droneNodes.droneOut.gain.cancelScheduledValues(actx.currentTime);
-    droneNodes.droneOut.gain.linearRampToValueAtTime(params.drone.lvl, actx.currentTime + 0.1);
+  const now = actx.currentTime;
+  if (secId === "master") {
+    if (knobId === "vol") {
+      master.gain.cancelScheduledValues(now);
+      master.gain.linearRampToValueAtTime(params.master.vol, now + 0.05);
+    } else if (knobId === "cycleMin") {
+      document.getElementById("f-cycle").textContent = fmtMS(cycleSeconds());
+    } else if (knobId === "revMix" && reverb) {
+      reverb.wet.gain.cancelScheduledValues(now);
+      reverb.wet.gain.linearRampToValueAtTime(params.master.revMix, now + 0.1);
+    } else if (knobId === "revSize" && reverb) {
+      /* debounce IR rebuild — it's expensive */
+      if (revSizeTimer) clearTimeout(revSizeTimer);
+      revSizeTimer = setTimeout(() => {
+        reverb.convolver.buffer = makeIR(params.master.revSize, 2.6);
+        revSizeTimer = null;
+      }, 80);
+    }
+    /* width is read at panNode creation time — no live patch */
+  } else if (secId === "drone" && droneNodes) {
+    if (knobId === "lvl") {
+      droneNodes.droneOut.gain.cancelScheduledValues(now);
+      droneNodes.droneOut.gain.linearRampToValueAtTime(params.drone.lvl, now + 0.1);
+    } else if (knobId === "pan") {
+      droneNodes.dronePan.pan.cancelScheduledValues(now);
+      droneNodes.dronePan.pan.linearRampToValueAtTime(params.drone.pan, now + 0.1);
+    }
   }
-  /* others read from params at trigger time — no live update needed */
-  if (secId === "master" && knobId === "cycleMin") {
-    document.getElementById("f-cycle").textContent = fmtMS(cycleSeconds());
-  }
+  /* per-voice density / lvl / character / pan are read at trigger time */
 }
 
 /* ==================================================================
