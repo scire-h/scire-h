@@ -648,13 +648,13 @@ function playSuzumushi(intensity) {
   const s = readSpecies("suzumushi");
   const pan = panNode(0.9, s.p.pan);
   const lp = makeLP(s.cut); lp.connect(pan);
-  const pulses = 3 + Math.floor(Math.random() * 6 * s.rm);
-  const baseF  = (4200 + Math.random() * 500 * s.rm) * s.p.pitch;
+  const pulses = 3 + Math.floor(Math.random() * 6);
+  const baseF  = (4200 + Math.random() * 500) * s.p.pitch;
   let t = start;
   for (let i = 0; i < pulses; i++) {
     const freq = baseF + (Math.random() - 0.5) * 30 * s.rm;
     const dur  = (0.10 + Math.random() * 0.07 * s.rm) * s.dm;
-    const peak = 0.18 * intensity * s.p.lvl;
+    const peak = 0.18 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
     bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.06 }, lp, s.wave);
     t += dur + 0.15 + Math.random() * 0.18 * s.rm;
   }
@@ -666,13 +666,13 @@ function playMatsumushi(intensity) {
   const s = readSpecies("matsumushi");
   const pan = panNode(0.9, s.p.pan);
   const lp = makeLP(s.cut); lp.connect(pan);
-  const pulses = 5 + Math.floor(Math.random() * 8 * s.rm);
-  const baseF  = (5600 + Math.random() * 600 * s.rm) * s.p.pitch;
+  const pulses = 5 + Math.floor(Math.random() * 8);
+  const baseF  = (5600 + Math.random() * 600) * s.p.pitch;
   let t = start;
   for (let i = 0; i < pulses; i++) {
     const freq = baseF + (Math.random() - 0.5) * 50 * s.rm;
     const dur  = (0.045 + Math.random() * 0.035 * s.rm) * s.dm;
-    const peak = 0.13 * intensity * s.p.lvl;
+    const peak = 0.13 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
     bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.045 }, lp, s.wave);
     t += dur + 0.05 + Math.random() * 0.08 * s.rm;
   }
@@ -684,14 +684,14 @@ function playKorogi(intensity) {
   const s = readSpecies("korogi");
   const pan = panNode(0.9, s.p.pan);
   const lp = makeLP(s.cut); lp.connect(pan);
-  const pulses = 4 + Math.floor(Math.random() * 5 * s.rm);
-  const baseF  = (3200 + Math.random() * 400 * s.rm) * s.p.pitch;
+  const pulses = 4 + Math.floor(Math.random() * 5);
+  const baseF  = (3200 + Math.random() * 400) * s.p.pitch;
   let t = start;
   for (let i = 0; i < pulses; i++) {
     const phase = pulses === 1 ? 0 : i / (pulses - 1);
     const freq  = baseF * (1 + (Math.random() - 0.5) * 0.04 * s.rm);
     const dur   = (0.035 + Math.random() * 0.025 * s.rm) * s.dm;
-    const peak  = 0.12 * intensity * s.p.lvl;
+    const peak  = 0.12 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
     bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.035 }, lp, s.wave);
     const gap = 0.045 + 0.025 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.02 * s.rm;
     t += dur + gap;
@@ -704,13 +704,13 @@ function playKanetataki(intensity) {
   const s = readSpecies("kanetataki");
   const pan = panNode(0.9, s.p.pan);
   const lp = makeLP(s.cut); lp.connect(pan);
-  const strikes = 1 + Math.floor(Math.random() * 3 * s.rm);
-  const baseF   = (6700 + Math.random() * 700 * s.rm) * s.p.pitch;
+  const strikes = 1 + Math.floor(Math.random() * 3);
+  const baseF   = (6700 + Math.random() * 700) * s.p.pitch;
   let t = start;
   for (let i = 0; i < strikes; i++) {
     const freq = baseF + (Math.random() - 0.5) * 80 * s.rm;
     const dur  = (0.025 + Math.random() * 0.025 * s.rm) * s.dm;
-    const peak = 0.085 * intensity * s.p.lvl;
+    const peak = 0.085 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
     bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.05 }, lp, s.wave);
     t += dur + 0.18 + Math.random() * 0.32 * s.rm;
   }
@@ -722,8 +722,8 @@ function playHigurashi(intensity) {
   const s = readSpecies("higurashi");
   const pan = panNode(0.9, s.p.pan);
   const lp = makeLP(s.cut); lp.connect(pan);
-  const tones = 3 + Math.floor(Math.random() * 4 * s.rm);
-  const baseStart = (2400 + Math.random() * 200 * s.rm) * s.p.pitch;
+  const tones = 3 + Math.floor(Math.random() * 4);
+  const baseStart = (2400 + Math.random() * 200) * s.p.pitch;
   const baseEnd   = baseStart * 0.72;
   let t = start;
   for (let i = 0; i < tones; i++) {
@@ -731,7 +731,7 @@ function playHigurashi(intensity) {
     const dur   = (0.13 + Math.random() * 0.06 * s.rm) * s.dm;
     const fS    = baseStart + (Math.random() - 0.5) * 60 * s.rm;
     const fE    = baseEnd   + (Math.random() - 0.5) * 50 * s.rm;
-    const peak  = 0.13 * intensity * s.p.lvl;
+    const peak  = 0.13 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
     const src = makeToneRamp(s.wave, fS, fE, t, dur);
     const env = actx.createGain();
@@ -758,10 +758,10 @@ function playKantan(intensity) {
   const s      = readSpecies("kantan");
   const pan    = panNode(0.9, s.p.pan);
   const lp     = makeLP(s.cut); lp.connect(pan);
-  const dur    = (1.0 + Math.random() * 1.5 * s.rm) * s.dm;
-  const baseF  = (3900 + Math.random() * 350 * s.rm) * s.p.pitch;
-  const amRate = 22 + Math.random() * 8 * s.rm;
-  const peak   = 0.085 * intensity * s.p.lvl;
+  const dur    = (1.0 + Math.random() * 1.5) * s.dm;
+  const baseF  = (3900 + Math.random() * 350) * s.p.pitch;
+  const amRate = 22 + Math.random() * 8;
+  const peak   = 0.085 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
   const src  = makeTone(s.wave, baseF,     start, dur);
   const src2 = makeTone(s.wave, baseF * 2, start, dur);
@@ -793,15 +793,15 @@ function playUmaoi(intensity) {
   const s = readSpecies("umaoi");
   const pan = panNode(0.9, s.p.pan);
   const lp = makeLP(s.cut); lp.connect(pan);
-  const pairs = (Math.random() * 0.30 * s.rm) > 0.18 ? 2 : 1;
+  const pairs = Math.random() < 0.30 ? 2 : 1;
   let t = start;
   for (let pp = 0; pp < pairs; pp++) {
-    const suiF = (3200 + Math.random() * 200 * s.rm) * s.p.pitch;
+    const suiF = (3200 + Math.random() * 200) * s.p.pitch;
     const suiDur = (0.075 + Math.random() * 0.025 * s.rm) * s.dm;
     {
       const src = makeToneRamp(s.wave, suiF, suiF * 1.06, t, suiDur);
       const env = actx.createGain();
-      const peak = 0.11 * intensity * s.p.lvl;
+      const peak = 0.11 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       env.gain.setValueAtTime(0, t);
       env.gain.linearRampToValueAtTime(peak, t + 0.012);
       env.gain.exponentialRampToValueAtTime(0.0005, t + suiDur);
@@ -817,11 +817,11 @@ function playUmaoi(intensity) {
     {
       const src = makeToneRamp(s.wave, choF, choF * 0.86, t, choDur);
       const vib = actx.createOscillator();
-      vib.frequency.value = 12 + Math.random() * 4 * s.rm;
+      vib.frequency.value = 12 + Math.random() * 4;
       const vibG = actx.createGain(); vibG.gain.value = 9;
       vib.connect(vibG).connect(src.frequency);
       const env = actx.createGain();
-      const peak = 0.12 * intensity * s.p.lvl;
+      const peak = 0.12 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       env.gain.setValueAtTime(0, t);
       env.gain.linearRampToValueAtTime(peak, t + 0.018);
       env.gain.setValueAtTime(peak, t + choDur - 0.04);
@@ -834,16 +834,17 @@ function playUmaoi(intensity) {
   finishInsect("umaoi");
 }
 
+
 /* クサヒバリ — grass-lark, tiny silvery continuous trill */
 function playKusahibari(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("kusahibari");
   const pan    = panNode(0.9, s.p.pan);
   const lp     = makeLP(s.cut); lp.connect(pan);
-  const dur    = (0.8 + Math.random() * 0.9 * s.rm) * s.dm;
-  const baseF  = (7200 + Math.random() * 500 * s.rm) * s.p.pitch;
-  const amRate = 28 + Math.random() * 10 * s.rm;
-  const peak   = 0.06 * intensity * s.p.lvl;
+  const dur    = (0.8 + Math.random() * 0.9) * s.dm;
+  const baseF  = (7200 + Math.random() * 500) * s.p.pitch;
+  const amRate = 28 + Math.random() * 10;
+  const peak   = 0.06 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
   const src = makeTone(s.wave, baseF, start, dur);
 
@@ -871,14 +872,14 @@ function playEnmakorogi(intensity) {
   const s = readSpecies("enmakorogi");
   const pan = panNode(0.9, s.p.pan);
   const lp = makeLP(s.cut); lp.connect(pan);
-  const pulses = 5 + Math.floor(Math.random() * 5 * s.rm);
-  const baseF  = (2400 + Math.random() * 300 * s.rm) * s.p.pitch;
+  const pulses = 5 + Math.floor(Math.random() * 5);
+  const baseF  = (2400 + Math.random() * 300) * s.p.pitch;
   let t = start;
   for (let i = 0; i < pulses; i++) {
     const phase = pulses === 1 ? 0 : i / (pulses - 1);
     const freq  = baseF * (1 + (Math.random() - 0.5) * 0.035 * s.rm);
     const dur   = (0.055 + Math.random() * 0.030 * s.rm) * s.dm;
-    const peak  = 0.14 * intensity * s.p.lvl;
+    const peak  = 0.14 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
     bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.055 }, lp, s.wave);
     const gap = 0.060 + 0.040 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.020 * s.rm;
     t += dur + gap;
@@ -892,10 +893,10 @@ function playAomatsumushi(intensity) {
   const s      = readSpecies("aomatsumushi");
   const pan    = panNode(0.9, s.p.pan);
   const lp     = makeLP(s.cut); lp.connect(pan);
-  const dur    = (1.2 + Math.random() * 1.6 * s.rm) * s.dm;
-  const baseF  = (4500 + Math.random() * 400 * s.rm) * s.p.pitch;
-  const amRate = 13 + Math.random() * 4 * s.rm;
-  const peak   = 0.10 * intensity * s.p.lvl;
+  const dur    = (1.2 + Math.random() * 1.6) * s.dm;
+  const baseF  = (4500 + Math.random() * 400) * s.p.pitch;
+  const amRate = 13 + Math.random() * 4;
+  const peak   = 0.10 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
   const src  = makeTone(s.wave, baseF,     start, dur);
   const src2 = makeTone(s.wave, baseF * 2, start, dur);
