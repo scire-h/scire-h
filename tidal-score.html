@@ -274,6 +274,30 @@
   }
   .mix-clear:hover { color: var(--fg); border-color: var(--dim); }
 
+  /* ----- PRESET SECTION ----- */
+  .preset-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .preset-btn {
+    font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--fg);
+    background: transparent; border: 1px solid var(--rule);
+    padding: 8px 6px; cursor: pointer; font-family: inherit;
+    font-weight: 400;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .preset-btn:hover { border-color: var(--dim); background: rgba(236,236,236,0.04); }
+  .preset-btn:active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .preset-status {
+    margin-top: 10px;
+    font-size: 9px; color: var(--faint); letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-feature-settings: "tnum" 1;
+    min-height: 1.4em;
+  }
+
   /* ----- FOOTER ----- */
   footer {
     display: grid; grid-template-columns: 1fr 1fr 1fr;
@@ -404,6 +428,25 @@ const INSECT_KINDS = [
   "kantan", "umaoi", "kusahibari", "enmakorogi", "aomatsumushi",
 ];
 const ALL_KINDS = [...INSECT_KINDS, "rasp", "scrape", "wind"];
+
+/* Factory preset — applied on first load over knob defs.
+   `def` on each knob is the "neutral" double-click target; this overlay
+   defines the curated starting state. Save / Load lives in localStorage. */
+const FACTORY_PATCH = {
+  master:       { cycleMin: 1.0, width: 0.61, revMix: 0.13, revSize: 0.5 },
+  drone:        { lvl: 1.46 },
+  suzumushi:    { lvl: 1.52, cutoff: 1300, decay: 0.30 },
+  matsumushi:   { lvl: 1.97, pitch: 1.61, cutoff: 14000, decay: 1.35, random: 1.19 },
+  korogi:       { density: 3.00, lvl: 1.12, pitch: 1.81, pan: -0.46, cutoff: 2400, decay: 1.72, random: 0.97 },
+  higurashi:    { density: 3.00, decay: 0.37 },
+  kanetataki:   { density: 1.83, pan: 0.50, wave: 3, decay: 0.64 },
+  kantan:       { pitch: 0.68, cutoff: 1500, decay: 0.62, random: 1.14 },
+  kusahibari:   { pitch: 0.64, wave: 2, cutoff: 3900, decay: 1.52, random: 0.47 },
+  enmakorogi:   { pitch: 1.75, cutoff: 2500 },
+};
+const FACTORY_MUTES = ["drone", "higurashi", "umaoi", "aomatsumushi", "scrape", "wind"];
+const FACTORY_SOLOS = ["suzumushi"];
+const PATCH_KEY    = "tidal-score-patch-v1";
 /* every audible track, including the always-on drone */
 const TRACKS = ["drone", ...ALL_KINDS];
 
@@ -1314,7 +1357,8 @@ const SECTIONS = [
       { id:"revMix",   lbl:"Reverb", min:0,   max:1,    def:0.30, fmt: fmt2 },
       { id:"revSize",  lbl:"Size",   min:0.3, max:6,    def:2.8,  fmt: v => v.toFixed(1)+"s" },
     ] },
-  { id: "mix", type: "mix", name: "Mix", color: "var(--fg)" },
+  { id: "preset", type: "preset", name: "Preset", color: "var(--fg)" },
+  { id: "mix",    type: "mix",    name: "Mix",    color: "var(--fg)" },
 
   { id: "drone",  name: "Drone",   color: "var(--drone)",
     knobs: [
@@ -1369,7 +1413,8 @@ const headBtnEls = {};  // track id -> { solo, mute, trig } in section header
 function buildPanel() {
   const root = document.getElementById("ctl-panel");
   for (const sec of SECTIONS) {
-    if (sec.type === "mix") { buildMixSection(root, sec); continue; }
+    if (sec.type === "mix")    { buildMixSection(root, sec);    continue; }
+    if (sec.type === "preset") { buildPresetSection(root, sec); continue; }
     const group = document.createElement("div");
     group.className = "ctl-group";
 
@@ -1570,6 +1615,168 @@ function buildMixSection(root, sec) {
   updateMixUI();
 }
 
+/* ==================================================================
+   PRESET PANEL — save / reset / share + URL fragment + localStorage
+   ================================================================== */
+let presetStatusEl = null;
+
+function buildPresetSection(root, sec) {
+  const group = document.createElement("div");
+  group.className = "ctl-group";
+
+  const head = document.createElement("div");
+  head.className = "ctl-head";
+  head.innerHTML = `
+    <div class="dot" style="background:${sec.color}"></div>
+    <div class="name">${sec.name}</div>
+    <div class="cnt num"></div>
+  `;
+  group.appendChild(head);
+
+  const row = document.createElement("div");
+  row.className = "preset-row";
+  const mk = (label, handler) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "preset-btn";
+    b.textContent = label;
+    b.addEventListener("click", handler);
+    return b;
+  };
+  row.appendChild(mk("Save",  savePatch));
+  row.appendChild(mk("Reset", resetPatch));
+  row.appendChild(mk("Share", copyShareURL));
+  group.appendChild(row);
+
+  const status = document.createElement("div");
+  status.className = "preset-status";
+  status.id = "preset-status";
+  status.textContent = "";
+  group.appendChild(status);
+  presetStatusEl = status;
+
+  root.appendChild(group);
+}
+
+function setStatus(msg) {
+  if (presetStatusEl) presetStatusEl.textContent = msg;
+}
+function fmtClock() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+}
+
+function snapshotPatch() {
+  return {
+    v: 1,
+    params: JSON.parse(JSON.stringify(params)),
+    mute: TRACKS.filter(t => muted[t]),
+    solo: TRACKS.filter(t => soloed[t]),
+  };
+}
+
+/* Overlay a patch onto current state, re-render the panel, push values
+   to live audio nodes. Missing fields fall through to existing values. */
+function applyPatchObject(patch) {
+  if (!patch) return false;
+  if (patch.params) {
+    for (const sec of Object.keys(patch.params)) {
+      if (!params[sec]) continue;
+      for (const k of Object.keys(patch.params[sec])) {
+        if (k in params[sec]) params[sec][k] = patch.params[sec][k];
+      }
+    }
+  }
+  if (Array.isArray(patch.mute)) {
+    for (const t of TRACKS) muted[t] = patch.mute.indexOf(t) >= 0;
+  }
+  if (Array.isArray(patch.solo)) {
+    for (const t of TRACKS) soloed[t] = patch.solo.indexOf(t) >= 0;
+  }
+  /* re-render each bound knob from the new params; applyParam pushes
+     live values into the audio graph for the ones that need it. */
+  for (const sec of Object.keys(knobRefs)) {
+    for (const k of Object.keys(knobRefs[sec])) {
+      knobRefs[sec][k].render();
+      applyParam(sec, k);
+    }
+  }
+  updateMixUI();
+  applyDroneAudibility();
+  return true;
+}
+
+/* Construct the factory-default state and apply it. */
+function applyFactoryPatch() {
+  const fp = {};
+  for (const sec of SECTIONS) {
+    if (!sec.knobs) continue;
+    fp[sec.id] = {};
+    for (const k of sec.knobs) fp[sec.id][k.id] = k.def;
+  }
+  for (const sec of Object.keys(FACTORY_PATCH)) {
+    if (!fp[sec]) fp[sec] = {};
+    Object.assign(fp[sec], FACTORY_PATCH[sec]);
+  }
+  applyPatchObject({ v: 1, params: fp, mute: FACTORY_MUTES.slice(), solo: FACTORY_SOLOS.slice() });
+}
+
+function savePatch() {
+  try {
+    localStorage.setItem(PATCH_KEY, JSON.stringify(snapshotPatch()));
+    setStatus("Saved " + fmtClock());
+  } catch (e) {
+    setStatus("Save failed");
+  }
+}
+
+function loadPatchFromStorage() {
+  try {
+    const raw = localStorage.getItem(PATCH_KEY);
+    if (!raw) return false;
+    applyPatchObject(JSON.parse(raw));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function resetPatch() {
+  applyFactoryPatch();
+  setStatus("Factory");
+}
+
+async function copyShareURL() {
+  try {
+    const json = JSON.stringify(snapshotPatch());
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    const url = location.origin + location.pathname + location.search + "#p=" + b64;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(url);
+      setStatus("URL copied");
+    } else {
+      /* fallback: drop the URL into history so the user can copy from the bar */
+      history.replaceState(null, "", url);
+      setStatus("URL in address bar");
+    }
+  } catch (e) {
+    setStatus("Share failed");
+  }
+}
+
+function loadPatchFromURL() {
+  if (!location.hash || location.hash.indexOf("#p=") !== 0) return false;
+  try {
+    const b64 = location.hash.slice(3);
+    const json = decodeURIComponent(escape(atob(b64)));
+    applyPatchObject(JSON.parse(json));
+    /* clear so subsequent reloads don't keep re-applying it */
+    history.replaceState(null, "", location.pathname + location.search);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function toggleSolo(kind) { soloed[kind] = !soloed[kind]; afterMixChange(); }
 function toggleMute(kind) { muted[kind]  = !muted[kind];  afterMixChange(); }
 function clearMix() {
@@ -1729,6 +1936,13 @@ function frame(nowMs) {
 }
 
 buildPanel();
+/* Apply factory preset, then overlay a saved patch or one from the URL.
+   URL wins, then localStorage, then the bare factory state. */
+applyFactoryPatch();
+const fromURL = loadPatchFromURL();
+if (fromURL) setStatus("Loaded from URL");
+else if (loadPatchFromStorage()) setStatus("Restored");
+else setStatus("Factory");
 f_cycle.textContent = fmtMS(cycleSeconds());
 resize();
 requestAnimationFrame(frame);
