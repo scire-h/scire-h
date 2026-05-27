@@ -142,6 +142,15 @@
     font-size: 10px; color: var(--faint); font-feature-settings: "tnum" 1;
     letter-spacing: 0.04em;
   }
+  /* in-header S / M / ▶ next to the count for every track section */
+  .ctl-cluster {
+    display: flex; align-items: center; gap: 5px;
+  }
+  .ctl-cluster .cnt {
+    margin-right: 4px;
+    min-width: 18px;
+    text-align: right;
+  }
 
   /* ----- KNOBS ----- */
   .knob-row {
@@ -1350,10 +1359,11 @@ const SECTIONS = [
 const SECTION_BY_ID = {};
 SECTIONS.forEach(s => { SECTION_BY_ID[s.id] = s; });
 
-const knobRefs  = {};  // section -> id -> { el, render }
-const dotEls    = {};  // section -> header dot element
-const cntEls    = {};  // section -> count element
-const mixDotEls = {};  // track id -> mix-row dot element
+const knobRefs   = {};  // section -> id -> { el, render }
+const dotEls     = {};  // section -> header dot element
+const cntEls     = {};  // section -> count element
+const mixDotEls  = {};  // track id -> mix-row dot element
+const headBtnEls = {};  // track id -> { solo, mute, trig } in section header
 
 function buildPanel() {
   const root = document.getElementById("ctl-panel");
@@ -1373,6 +1383,9 @@ function buildPanel() {
     group.appendChild(head);
     dotEls[sec.id] = head.querySelector(".dot");
     cntEls[sec.id] = head.querySelector(".cnt");
+
+    /* every audible track gets S / M / ▶ buttons next to its name */
+    if (TRACKS.includes(sec.id)) addTrackControls(head, sec);
 
     const row = document.createElement("div");
     const n = sec.knobs.length;
@@ -1394,6 +1407,45 @@ function buildPanel() {
     group.appendChild(row);
     root.appendChild(group);
   }
+}
+
+/* wrap the section header's count + S / M / ▶ buttons into a cluster
+   sitting in the head's right-hand "auto" grid cell. Reuses the same
+   styles, state and handlers as the Mix panel rows. */
+function addTrackControls(head, sec) {
+  const id = sec.id;
+  const cnt = head.querySelector(".cnt");
+  if (!cnt) return;
+  const cluster = document.createElement("div");
+  cluster.className = "ctl-cluster";
+  cnt.parentNode.replaceChild(cluster, cnt);
+  cluster.appendChild(cnt);
+
+  const mk = (cls, label, aria, html) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "mix-btn " + cls;
+    if (html) b.innerHTML = html; else b.textContent = label;
+    b.setAttribute("aria-label", aria);
+    return b;
+  };
+  const sName = sec.name + (sec.nameJa ? " " + sec.nameJa : "");
+  const solo = mk("solo", "S", "Solo " + sName);
+  const mute = mk("mute", "M", "Mute " + sName);
+  const trig = mk("trig", "",  "Trigger " + sName, "&#9654;");
+
+  solo.addEventListener("click", () => toggleSolo(id));
+  mute.addEventListener("click", () => toggleMute(id));
+  trig.addEventListener("click", () => {
+    manualTrigger(id);
+    trig.classList.add("fire");
+    setTimeout(() => trig.classList.remove("fire"), 120);
+  });
+
+  cluster.appendChild(solo);
+  cluster.appendChild(mute);
+  cluster.appendChild(trig);
+  headBtnEls[id] = { solo, mute, trig };
 }
 
 function bindKnob(el, secId, def) {
@@ -1534,6 +1586,13 @@ function updateMixUI() {
     row.querySelector(".mute").classList.toggle("on", !!muted[id]);
     row.querySelector(".mix-name").classList.toggle("dim", !isAudible(id));
   });
+  /* sync the per-section header clusters so the Mix matrix and the
+     in-section S / M lights stay identical */
+  for (const id of Object.keys(headBtnEls)) {
+    const b = headBtnEls[id];
+    b.solo.classList.toggle("on", !!soloed[id]);
+    b.mute.classList.toggle("on", !!muted[id]);
+  }
 }
 
 /* push knob value into live audio params where it must take effect immediately */
