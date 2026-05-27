@@ -214,7 +214,8 @@
       <div class="opus">Op. 01 &nbsp;·&nbsp; for the tide</div>
       <h1>Tidal&nbsp;Score</h1>
       <div class="sub">
-        Synthetic insects, scraping bodies and hollow winds, conducted by a sine of the sea.
+        Bell crickets, pine crickets and the wind through a hollow stem —
+        a quiet Japanese summer night, conducted by a sine of the sea.
         Fifteen dials below shape the score; the tide schedules it.
       </div>
     </div>
@@ -335,90 +336,94 @@ function makeNoise(seconds) {
   return buf;
 }
 
-/* ---------- VOICE: INSECT ---------- */
+/* ---------- VOICE: INSECT ----------
+ * A still Japanese summer night: a phrase of pure sine pulses
+ * with silence between them.
+ *   Suzumushi  (鈴虫)   bell-like, ~4.4 kHz, slow rin… rin… rin…
+ *   Matsumushi (松虫)   quicker, ~5.8 kHz, brighter chi-chi-chi
+ *   Korogi     (蟋蟀)   lower, ~3.4 kHz, korokoro-rii trill
+ */
 function playInsect(intensity) {
-  const now = actx.currentTime;
-  const cricket = Math.random() < 0.65;
-  const bright = params.insect.bright;
+  const start = actx.currentTime;
   const lvl    = params.insect.lvl;
+  const bright = params.insect.bright;
+  const pan    = panNode(0.9);
 
-  if (cricket) {
-    const carrier = (2800 + Math.random() * 2600) * bright;
-    const trill   = 18 + Math.random() * 22;
-    const dur     = 0.35 + Math.random() * 1.4;
-
-    const osc = actx.createOscillator();
-    osc.type = "square";
-    osc.frequency.value = carrier;
-    const vib = actx.createOscillator();
-    vib.frequency.value = trill * 0.5;
-    const vibAmt = actx.createGain();
-    vibAmt.gain.value = carrier * 0.005;
-    vib.connect(vibAmt).connect(osc.frequency);
-
-    const bp = actx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.frequency.value = carrier;
-    bp.Q.value = 9;
-
-    const trillOsc = actx.createOscillator();
-    trillOsc.type = "sine";
-    trillOsc.frequency.value = trill;
-    const trillG = actx.createGain();
-    trillG.gain.value = 0.5;
-    trillOsc.connect(trillG);
-    const trem = actx.createGain();
-    trem.gain.value = 0.5;
-    trillG.connect(trem.gain);
-
-    const env = actx.createGain();
-    const peak = 0.07 * intensity * lvl;
-    env.gain.setValueAtTime(0, now);
-    env.gain.linearRampToValueAtTime(peak, now + 0.04);
-    env.gain.setValueAtTime(peak, now + dur - 0.15);
-    env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
-
-    osc.connect(bp).connect(trem).connect(env).connect(panNode(0.85));
-    osc.start(now); vib.start(now); trillOsc.start(now);
-    osc.stop(now + dur + 0.05); vib.stop(now + dur + 0.05); trillOsc.stop(now + dur + 0.05);
-  } else {
-    const dur = 0.8 + Math.random() * 1.6;
-    const f   = (2400 + Math.random() * 2000) * bright;
-
-    const src = actx.createBufferSource();
-    src.buffer = noiseBuf;
-    src.loop = true;
-    src.playbackRate.value = 1 + Math.random() * 0.5;
-
-    const bp = actx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.frequency.value = f;
-    bp.Q.value = 11;
-
-    const shim = actx.createOscillator();
-    shim.frequency.value = 40 + Math.random() * 60;
-    const shimG = actx.createGain();
-    shimG.gain.value = 0.35;
-    shim.connect(shimG);
-    const trem = actx.createGain();
-    trem.gain.value = 0.65;
-    shimG.connect(trem.gain);
-
-    const env = actx.createGain();
-    const peak = 0.05 * intensity * lvl;
-    env.gain.setValueAtTime(0, now);
-    env.gain.linearRampToValueAtTime(peak, now + 0.18);
-    env.gain.setValueAtTime(peak, now + dur - 0.25);
-    env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
-
-    src.connect(bp).connect(trem).connect(env).connect(panNode(0.85));
-    src.start(now); shim.start(now);
-    src.stop(now + dur + 0.05); shim.stop(now + dur + 0.05);
-  }
+  const variant = Math.random();
+  if (variant < 0.50) playSuzumushi(start, intensity, lvl, bright, pan);
+  else if (variant < 0.78) playMatsumushi(start, intensity, lvl, bright, pan);
+  else                     playKorogi(start, intensity, lvl, bright, pan);
 
   flash.insect = 1;
   registerEvent("insect");
   counts.insect++;
+}
+
+/* a single bell-like sine pulse with a faint upper harmonic for shimmer */
+function bellPulse(t, freq, dur, peak, harmonic, dest) {
+  const osc = actx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.value = freq;
+
+  const env = actx.createGain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(peak, t + 0.006);
+  env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+
+  osc.connect(env);
+  if (harmonic) {
+    const osc2 = actx.createOscillator();
+    osc2.type = "sine";
+    osc2.frequency.value = freq * harmonic.mult;
+    const g2 = actx.createGain();
+    g2.gain.value = harmonic.gain;
+    osc2.connect(g2).connect(env);
+    osc2.start(t); osc2.stop(t + dur + 0.02);
+  }
+  env.connect(dest);
+  osc.start(t); osc.stop(t + dur + 0.02);
+}
+
+function playSuzumushi(start, intensity, lvl, bright, pan) {
+  const pulses = 3 + Math.floor(Math.random() * 6);          // 3–8
+  const baseF  = (4200 + Math.random() * 500) * bright;       // ~4.2–4.7 kHz
+  let t = start;
+  for (let i = 0; i < pulses; i++) {
+    const freq = baseF + (Math.random() - 0.5) * 30;
+    const dur  = 0.10 + Math.random() * 0.07;                 // ~100–170 ms
+    const peak = 0.18 * intensity * lvl;
+    bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.06 }, pan);
+    t += dur + 0.15 + Math.random() * 0.18;                   // ~250–400 ms rest
+  }
+}
+
+function playMatsumushi(start, intensity, lvl, bright, pan) {
+  const pulses = 5 + Math.floor(Math.random() * 8);          // 5–12
+  const baseF  = (5600 + Math.random() * 600) * bright;       // ~5.6–6.2 kHz
+  let t = start;
+  for (let i = 0; i < pulses; i++) {
+    const freq = baseF + (Math.random() - 0.5) * 50;
+    const dur  = 0.045 + Math.random() * 0.035;               // ~45–80 ms
+    const peak = 0.13 * intensity * lvl;
+    bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.045 }, pan);
+    t += dur + 0.05 + Math.random() * 0.08;                   // ~95–180 ms rest
+  }
+}
+
+function playKorogi(start, intensity, lvl, bright, pan) {
+  const pulses = 4 + Math.floor(Math.random() * 5);          // 4–8
+  const baseF  = (3200 + Math.random() * 400) * bright;       // ~3.2–3.6 kHz
+  let t = start;
+  for (let i = 0; i < pulses; i++) {
+    const phase = pulses === 1 ? 0 : i / (pulses - 1);
+    const freq  = baseF * (1 + (Math.random() - 0.5) * 0.04);
+    const dur   = 0.035 + Math.random() * 0.025;              // ~35–60 ms
+    const peak  = 0.12 * intensity * lvl;
+    bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.035 }, pan);
+    /* tempo dips in the middle of the trill, then settles */
+    const gap = 0.045 + 0.025 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.02;
+    t += dur + gap;
+  }
 }
 
 /* ---------- VOICE: RASP ---------- */
@@ -618,7 +623,7 @@ function rates(level, deriv) {
   const rising  = Math.max(0, deriv);
   const falling = Math.max(0, -deriv);
   return {
-    insect: (0.05 + 1.4 * Math.max(0, level) ** 1.6) * params.insect.density,
+    insect: (0.04 + 0.45 * Math.max(0, level + 0.20) ** 1.0) * params.insect.density,
     rasp:   (0.10 + 1.0 * Math.max(0, level + 0.25) ** 1.1) * params.rasp.density,
     scrape: (0.05 + 0.9 * Math.max(0, -level) ** 1.4 + 0.4 * falling) * params.scrape.density,
     wind:   (0.03 + 0.9 * rising * Math.sqrt(Math.max(0, 1 - level * level))) * params.wind.density,
