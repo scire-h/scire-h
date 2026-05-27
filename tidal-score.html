@@ -192,6 +192,74 @@
     letter-spacing: 0.02em;
   }
 
+  /* ----- MIX SECTION (Solo / Mute matrix) ----- */
+  .mix-list { display: flex; flex-direction: column; }
+  .mix-row {
+    display: grid;
+    grid-template-columns: 9px 1fr 22px 22px;
+    gap: 9px;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .mix-row:last-child { border-bottom: none; }
+  .mix-row .mix-dot {
+    width: 7px; height: 7px; border-radius: 50%; justify-self: center;
+    transition: box-shadow 0.18s, transform 0.18s;
+  }
+  .mix-row .mix-dot.on {
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.07);
+    transform: scale(1.3);
+  }
+  .mix-row .mix-name {
+    font-size: 10px; color: var(--fg);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .mix-row .mix-name .ja {
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic",
+                 "Noto Sans CJK JP", sans-serif;
+    font-size: 8.5px;
+    margin-left: 6px;
+    opacity: 0.45;
+    font-weight: 300;
+  }
+  .mix-row .mix-name.dim { opacity: 0.35; }
+  .mix-btn {
+    width: 22px; height: 22px;
+    border: 1px solid var(--rule);
+    background: transparent;
+    color: var(--faint);
+    font-size: 10px;
+    letter-spacing: 0;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit;
+    font-weight: 400;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    padding: 0;
+  }
+  .mix-btn:hover { border-color: var(--dim); color: var(--fg); }
+  .mix-btn.solo.on {
+    background: var(--fg); color: var(--bg); border-color: var(--fg);
+  }
+  .mix-btn.mute.on {
+    background: rgba(236,236,236,0.10);
+    color: var(--fg);
+    border-color: var(--dim);
+    text-decoration: line-through;
+  }
+  .mix-clear {
+    margin-top: 10px; align-self: flex-start;
+    font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--faint);
+    background: transparent; border: 1px solid var(--rule);
+    padding: 5px 10px; cursor: pointer; font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .mix-clear:hover { color: var(--fg); border-color: var(--dim); }
+
   /* ----- FOOTER ----- */
   footer {
     display: grid; grid-template-columns: 1fr 1fr 1fr;
@@ -322,6 +390,18 @@ const INSECT_KINDS = [
   "kantan", "umaoi", "kusahibari", "enmakorogi", "aomatsumushi",
 ];
 const ALL_KINDS = [...INSECT_KINDS, "rasp", "scrape", "wind"];
+/* every audible track, including the always-on drone */
+const TRACKS = ["drone", ...ALL_KINDS];
+
+/* per-track solo / mute state, toggled by the Mix panel */
+const muted  = {}; TRACKS.forEach(k => muted[k]  = false);
+const soloed = {}; TRACKS.forEach(k => soloed[k] = false);
+function anySolo() { for (const k of TRACKS) if (soloed[k]) return true; return false; }
+function isAudible(kind) {
+  if (muted[kind]) return false;
+  if (anySolo() && !soloed[kind]) return false;
+  return true;
+}
 
 let actx = null;
 let master = null;
@@ -1011,10 +1091,10 @@ function maybeTrigger(now) {
   for (const kind of ALL_KINDS) {
     if (now >= nextDue[kind]) {
       const rate = Math.max(0.0005, r[kind]);
-      /* intensity stays in a tighter range than before so per-event density
-         changes don't blow out the level — Levels are now per-species knobs. */
       const intensity = 0.6 + Math.min(1.2, rate * 1.5) * 0.4;
-      VOICE_FN[kind](intensity);
+      /* still advance the schedule when muted/soloed-out, so unmuting
+         doesn't release a burst of pent-up events */
+      if (isAudible(kind)) VOICE_FN[kind](intensity);
       const wait = -Math.log(1 - Math.random()) / rate;
       nextDue[kind] = now + Math.max(0.1, wait);
     }
@@ -1152,6 +1232,8 @@ const SECTIONS = [
       { id:"revMix",   lbl:"Reverb", min:0,   max:1,    def:0.30, fmt: fmt2 },
       { id:"revSize",  lbl:"Size",   min:0.3, max:6,    def:2.8,  fmt: v => v.toFixed(1)+"s" },
     ] },
+  { id: "mix", type: "mix", name: "Mix", color: "var(--fg)" },
+
   { id: "drone",  name: "Drone",   color: "var(--drone)",
     knobs: [
       { id:"lvl", lbl:"Level", min:0,    max:1.5, def:1.0, fmt: fmt2 },
@@ -1193,13 +1275,18 @@ const SECTIONS = [
     ] },
 ];
 
-const knobRefs = {};   // section -> id -> { el, render }
-const dotEls   = {};   // section -> dot element
-const cntEls   = {};   // section -> count element
+const SECTION_BY_ID = {};
+SECTIONS.forEach(s => { SECTION_BY_ID[s.id] = s; });
+
+const knobRefs  = {};  // section -> id -> { el, render }
+const dotEls    = {};  // section -> header dot element
+const cntEls    = {};  // section -> count element
+const mixDotEls = {};  // track id -> mix-row dot element
 
 function buildPanel() {
   const root = document.getElementById("ctl-panel");
   for (const sec of SECTIONS) {
+    if (sec.type === "mix") { buildMixSection(root, sec); continue; }
     const group = document.createElement("div");
     group.className = "ctl-group";
 
@@ -1301,6 +1388,75 @@ function bindKnob(el, secId, def) {
   return { render, get, set };
 }
 
+/* ==================================================================
+   MIX PANEL — solo & mute matrix across all tracks
+   ================================================================== */
+function buildMixSection(root, sec) {
+  const group = document.createElement("div");
+  group.className = "ctl-group";
+
+  const head = document.createElement("div");
+  head.className = "ctl-head";
+  head.innerHTML = `
+    <div class="dot" style="background:${sec.color}"></div>
+    <div class="name">${sec.name}</div>
+    <div class="cnt num"></div>
+  `;
+  group.appendChild(head);
+
+  const list = document.createElement("div");
+  list.className = "mix-list";
+  for (const trackId of TRACKS) {
+    const s = SECTION_BY_ID[trackId];
+    const name = s?.name || trackId;
+    const ja = s?.nameJa ? `<span class="ja">${s.nameJa}</span>` : "";
+    const color = s?.color || "var(--fg)";
+    const row = document.createElement("div");
+    row.className = "mix-row";
+    row.dataset.track = trackId;
+    row.innerHTML = `
+      <div class="mix-dot" style="background:${color}"></div>
+      <div class="mix-name">${name}${ja}</div>
+      <button class="mix-btn solo" type="button" aria-label="Solo ${name}">S</button>
+      <button class="mix-btn mute" type="button" aria-label="Mute ${name}">M</button>
+    `;
+    list.appendChild(row);
+    mixDotEls[trackId] = row.querySelector(".mix-dot");
+    row.querySelector(".solo").addEventListener("click", () => toggleSolo(trackId));
+    row.querySelector(".mute").addEventListener("click", () => toggleMute(trackId));
+  }
+  group.appendChild(list);
+
+  const clear = document.createElement("button");
+  clear.className = "mix-clear";
+  clear.type = "button";
+  clear.textContent = "Clear all";
+  clear.addEventListener("click", clearMix);
+  group.appendChild(clear);
+
+  root.appendChild(group);
+  updateMixUI();
+}
+
+function toggleSolo(kind) { soloed[kind] = !soloed[kind]; afterMixChange(); }
+function toggleMute(kind) { muted[kind]  = !muted[kind];  afterMixChange(); }
+function clearMix() {
+  for (const k of TRACKS) { soloed[k] = false; muted[k] = false; }
+  afterMixChange();
+}
+function afterMixChange() {
+  updateMixUI();
+  applyDroneAudibility();
+}
+function updateMixUI() {
+  document.querySelectorAll(".mix-row").forEach(row => {
+    const id = row.dataset.track;
+    row.querySelector(".solo").classList.toggle("on", !!soloed[id]);
+    row.querySelector(".mute").classList.toggle("on", !!muted[id]);
+    row.querySelector(".mix-name").classList.toggle("dim", !isAudible(id));
+  });
+}
+
 /* push knob value into live audio params where it must take effect immediately */
 let revSizeTimer = null;
 function applyParam(secId, knobId) {
@@ -1326,14 +1482,22 @@ function applyParam(secId, knobId) {
     /* width is read at panNode creation time — no live patch */
   } else if (secId === "drone" && droneNodes) {
     if (knobId === "lvl") {
-      droneNodes.droneOut.gain.cancelScheduledValues(now);
-      droneNodes.droneOut.gain.linearRampToValueAtTime(params.drone.lvl, now + 0.1);
+      applyDroneAudibility();
     } else if (knobId === "pan") {
       droneNodes.dronePan.pan.cancelScheduledValues(now);
       droneNodes.dronePan.pan.linearRampToValueAtTime(params.drone.pan, now + 0.1);
     }
   }
   /* per-voice density / lvl / character / pan are read at trigger time */
+}
+
+/* gate the drone's continuous gain on its mute/solo state */
+function applyDroneAudibility() {
+  if (!droneNodes) return;
+  const target = isAudible("drone") ? params.drone.lvl : 0;
+  const now = actx.currentTime;
+  droneNodes.droneOut.gain.cancelScheduledValues(now);
+  droneNodes.droneOut.gain.linearRampToValueAtTime(target, now + 0.1);
 }
 
 /* ==================================================================
@@ -1381,16 +1545,18 @@ function tickUI(nowMs) {
   m_level.textContent = (lvl >= 0 ? "+" : "") + lvl.toFixed(3);
   m_phase.textContent = phaseLabel(lvl, der);
 
-  if (cntEls.insect) cntEls.insect.textContent = counts.insect;
-  if (cntEls.rasp)   cntEls.rasp.textContent   = counts.rasp;
-  if (cntEls.scrape) cntEls.scrape.textContent = counts.scrape;
-  if (cntEls.wind)   cntEls.wind.textContent   = counts.wind;
+  for (const k of ALL_KINDS) {
+    if (cntEls[k]) cntEls[k].textContent = counts[k];
+  }
 
-  for (const k of ["insect","rasp","scrape","wind","drone"]) {
+  for (const k of TRACKS) {
     flash[k] = Math.max(0, flash[k] - 0.04);
-    const el = dotEls[k];
-    if (!el) continue;
-    if (flash[k] > 0.5) el.classList.add("on"); else el.classList.remove("on");
+    /* drone has no event flashes — light steadily whenever audible */
+    const lit = (k === "drone") ? isAudible("drone") : (flash[k] > 0.5);
+    const head = dotEls[k];
+    const mixD = mixDotEls[k];
+    if (head) head.classList.toggle("on", lit);
+    if (mixD) mixD.classList.toggle("on", lit);
   }
 }
 
