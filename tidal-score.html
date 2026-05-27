@@ -516,8 +516,11 @@ let limiter = null;      // exposed for the recorder tap
 let reverb = null;       // { convolver, wet }
 let noiseBufs = null;    // { white, pink, brown }
 let droneNodes = null;
-let outputBridge = null; // <audio> element fed by a MediaStreamDestination,
-                         // so iOS/macOS screen recording captures the piece
+let silentPrimer = null; // hidden <audio> looping silence so iOS/macOS
+                         // classifies this tab as "media playback" and
+                         // includes the AudioContext output in screen
+                         // recordings. The actual audio goes straight
+                         // out via actx.destination — no extra resampling.
 let running = false;
 
 /* recording state — ScriptProcessor tap + WAV encode on stop */
@@ -556,7 +559,7 @@ function initAudio() {
   lim.release.value = 0.08;
   limiter = lim;
 
-  /* dry path: master -> limiter */
+  /* dry path: master -> limiter -> destination (clean, no resampling) */
   master.connect(lim);
   /* wet path: master -> convolver -> wet gain -> limiter (parallel send) */
   const convolver = actx.createConvolver();
@@ -564,30 +567,7 @@ function initAudio() {
   const wet = actx.createGain();
   wet.gain.value = params.master.revMix;
   master.connect(convolver).connect(wet).connect(lim);
-
-  /* Output routing: send the limiter through a MediaStreamDestination
-     and play it back via a hidden <audio> element. iOS / macOS screen
-     recording classifies <audio> as "media playback" and captures it,
-     whereas AudioContext.destination output is often skipped. Falls
-     back to the direct destination if the API is missing. */
-  let bridged = false;
-  try {
-    if (typeof actx.createMediaStreamDestination === "function") {
-      const dest = actx.createMediaStreamDestination();
-      lim.connect(dest);
-      const audioEl = document.createElement("audio");
-      audioEl.id = "audio-bridge";
-      audioEl.autoplay = true;
-      audioEl.playsInline = true;
-      audioEl.srcObject = dest.stream;
-      audioEl.style.cssText =
-        "position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;";
-      document.body.appendChild(audioEl);
-      outputBridge = audioEl;
-      bridged = true;
-    }
-  } catch (_) { /* fall through to direct routing */ }
-  if (!bridged) lim.connect(actx.destination);
+  lim.connect(actx.destination);
 
   reverb = { convolver, wet };
 
@@ -624,6 +604,38 @@ function makeIR(durationSec, decay) {
 }
 
 /* Per-event StereoPanner: per-voice center + random spread × global width */
+/* Build a hidden <audio> that loops one second of silence. Played
+   inside the user-gesture START handler, this convinces iOS / macOS
+   that the page is doing "media playback" so the system includes the
+   AudioContext speaker output in screen recordings. The element itself
+   adds no audible sound and no DSP load — it's just a session hint. */
+function ensureSilentPrimer() {
+  if (silentPrimer) return;
+  /* 1 s of unsigned 8-bit silence at 8 kHz = 8044 bytes (header + data) */
+  const sr = 8000, samples = sr;
+  const buf = new ArrayBuffer(44 + samples);
+  const view = new DataView(buf);
+  let p = 0;
+  const wStr = (s) => { for (let i = 0; i < s.length; i++) view.setUint8(p++, s.charCodeAt(i)); };
+  const w32 = (n) => { view.setUint32(p, n, true); p += 4; };
+  const w16 = (n) => { view.setUint16(p, n, true); p += 2; };
+  wStr("RIFF"); w32(36 + samples); wStr("WAVE");
+  wStr("fmt "); w32(16); w16(1); w16(1);
+  w32(sr); w32(sr); w16(1); w16(8);
+  wStr("data"); w32(samples);
+  for (let i = 0; i < samples; i++) view.setUint8(p++, 128);
+  const url = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  const el = document.createElement("audio");
+  el.src = url;
+  el.loop = true;
+  el.playsInline = true;
+  el.preload = "auto";
+  el.style.cssText =
+    "position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;";
+  document.body.appendChild(el);
+  silentPrimer = el;
+}
+
 function panNode(spread, center = 0) {
   const p = actx.createStereoPanner();
   const w = params.master.width;
@@ -1419,6 +1431,7 @@ const fmtPan = v => Math.abs(v) < 0.005 ? "  C" : (v < 0 ? "L" + Math.round(-v *
 
 const fmtHz = v => v >= 1000 ? (v/1000).toFixed(1) + "k" : Math.round(v) + "";
 const fmtWave = v => WAVE_LABEL[WAVES[Math.round(v)]] || "—";
+const fmtDB = v => v <= 0.0005 ? "−∞" : ((v >= 1 ? "+" : "") + (20 * Math.log10(v)).toFixed(1));
 
 /* one insect species knob set — 8 dials in two rows of four */
 function insectKnobs() {
@@ -1437,7 +1450,7 @@ function insectKnobs() {
 const SECTIONS = [
   { id: "master", name: "Master", color: "var(--fg)",
     knobs: [
-      { id:"vol",      lbl:"Volume", min:0,   max:1,    def:0.7,  fmt: fmt2 },
+      { id:"vol",      lbl:"Volume", min:0,   max:4,    def:0.7,  fmt: fmtDB },
       { id:"cycleMin", lbl:"Cycle",  min:1,   max:30,   def:6.0,  step:0.5, fmt: v => v.toFixed(1)+"m" },
       { id:"width",    lbl:"Width",  min:0,   max:1,    def:1.0,  fmt: fmt2 },
       { id:"revMix",   lbl:"Reverb", min:0,   max:1,    def:0.30, fmt: fmt2 },
@@ -2194,10 +2207,12 @@ const startEl = document.getElementById("start");
 
 async function startAudio() {
   if (!actx) initAudio();
-  /* Kick the <audio> bridge inside the user gesture before any await,
-     so iOS Safari's autoplay policy lets it through. */
-  if (outputBridge) {
-    const p = outputBridge.play();
+  /* Kick the silent primer inside the user gesture so iOS/macOS treats
+     the page as media playback and screen recording captures the live
+     AudioContext output. Must happen before any await. */
+  ensureSilentPrimer();
+  if (silentPrimer) {
+    const p = silentPrimer.play();
     if (p && p.catch) p.catch(() => {});
   }
   if (actx.state === "suspended") await actx.resume();
