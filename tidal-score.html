@@ -553,23 +553,26 @@ function initAudio() {
   }
   master = actx.createGain();
   master.gain.value = 0.0;
+  /* Transparent brick-wall limiter: only catches peaks at the very top,
+     so EQ boosts and Master Volume lifts colour the sound instead of
+     being squashed by an over-eager compressor. */
   const lim = actx.createDynamicsCompressor();
-  lim.threshold.value = -8;
-  lim.knee.value = 4;
-  lim.ratio.value = 14;
-  lim.attack.value = 0.003;
+  lim.threshold.value = -3;
+  lim.knee.value = 0;
+  lim.ratio.value = 20;
+  lim.attack.value = 0.001;
   lim.release.value = 0.08;
   limiter = lim;
 
-  /* 3-band master EQ — low shelf, mid bell, high shelf — sits between
-     master and the dry/wet split so it shapes both reverb send and
-     direct output. Gains in dB are driven by params.eq.{low, mid, high}. */
+  /* 3-band master EQ — tuned to where the insect chorus actually lives.
+     Sits between master and the dry/wet split so it shapes both reverb
+     send and direct output. Gains in dB live in params.eq.{low,mid,high}. */
   const eqLow  = actx.createBiquadFilter();
-  eqLow.type   = "lowshelf";  eqLow.frequency.value  = 250;  eqLow.gain.value  = params.eq.low;
+  eqLow.type   = "lowshelf";  eqLow.frequency.value  = 200;  eqLow.gain.value  = params.eq.low;
   const eqMid  = actx.createBiquadFilter();
-  eqMid.type   = "peaking";   eqMid.frequency.value  = 1000; eqMid.Q.value = 0.9; eqMid.gain.value = params.eq.mid;
+  eqMid.type   = "peaking";   eqMid.frequency.value  = 1500; eqMid.Q.value = 0.7; eqMid.gain.value = params.eq.mid;
   const eqHigh = actx.createBiquadFilter();
-  eqHigh.type  = "highshelf"; eqHigh.frequency.value = 3500; eqHigh.gain.value = params.eq.high;
+  eqHigh.type  = "highshelf"; eqHigh.frequency.value = 5000; eqHigh.gain.value = params.eq.high;
   master.connect(eqLow).connect(eqMid).connect(eqHigh);
   eqNodes = { low: eqLow, mid: eqMid, high: eqHigh };
 
@@ -1479,9 +1482,9 @@ const SECTIONS = [
     ] },
   { id: "eq", name: "EQ", color: "var(--fg)",
     knobs: [
-      { id:"low",  lbl:"Low",  min:-15, max:15, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
-      { id:"mid",  lbl:"Mid",  min:-15, max:15, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
-      { id:"high", lbl:"High", min:-15, max:15, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
+      { id:"low",  lbl:"Low 200",   min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
+      { id:"mid",  lbl:"Mid 1.5k",  min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
+      { id:"high", lbl:"High 5k",   min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
     ] },
   { id: "preset", type: "preset", name: "Preset", color: "var(--fg)" },
   { id: "record", type: "record", name: "Record", color: "var(--fg)" },
