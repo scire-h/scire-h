@@ -447,7 +447,7 @@ const TWO_PI = Math.PI * 2;
 
 /* --- runtime state, driven by knobs --- */
 const params = {
-  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8 },
+  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0 },
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
   suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
@@ -735,15 +735,20 @@ function makeLP(freq) {
   return lp;
 }
 
-/* pull a species's settings into a compact object */
+/* pull a species's settings into a compact object.
+   Chaos amplifies the per-pulse yuragi (pitch / amp / timing wobble)
+   in addition to bumping trigger rates, so a denser chorus also feels
+   more agitated, not just busier. */
 function readSpecies(sp) {
   const p = params[sp];
+  const c = params.master.chaos;
+  const chaosWobble = c <= 1 ? 1 : 1 + (c - 1) * 0.35;
   return {
     p,
     wave: WAVES[Math.round(p.wave)] || "sine",
     cut:  p.cutoff,
     dm:   p.decay,
-    rm:   p.random,
+    rm:   p.random * chaosWobble,
   };
 }
 
@@ -1263,22 +1268,23 @@ function rates(level, deriv) {
   const falling = Math.max(0, -deriv);
   /* a shared bias curve: zero at very low tide, peaks past +0.5 */
   const night = Math.max(0, level + 0.20);
+  /* Global Chaos multiplier — lifts every trigger rate uniformly so
+     1.0 = the curated default and e.g. 4.0 = four-times-denser chorus. */
+  const c = params.master.chaos;
   return {
-    /* six bell / trill voices weighted toward suzumushi at default */
-    suzumushi:    (0.012 + 0.135 * night) * params.suzumushi.density,
-    matsumushi:   (0.006 + 0.070 * night) * params.matsumushi.density,
-    korogi:       (0.006 + 0.070 * night) * params.korogi.density,
-    higurashi:    (0.004 + 0.045 * Math.max(0, 1 - Math.abs(level))) * params.higurashi.density, /* mid-tide bias */
-    kanetataki:   (0.007 + 0.080 * night) * params.kanetataki.density,
-    kantan:       (0.003 + 0.035 * night) * params.kantan.density,
-    /* four new voices */
-    umaoi:        (0.003 + 0.030 * night) * params.umaoi.density,
-    kusahibari:   (0.005 + 0.050 * night) * params.kusahibari.density,
-    enmakorogi:   (0.004 + 0.050 * night) * params.enmakorogi.density,
-    aomatsumushi: (0.005 + 0.060 * night) * params.aomatsumushi.density,
-    rasp:   (0.10 + 1.0 * Math.max(0, level + 0.25) ** 1.1) * params.rasp.density,
-    scrape: (0.05 + 0.9 * Math.max(0, -level) ** 1.4 + 0.4 * falling) * params.scrape.density,
-    wind:   (0.03 + 0.9 * rising * Math.sqrt(Math.max(0, 1 - level * level))) * params.wind.density,
+    suzumushi:    c * (0.012 + 0.135 * night) * params.suzumushi.density,
+    matsumushi:   c * (0.006 + 0.070 * night) * params.matsumushi.density,
+    korogi:       c * (0.006 + 0.070 * night) * params.korogi.density,
+    higurashi:    c * (0.004 + 0.045 * Math.max(0, 1 - Math.abs(level))) * params.higurashi.density,
+    kanetataki:   c * (0.007 + 0.080 * night) * params.kanetataki.density,
+    kantan:       c * (0.003 + 0.035 * night) * params.kantan.density,
+    umaoi:        c * (0.003 + 0.030 * night) * params.umaoi.density,
+    kusahibari:   c * (0.005 + 0.050 * night) * params.kusahibari.density,
+    enmakorogi:   c * (0.004 + 0.050 * night) * params.enmakorogi.density,
+    aomatsumushi: c * (0.005 + 0.060 * night) * params.aomatsumushi.density,
+    rasp:   c * (0.10 + 1.0 * Math.max(0, level + 0.25) ** 1.1) * params.rasp.density,
+    scrape: c * (0.05 + 0.9 * Math.max(0, -level) ** 1.4 + 0.4 * falling) * params.scrape.density,
+    wind:   c * (0.03 + 0.9 * rising * Math.sqrt(Math.max(0, 1 - level * level))) * params.wind.density,
   };
 }
 
@@ -1455,6 +1461,7 @@ const SECTIONS = [
       { id:"width",    lbl:"Width",  min:0,   max:1,    def:1.0,  fmt: fmt2 },
       { id:"revMix",   lbl:"Reverb", min:0,   max:1,    def:0.30, fmt: fmt2 },
       { id:"revSize",  lbl:"Size",   min:0.3, max:6,    def:2.8,  fmt: v => v.toFixed(1)+"s" },
+      { id:"chaos",    lbl:"Chaos",  min:0,   max:6,    def:1.0,  fmt: fmt2 },
     ] },
   { id: "preset", type: "preset", name: "Preset", color: "var(--fg)" },
   { id: "record", type: "record", name: "Record", color: "var(--fg)" },
