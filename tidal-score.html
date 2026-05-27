@@ -297,6 +297,28 @@
     font-feature-settings: "tnum" 1;
     min-height: 1.4em;
   }
+  /* ----- SCORE SECTION (hand-drawn conductor curve) ----- */
+  .score-canvas {
+    display: block;
+    width: 100%;
+    height: 96px;
+    margin: 6px 0 8px;
+    background: rgba(255,255,255,0.012);
+    border: 1px solid var(--rule);
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .score-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+  }
+  .score-hint {
+    margin-top: 8px;
+    font-size: 9px; letter-spacing: 0.18em; color: var(--faint);
+    text-transform: uppercase;
+  }
   /* ----- RECORD SECTION ----- */
   .rec-btn {
     width: 100%;
@@ -449,6 +471,7 @@ const TWO_PI = Math.PI * 2;
 const params = {
   master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0 },
   eq:           { low: 0, mid: 0, high: 0 },  // dB, master 3-band
+  score:        { mix: 0 },                   // 0 = tide sine, 1 = hand-drawn curve
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
   suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
@@ -490,6 +513,17 @@ const FACTORY_PATCH = {
 const FACTORY_MUTES = ["drone", "higurashi", "umaoi", "aomatsumushi", "scrape", "wind"];
 const FACTORY_SOLOS = ["suzumushi"];
 const PATCH_KEY    = "tidal-score-patch-v1";
+
+/* Hand-drawn graphic score — a Float32Array of length SCORE_SAMPLES
+   in [-1, +1], looping over one tide cycle. Null until the user
+   touches the score canvas. */
+const SCORE_SAMPLES = 512;
+let drawnCurve   = null;
+let scoreCanvas  = null;
+let scoreCtx     = null;
+let scoreDrawing = false;
+let scoreLastIdx = -1;
+let scoreLastVal = 0;
 /* every audible track, including the always-on drone */
 const TRACKS = ["drone", ...ALL_KINDS];
 
@@ -1324,8 +1358,8 @@ const VOICE_FN = {
 function maybeTrigger(now) {
   if (!running) return;
   const t = now - T0;
-  const lvl = tideLevel(t);
-  const der = tideDerivative(t);
+  const lvl = conductorLevel(t);
+  const der = conductorDerivative(t);
   const r = rates(lvl, der);
   for (const kind of ALL_KINDS) {
     if (now >= nextDue[kind]) {
@@ -1362,7 +1396,7 @@ function draw(nowMs) {
   const t = nowMs / 1000 - T0;
   ctx.clearRect(0, 0, W, H);
 
-  const lvl = tideLevel(t);
+  const lvl = conductorLevel(t);
   const g = ctx.createLinearGradient(0, 0, 0, H);
   const top = Math.max(0, lvl);
   g.addColorStop(0, `rgba(255,255,255,${0.012 + 0.02 * top})`);
@@ -1397,7 +1431,7 @@ function draw(nowMs) {
   const steps = W;
   for (let i = 0; i <= steps; i++) {
     const tt = t0 + (i / steps) * span;
-    const y = H/2 - tideLevel(tt) * (H * 0.42);
+    const y = H/2 - conductorLevel(tt) * (H * 0.42);
     if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
   }
   ctx.stroke();
@@ -1486,6 +1520,7 @@ const SECTIONS = [
       { id:"mid",  lbl:"Mid 1.5k",  min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
       { id:"high", lbl:"High 5k",   min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
     ] },
+  { id: "score", type: "score", name: "Score", color: "var(--fg)" },
   { id: "preset", type: "preset", name: "Preset", color: "var(--fg)" },
   { id: "record", type: "record", name: "Record", color: "var(--fg)" },
   { id: "mix",    type: "mix",    name: "Mix",    color: "var(--fg)" },
@@ -1546,6 +1581,7 @@ function buildPanel() {
     if (sec.type === "mix")    { buildMixSection(root, sec);    continue; }
     if (sec.type === "preset") { buildPresetSection(root, sec); continue; }
     if (sec.type === "record") { buildRecordSection(root, sec); continue; }
+    if (sec.type === "score")  { buildScoreSection(root, sec);  continue; }
     const group = document.createElement("div");
     group.className = "ctl-group";
 
@@ -1957,6 +1993,193 @@ async function copyShareURL() {
 }
 
 /* ==================================================================
+   SCORE PANEL — hand-drawn conductor curve (a graphic score)
+   ================================================================== */
+function buildScoreSection(root, sec) {
+  const group = document.createElement("div");
+  group.className = "ctl-group";
+
+  const head = document.createElement("div");
+  head.className = "ctl-head";
+  head.innerHTML = `
+    <div class="dot" style="background:${sec.color}"></div>
+    <div class="name">${sec.name}</div>
+    <div class="cnt num"></div>
+  `;
+  group.appendChild(head);
+
+  const cv = document.createElement("canvas");
+  cv.className = "score-canvas";
+  cv.setAttribute("aria-label", "Hand-drawn conductor score");
+  group.appendChild(cv);
+  scoreCanvas = cv;
+  scoreCtx = cv.getContext("2d");
+  cv.addEventListener("pointerdown",   scoreDown);
+  cv.addEventListener("pointermove",   scoreMove);
+  cv.addEventListener("pointerup",     scoreUp);
+  cv.addEventListener("pointercancel", scoreUp);
+  cv.addEventListener("lostpointercapture", scoreUp);
+
+  /* Mix knob + Clear button */
+  const row = document.createElement("div");
+  row.className = "score-row";
+
+  const knobEl = document.createElement("div");
+  knobEl.className = "knob";
+  knobEl.innerHTML = `<div class="dial"></div><div class="lbl">Mix</div><div class="val">—</div>`;
+  row.appendChild(knobEl);
+  const ref = bindKnob(knobEl, "score", {
+    id:"mix", lbl:"Mix", min:0, max:1, def:0, fmt: v => v.toFixed(2),
+  });
+  knobRefs.score = { mix: ref };
+
+  const clear = document.createElement("button");
+  clear.type = "button"; clear.className = "preset-btn";
+  clear.textContent = "Clear";
+  clear.addEventListener("click", clearScore);
+  row.appendChild(clear);
+
+  group.appendChild(row);
+
+  const hint = document.createElement("div");
+  hint.className = "score-hint";
+  hint.textContent = "drag inside the box · 0 = tide · 1 = score";
+  group.appendChild(hint);
+
+  root.appendChild(group);
+  /* paint once so the empty box still shows the tide reference */
+  requestAnimationFrame(() => drawScoreCanvas());
+}
+
+/* pointer → curve index / [-1,1] value */
+function _scoreXY(e) {
+  const r = scoreCanvas.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  const idx = Math.max(0, Math.min(SCORE_SAMPLES - 1, Math.floor(x / r.width * SCORE_SAMPLES)));
+  const v   = 1 - 2 * Math.max(0, Math.min(1, y / r.height));
+  return { idx, v };
+}
+function _writeRange(fromIdx, fromV, toIdx, toV) {
+  if (!drawnCurve) drawnCurve = new Float32Array(SCORE_SAMPLES);
+  if (toIdx === fromIdx) { drawnCurve[toIdx] = toV; return; }
+  const step = (toV - fromV) / (toIdx - fromIdx);
+  if (toIdx > fromIdx) {
+    for (let x = fromIdx; x <= toIdx; x++) drawnCurve[x] = fromV + (x - fromIdx) * step;
+  } else {
+    for (let x = fromIdx; x >= toIdx; x--) drawnCurve[x] = fromV + (x - fromIdx) * step;
+  }
+}
+function scoreDown(e) {
+  const { idx, v } = _scoreXY(e);
+  if (!drawnCurve) drawnCurve = new Float32Array(SCORE_SAMPLES);
+  drawnCurve[idx] = v;
+  scoreDrawing = true;
+  scoreLastIdx = idx;
+  scoreLastVal = v;
+  try { scoreCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+  e.preventDefault();
+  /* if Mix is still zero, lift it so the user hears their drawing */
+  if (params.score.mix < 0.001 && knobRefs.score && knobRefs.score.mix) {
+    knobRefs.score.mix.set(1.0); knobRefs.score.mix.render();
+  }
+}
+function scoreMove(e) {
+  if (!scoreDrawing) return;
+  const { idx, v } = _scoreXY(e);
+  _writeRange(scoreLastIdx, scoreLastVal, idx, v);
+  scoreLastIdx = idx;
+  scoreLastVal = v;
+}
+function scoreUp(e) {
+  scoreDrawing = false;
+  scoreLastIdx = -1;
+  try { if (scoreCanvas.hasPointerCapture(e.pointerId)) scoreCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+}
+function clearScore() {
+  drawnCurve = null;
+}
+
+function drawScoreCanvas() {
+  if (!scoreCtx || !scoreCanvas) return;
+  const rect = scoreCanvas.getBoundingClientRect();
+  const W = Math.max(40, Math.floor(rect.width));
+  const H = Math.max(40, Math.floor(rect.height));
+  const dpr = window.devicePixelRatio || 1;
+  if (scoreCanvas.width !== W * dpr || scoreCanvas.height !== H * dpr) {
+    scoreCanvas.width = W * dpr; scoreCanvas.height = H * dpr;
+    scoreCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  const c = scoreCtx;
+  c.clearRect(0, 0, W, H);
+
+  /* mid line */
+  c.strokeStyle = "rgba(255,255,255,0.05)";
+  c.lineWidth = 1;
+  c.beginPath(); c.moveTo(0, H/2); c.lineTo(W, H/2); c.stroke();
+
+  /* dim tide sine over one full cycle (reference) */
+  c.strokeStyle = "rgba(236,236,236,0.18)";
+  c.beginPath();
+  for (let x = 0; x <= W; x++) {
+    const v = Math.sin((x / W) * TWO_PI);
+    const y = H/2 - v * (H * 0.40);
+    if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+  }
+  c.stroke();
+
+  /* drawn curve, bright */
+  if (drawnCurve) {
+    c.strokeStyle = "rgba(236,236,236,0.92)";
+    c.lineWidth = 1.4;
+    c.beginPath();
+    for (let x = 0; x < W; x++) {
+      const i = Math.floor((x / W) * SCORE_SAMPLES);
+      const v = drawnCurve[i];
+      const y = H/2 - v * (H * 0.40);
+      if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+    }
+    c.stroke();
+  }
+
+  /* sweeping time cursor */
+  if (actx) {
+    const t = performance.now() / 1000 - T0;
+    const cyc = cycleSeconds();
+    const phase = ((t % cyc) + cyc) % cyc;
+    const cx = phase / cyc * W;
+    c.strokeStyle = "rgba(236,236,236,0.55)";
+    c.lineWidth = 1;
+    c.beginPath(); c.moveTo(cx, 0); c.lineTo(cx, H); c.stroke();
+    /* dot at current conductor value */
+    const cy = H/2 - conductorLevel(t) * (H * 0.40);
+    c.fillStyle = "#fff";
+    c.beginPath(); c.arc(cx, cy, 2.6, 0, TWO_PI); c.fill();
+  }
+}
+
+/* The conductor — what actually drives the trigger rates and the
+   main canvas curve. Blend of the tide sine and the hand-drawn score
+   according to params.score.mix. */
+function conductorLevel(tSec) {
+  if (!drawnCurve || params.score.mix < 0.001) return tideLevel(tSec);
+  const cyc = cycleSeconds();
+  const phase = ((tSec % cyc) + cyc) % cyc;
+  const fp = (phase / cyc) * SCORE_SAMPLES;
+  const i0 = Math.floor(fp) % SCORE_SAMPLES;
+  const i1 = (i0 + 1) % SCORE_SAMPLES;
+  const frac = fp - Math.floor(fp);
+  const drawn = drawnCurve[i0] * (1 - frac) + drawnCurve[i1] * frac;
+  const m = params.score.mix;
+  if (m >= 0.999) return drawn;
+  return tideLevel(tSec) * (1 - m) + drawn * m;
+}
+function conductorDerivative(tSec) {
+  const e = Math.max(0.2, cycleSeconds() * 0.001);
+  return (conductorLevel(tSec + e) - conductorLevel(tSec - e)) / (2 * e);
+}
+
+/* ==================================================================
    RECORD PANEL — capture limiter output to a hi-res WAV download
    ================================================================== */
 let recBtnEl    = null;
@@ -2312,8 +2535,8 @@ function registerEvent(kind) {
 
 function tickUI(nowMs) {
   const t = nowMs / 1000 - T0;
-  const lvl = tideLevel(t);
-  const der = tideDerivative(t);
+  const lvl = conductorLevel(t);
+  const der = conductorDerivative(t);
   m_time.textContent  = fmtTime(t);
   m_level.textContent = (lvl >= 0 ? "+" : "") + lvl.toFixed(3);
   m_phase.textContent = phaseLabel(lvl, der);
@@ -2342,6 +2565,7 @@ function tickUI(nowMs) {
 function frame(nowMs) {
   draw(nowMs);
   tickUI(nowMs);
+  drawScoreCanvas();
   if (running) maybeTrigger(performance.now() / 1000);
   requestAnimationFrame(frame);
 }
