@@ -479,16 +479,16 @@ const params = {
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
-  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0 },
-  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0 },
-  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0, depth:0 },
-  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0,     shape:0, anti:0, depth:0 },
-  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30, track:0, bend:0.008, shape:0, anti:0, depth:0 },
-  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0, depth:0 },
-  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0,     shape:0, anti:0, depth:0 },
-  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0, depth:0 },
-  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0, depth:0 },
-  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0.005, shape:0, anti:0, depth:0 },
+  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0, phrase:0 },
+  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0, phrase:0 },
+  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0, depth:0, phrase:0 },
+  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0,     shape:0, anti:0, depth:0, phrase:0 },
+  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30, track:0, bend:0.008, shape:0, anti:0, depth:0, phrase:0 },
+  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0, depth:0, phrase:0 },
+  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0,     shape:0, anti:0, depth:0, phrase:0 },
+  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0, depth:0, phrase:0 },
+  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0, depth:0, phrase:0 },
+  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0.005, shape:0, anti:0, depth:0, phrase:0 },
   rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
   scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0 },
   wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0 },
@@ -1027,7 +1027,8 @@ function playSuzumushi(intensity) {
       const peak = 0.18 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.06 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
-      t += dur + 0.15 + Math.random() * 0.18 * s.rm;
+      const ph = pulses === 1 ? 0 : i / (pulses - 1);
+      t += dur + (0.15 + Math.random() * 0.18 * s.rm) * phraseTempo(ph, s.p.phrase);
     }
   }
   finishInsect("suzumushi");
@@ -1054,7 +1055,8 @@ function playMatsumushi(intensity) {
       const peak = 0.13 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.045 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
-      t += dur + 0.05 + Math.random() * 0.08 * s.rm;
+      const ph = pulses === 1 ? 0 : i / (pulses - 1);
+      t += dur + (0.05 + Math.random() * 0.08 * s.rm) * phraseTempo(ph, s.p.phrase);
     }
   }
   finishInsect("matsumushi");
@@ -1082,7 +1084,7 @@ function playKorogi(intensity) {
       const peak  = 0.12 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.035 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
-      const gap = 0.045 + 0.025 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.02 * s.rm;
+      const gap = (0.045 + 0.025 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.02 * s.rm) * phraseTempo(phase, s.p.phrase);
       t += dur + gap;
     }
   }
@@ -1110,7 +1112,8 @@ function playKanetataki(intensity) {
       const peak = 0.085 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.05 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
-      t += dur + 0.18 + Math.random() * 0.32 * s.rm;
+      const ph = strikes === 1 ? 0 : i / (strikes - 1);
+      t += dur + (0.18 + Math.random() * 0.32 * s.rm) * phraseTempo(ph, s.p.phrase);
     }
   }
   finishInsect("kanetataki");
@@ -1155,7 +1158,7 @@ function playHigurashi(intensity) {
       env.connect(lp);
       addClick(t, fS, peak, s.p.click, lp);
 
-      const gap = 0.06 + 0.10 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.04 * s.rm;
+      const gap = (0.06 + 0.10 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.04 * s.rm) * phraseTempo(phase, s.p.phrase);
       t += dur + gap;
     }
   }
@@ -1329,7 +1332,7 @@ function playEnmakorogi(intensity) {
       const peak  = 0.14 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.055 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
-      const gap = 0.060 + 0.040 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.020 * s.rm;
+      const gap = (0.060 + 0.040 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.020 * s.rm) * phraseTempo(phase, s.p.phrase);
       t += dur + gap;
     }
   }
@@ -1796,7 +1799,24 @@ function insectKnobs() {
     { id:"shape",   lbl:"Shape",   min:0,   max:2,     def:0,     step:1, fmt: v => ["1pk","2pk","plat"][Math.round(v)] || "?" },
     { id:"anti",    lbl:"Anti",    min:0,   max:1,     def:0,     fmt: fmt2 },
     { id:"depth",   lbl:"Depth",   min:0,   max:1,     def:0,     fmt: fmt2 },
+    { id:"phrase",  lbl:"Phrase",  min:0,   max:4,     def:0,     step:1,
+      fmt: v => ["even","acc","dec","arch","dip"][Math.round(v)] || "?" },
   ];
+}
+
+/* Phrase tempo curve — multiplier on inter-pulse spacing as phase
+   moves through a phrase (0…1). Lets a species speed up, slow down,
+   arch into the middle or dip in the middle while keeping the same
+   total pulse count and base spacing. */
+function phraseTempo(phase, shape) {
+  const sh = Math.round(shape || 0);
+  switch (sh) {
+    case 1: return 1.5 - phase * 0.9;                           // accelerando
+    case 2: return 0.6 + phase * 0.9;                           // ritardando
+    case 3: return 1.5 - 0.9 * Math.sin(phase * Math.PI);       // arch (slow-fast-slow)
+    case 4: return 0.6 + 0.9 * Math.sin(phase * Math.PI);       // dip (fast-slow-fast)
+    default: return 1.0;
+  }
 }
 
 /* For chorus: returns a per-voice pitch multiplier. voiceCount=1 → 1.0
