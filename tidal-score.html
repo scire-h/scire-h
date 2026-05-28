@@ -523,7 +523,7 @@ const params = {
   eq:           { low: 0, mid: 0, high: 0 },  // dB, master 3-band
   score:        { mix: 0 },                   // 0 = tide sine, 1 = hand-drawn curve
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
-  drone:        { lvl: 1.0, pan: 0.0, key: 55 },
+  drone:        { lvl: 1.0, pan: 0.0, key: 55, yuragi: 0, poly: 0 },
   /* ten independently-controlled night insects (each gets a full synth) */
   suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
   matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
@@ -1643,8 +1643,36 @@ function startDrone() {
   dronePan.pan.value = params.drone.pan;
   inner.connect(droneOut).connect(dronePan).connect(master);
 
+  /* Yuragi — three uncorrelated slow LFOs (~0.07 / 0.11 / 0.13 Hz)
+     gently wander each oscillator's pitch by a few cents. Depth is
+     params.drone.yuragi × per-osc weight. */
+  const yRates  = [0.07, 0.11, 0.13];
+  const yDepths = [0.6, 0.6, 1.0];   // c (twice-key) gets a bigger swing
+  const yOscs   = [a, b, c];
+  const yuragi = [];
+  for (let i = 0; i < 3; i++) {
+    const lfo = actx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = yRates[i];
+    const depth = actx.createGain();
+    depth.gain.value = params.drone.yuragi * yDepths[i];
+    lfo.connect(depth).connect(yOscs[i].frequency);
+    lfo.start(now);
+    yuragi.push({ lfo, depth, weight: yDepths[i] });
+  }
+
+  /* Polymodulation — cross-FM. osc_a's output drives osc_c's frequency,
+     and osc_c's drives osc_b's. Depth scales with params.drone.poly so
+     poly = 0 is silent / inert. */
+  const polyAC = actx.createGain();
+  polyAC.gain.value = params.drone.poly * 120;
+  a.connect(polyAC).connect(c.frequency);
+  const polyCB = actx.createGain();
+  polyCB.gain.value = params.drone.poly * 35;
+  c.connect(polyCB).connect(b.frequency);
+
   a.start(now); b.start(now); c.start(now); swell.start(now);
-  droneNodes = { inner, droneOut, dronePan, a, b, c };
+  droneNodes = { inner, droneOut, dronePan, a, b, c, yuragi, polyAC, polyCB };
   flash.drone = 1;
 }
 
@@ -2017,9 +2045,11 @@ const SECTIONS = [
 
   { id: "drone",  name: "Drone",   color: "var(--drone)",
     knobs: [
-      { id:"lvl", lbl:"Level", min:0,    max:1.5, def:1.0, fmt: fmt2 },
-      { id:"pan", lbl:"Pan",   min:-1,   max:1,   def:0.0, fmt: fmtPan },
-      { id:"key", lbl:"Key",   min:30,   max:200, def:55,  step:0.5, fmt: v => v.toFixed(1) + "Hz" },
+      { id:"lvl",    lbl:"Level",  min:0,    max:1.5, def:1.0, fmt: fmt2 },
+      { id:"pan",    lbl:"Pan",    min:-1,   max:1,   def:0.0, fmt: fmtPan },
+      { id:"key",    lbl:"Key",    min:30,   max:200, def:55,  step:0.5, fmt: v => v.toFixed(1) + "Hz" },
+      { id:"yuragi", lbl:"Yuragi", min:0,    max:1,   def:0,   fmt: fmt2 },
+      { id:"poly",   lbl:"Poly",   min:0,    max:1,   def:0,   fmt: fmt2 },
     ] },
 
   /* --- ten night insects --- */
@@ -3027,6 +3057,17 @@ function applyParam(secId, knobId) {
       droneNodes.b.frequency.linearRampToValueAtTime(k + 0.5,     ramp);
       droneNodes.c.frequency.cancelScheduledValues(now);
       droneNodes.c.frequency.linearRampToValueAtTime(k * 2 + 0.2, ramp);
+    } else if (knobId === "yuragi" && droneNodes.yuragi) {
+      for (const y of droneNodes.yuragi) {
+        y.depth.gain.cancelScheduledValues(now);
+        y.depth.gain.linearRampToValueAtTime(params.drone.yuragi * y.weight, now + 0.1);
+      }
+    } else if (knobId === "poly") {
+      const p = params.drone.poly;
+      droneNodes.polyAC.gain.cancelScheduledValues(now);
+      droneNodes.polyAC.gain.linearRampToValueAtTime(p * 120, now + 0.12);
+      droneNodes.polyCB.gain.cancelScheduledValues(now);
+      droneNodes.polyCB.gain.linearRampToValueAtTime(p *  35, now + 0.12);
     }
   }
   /* per-voice density / lvl / character / pan are read at trigger time */
