@@ -479,16 +479,16 @@ const params = {
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
-  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012 },
-  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012 },
-  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018 },
-  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0 },
-  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30, track:0, bend:0.008 },
-  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005 },
-  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0 },
-  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005 },
-  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018 },
-  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0.005 },
+  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0 },
+  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0 },
+  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0 },
+  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0,     shape:0 },
+  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30, track:0, bend:0.008, shape:0 },
+  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0 },
+  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0,     shape:0 },
+  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0 },
+  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0 },
+  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0.005, shape:0 },
   rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
   scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0 },
   wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0 },
@@ -954,23 +954,41 @@ function readSpecies(sp) {
 /* a single bell-like pulse with a faint upper harmonic for shimmer.
    waveType selects sine/triangle/square/sawtooth or white/pink/brown noise.
    `bend` (optional) starts the fundamental & harmonic above pitch and
-   settles into the natural carrier — a per-pulse micro-FM. */
-function bellPulse(t, freq, dur, peak, harmonic, dest, waveType, bend) {
+   settles into the natural carrier — a per-pulse micro-FM.
+   `shape` 0 = single peak, 1 = biphasic (peak → dip → second peak), 2 = plateau. */
+function bellPulse(t, freq, dur, peak, harmonic, dest, waveType, bend, shape) {
   const wt = waveType || "sine";
   const src = makeTone(wt, freq, t, dur);
   applyBend(src, freq, bend, t, dur);
 
   const env = actx.createGain();
-  env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(peak, t + 0.006);
-  env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+  const sh = Math.round(shape || 0);
+  if (sh === 1) {
+    /* biphasic — attack, partial decay, second peak, then tail */
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.006);
+    env.gain.exponentialRampToValueAtTime(peak * 0.45, t + dur * 0.35);
+    env.gain.linearRampToValueAtTime(peak * 0.9, t + dur * 0.55);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+  } else if (sh === 2) {
+    /* plateau — attack, long hold, late release */
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.008);
+    env.gain.setValueAtTime(peak, t + dur * 0.80);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+  } else {
+    /* single peak (default) */
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.006);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+  }
 
   src.connect(env);
   if (harmonic) {
-    const sh = makeTone(wt, freq * harmonic.mult, t, dur);
-    applyBend(sh, freq * harmonic.mult, bend, t, dur);
+    const sh2 = makeTone(wt, freq * harmonic.mult, t, dur);
+    applyBend(sh2, freq * harmonic.mult, bend, t, dur);
     const g  = actx.createGain(); g.gain.value = harmonic.gain;
-    sh.connect(g).connect(env);
+    sh2.connect(g).connect(env);
   }
   env.connect(dest);
 }
@@ -1000,7 +1018,7 @@ function playSuzumushi(intensity) {
       const freq = baseF + (Math.random() - 0.5) * 30 * s.rm;
       const dur  = (0.10 + Math.random() * 0.07 * s.rm) * s.dm;
       const peak = 0.18 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.06 }, lp, s.wave, s.p.bend);
+      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.06 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
       t += dur + 0.15 + Math.random() * 0.18 * s.rm;
     }
@@ -1026,7 +1044,7 @@ function playMatsumushi(intensity) {
       const freq = baseF + (Math.random() - 0.5) * 50 * s.rm;
       const dur  = (0.045 + Math.random() * 0.035 * s.rm) * s.dm;
       const peak = 0.13 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-      bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.045 }, lp, s.wave, s.p.bend);
+      bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.045 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
       t += dur + 0.05 + Math.random() * 0.08 * s.rm;
     }
@@ -1053,7 +1071,7 @@ function playKorogi(intensity) {
       const freq  = baseF * (1 + (Math.random() - 0.5) * 0.04 * s.rm);
       const dur   = (0.035 + Math.random() * 0.025 * s.rm) * s.dm;
       const peak  = 0.12 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.035 }, lp, s.wave, s.p.bend);
+      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.035 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
       const gap = 0.045 + 0.025 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.02 * s.rm;
       t += dur + gap;
@@ -1080,7 +1098,7 @@ function playKanetataki(intensity) {
       const freq = baseF + (Math.random() - 0.5) * 80 * s.rm;
       const dur  = (0.025 + Math.random() * 0.025 * s.rm) * s.dm;
       const peak = 0.085 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-      bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.05 }, lp, s.wave, s.p.bend);
+      bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.05 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
       t += dur + 0.18 + Math.random() * 0.32 * s.rm;
     }
@@ -1294,7 +1312,7 @@ function playEnmakorogi(intensity) {
       const freq  = baseF * (1 + (Math.random() - 0.5) * 0.035 * s.rm);
       const dur   = (0.055 + Math.random() * 0.030 * s.rm) * s.dm;
       const peak  = 0.14 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.055 }, lp, s.wave, s.p.bend);
+      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.055 }, lp, s.wave, s.p.bend, s.p.shape);
       addClick(t, freq, peak, s.p.click, lp);
       const gap = 0.060 + 0.040 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.020 * s.rm;
       t += dur + gap;
@@ -1745,6 +1763,7 @@ function insectKnobs() {
     { id:"click",   lbl:"Click",   min:0,   max:1,     def:0.25,  fmt: fmt2 },
     { id:"track",   lbl:"Track",   min:0,   max:1,     def:0,     fmt: fmt2 },
     { id:"bend",    lbl:"Bend",    min:0,   max:0.05,  def:0.012, fmt: v => (v*100).toFixed(1) + "%" },
+    { id:"shape",   lbl:"Shape",   min:0,   max:2,     def:0,     step:1, fmt: v => ["1pk","2pk","plat"][Math.round(v)] || "?" },
   ];
 }
 
