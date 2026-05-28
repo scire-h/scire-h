@@ -479,16 +479,16 @@ const params = {
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
-  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
-  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
-  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
-  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
-  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
-  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
-  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
-  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
-  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
-  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1 },
+  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
   rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
   scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0 },
   wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0 },
@@ -847,6 +847,29 @@ function makeLP(freq) {
   return lp;
 }
 
+/* Body-cavity resonator — three cascaded peaking biquads at the
+   fundamental and two inharmonic multiples (1.0, 2.4, 4.7), with Q
+   and gain both rising with `amount`. Gives oscillator-based voices
+   a ring / cavity character that bare sines lack. Returns { in, out }. */
+function makeBody(baseFreq, amount) {
+  const a = Math.max(0, Math.min(1, amount));
+  const peaks = [
+    { mult: 1.0, gainDB: 10 * a, Q: 1.5 + 7 * a },
+    { mult: 2.4, gainDB:  6 * a, Q: 1.5 + 5 * a },
+    { mult: 4.7, gainDB:  3 * a, Q: 1.5 + 4 * a },
+  ];
+  const filters = peaks.map(p => {
+    const f = actx.createBiquadFilter();
+    f.type = "peaking";
+    f.frequency.value = Math.min(20000, Math.max(40, baseFreq * p.mult));
+    f.Q.value = p.Q;
+    f.gain.value = p.gainDB;
+    return f;
+  });
+  for (let i = 0; i < filters.length - 1; i++) filters[i].connect(filters[i + 1]);
+  return { in: filters[0], out: filters[filters.length - 1] };
+}
+
 /* pull a species's settings into a compact object.
    Chaos amplifies the per-pulse yuragi (pitch / amp / timing wobble)
    in addition to bumping trigger rates, so a denser chorus also feels
@@ -905,9 +928,11 @@ function playSuzumushi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("suzumushi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
   const pulses = 3 + Math.floor(Math.random() * 6);
   const baseF  = (4200 + Math.random() * 500) * s.p.pitch;
+  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+  const lp = body.in;
   let t = start;
   for (let i = 0; i < pulses; i++) {
     const freq = baseF + (Math.random() - 0.5) * 30 * s.rm;
@@ -923,9 +948,11 @@ function playMatsumushi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("matsumushi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
   const pulses = 5 + Math.floor(Math.random() * 8);
   const baseF  = (5600 + Math.random() * 600) * s.p.pitch;
+  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+  const lp = body.in;
   let t = start;
   for (let i = 0; i < pulses; i++) {
     const freq = baseF + (Math.random() - 0.5) * 50 * s.rm;
@@ -941,9 +968,11 @@ function playKorogi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("korogi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
   const pulses = 4 + Math.floor(Math.random() * 5);
   const baseF  = (3200 + Math.random() * 400) * s.p.pitch;
+  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+  const lp = body.in;
   let t = start;
   for (let i = 0; i < pulses; i++) {
     const phase = pulses === 1 ? 0 : i / (pulses - 1);
@@ -961,9 +990,11 @@ function playKanetataki(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("kanetataki");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
   const strikes = 1 + Math.floor(Math.random() * 3);
   const baseF   = (6700 + Math.random() * 700) * s.p.pitch;
+  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+  const lp = body.in;
   let t = start;
   for (let i = 0; i < strikes; i++) {
     const freq = baseF + (Math.random() - 0.5) * 80 * s.rm;
@@ -979,10 +1010,13 @@ function playHigurashi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("higurashi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
   const tones = 3 + Math.floor(Math.random() * 4);
   const baseStart = (2400 + Math.random() * 200) * s.p.pitch;
   const baseEnd   = baseStart * 0.72;
+  /* body tracks the mid-phrase frequency for stability */
+  const body = makeBody((baseStart + baseEnd) * 0.5, s.p.body); body.out.connect(filt);
+  const lp = body.in;
   let t = start;
   for (let i = 0; i < tones; i++) {
     const phase = tones === 1 ? 0 : i / (tones - 1);
@@ -1015,9 +1049,11 @@ function playKantan(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("kantan");
   const pan    = panNode(0.9, s.p.pan);
-  const lp     = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
   const dur    = (1.0 + Math.random() * 1.5) * s.dm;
   const baseF  = (3900 + Math.random() * 350) * s.p.pitch;
+  const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
+  const lp     = body.in;
   const amRate = 22 + Math.random() * 8;
   const peak   = 0.085 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
@@ -1050,7 +1086,10 @@ function playUmaoi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("umaoi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+  /* body tracks the typical sui/cho centre — about 3 kHz × pitch */
+  const body = makeBody(3000 * s.p.pitch, s.p.body); body.out.connect(filt);
+  const lp = body.in;
   const pairs = Math.random() < 0.30 ? 2 : 1;
   let t = start;
   for (let pp = 0; pp < pairs; pp++) {
@@ -1098,9 +1137,11 @@ function playKusahibari(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("kusahibari");
   const pan    = panNode(0.9, s.p.pan);
-  const lp     = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
   const dur    = (0.8 + Math.random() * 0.9) * s.dm;
   const baseF  = (7200 + Math.random() * 500) * s.p.pitch;
+  const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
+  const lp     = body.in;
   const amRate = 28 + Math.random() * 10;
   const peak   = 0.06 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
@@ -1129,9 +1170,11 @@ function playEnmakorogi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("enmakorogi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
   const pulses = 5 + Math.floor(Math.random() * 5);
   const baseF  = (2400 + Math.random() * 300) * s.p.pitch;
+  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+  const lp = body.in;
   let t = start;
   for (let i = 0; i < pulses; i++) {
     const phase = pulses === 1 ? 0 : i / (pulses - 1);
@@ -1150,9 +1193,11 @@ function playAomatsumushi(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("aomatsumushi");
   const pan    = panNode(0.9, s.p.pan);
-  const lp     = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
+  const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
   const dur    = (1.2 + Math.random() * 1.6) * s.dm;
   const baseF  = (4500 + Math.random() * 400) * s.p.pitch;
+  const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
+  const lp     = body.in;
   const amRate = 13 + Math.random() * 4;
   const peak   = 0.10 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
@@ -1560,7 +1605,7 @@ const fmtHz = v => v >= 1000 ? (v/1000).toFixed(1) + "k" : Math.round(v) + "";
 const fmtWave = v => WAVE_LABEL[WAVES[Math.round(v)]] || "—";
 const fmtDB = v => v <= 0.0005 ? "−∞" : ((v >= 1 ? "+" : "") + (20 * Math.log10(v)).toFixed(1));
 
-/* one insect species knob set — 8 dials in two rows of four */
+/* one insect species knob set — 9 dials (3 × 3 grid via cols-3) */
 function insectKnobs() {
   return [
     { id:"density", lbl:"Density", min:0,   max:3,     def:1.0,   fmt: fmt2 },
@@ -1571,6 +1616,7 @@ function insectKnobs() {
     { id:"cutoff",  lbl:"Cut",     min:200, max:14000, def:12000, step:50, fmt: fmtHz },
     { id:"decay",   lbl:"Decay",   min:0.3, max:3,     def:1.0,   fmt: fmt2 },
     { id:"random",  lbl:"Random",  min:0,   max:2,     def:1.0,   fmt: fmt2 },
+    { id:"body",    lbl:"Body",    min:0,   max:1,     def:0.4,   fmt: fmt2 },
   ];
 }
 
