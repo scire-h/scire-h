@@ -479,16 +479,16 @@ const params = {
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
-  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
-  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
-  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
-  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
-  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
-  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
-  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
-  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
-  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
-  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4 },
+  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
   rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
   scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0 },
   wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0 },
@@ -927,19 +927,24 @@ function finishInsect(kind) {
 function playSuzumushi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("suzumushi");
-  const pan = panNode(0.9, s.p.pan);
-  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  const pulses = 3 + Math.floor(Math.random() * 6);
-  const baseF  = (4200 + Math.random() * 500) * s.p.pitch;
-  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
-  const lp = body.in;
-  let t = start;
-  for (let i = 0; i < pulses; i++) {
-    const freq = baseF + (Math.random() - 0.5) * 30 * s.rm;
-    const dur  = (0.10 + Math.random() * 0.07 * s.rm) * s.dm;
-    const peak = 0.18 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-    bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.06 }, lp, s.wave);
-    t += dur + 0.15 + Math.random() * 0.18 * s.rm;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const pulses = 3 + Math.floor(Math.random() * 6);
+    const baseF  = (4200 + Math.random() * 500) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < pulses; i++) {
+      const freq = baseF + (Math.random() - 0.5) * 30 * s.rm;
+      const dur  = (0.10 + Math.random() * 0.07 * s.rm) * s.dm;
+      const peak = 0.18 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.06 }, lp, s.wave);
+      t += dur + 0.15 + Math.random() * 0.18 * s.rm;
+    }
   }
   finishInsect("suzumushi");
 }
@@ -947,19 +952,24 @@ function playSuzumushi(intensity) {
 function playMatsumushi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("matsumushi");
-  const pan = panNode(0.9, s.p.pan);
-  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  const pulses = 5 + Math.floor(Math.random() * 8);
-  const baseF  = (5600 + Math.random() * 600) * s.p.pitch;
-  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
-  const lp = body.in;
-  let t = start;
-  for (let i = 0; i < pulses; i++) {
-    const freq = baseF + (Math.random() - 0.5) * 50 * s.rm;
-    const dur  = (0.045 + Math.random() * 0.035 * s.rm) * s.dm;
-    const peak = 0.13 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-    bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.045 }, lp, s.wave);
-    t += dur + 0.05 + Math.random() * 0.08 * s.rm;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const pulses = 5 + Math.floor(Math.random() * 8);
+    const baseF  = (5600 + Math.random() * 600) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < pulses; i++) {
+      const freq = baseF + (Math.random() - 0.5) * 50 * s.rm;
+      const dur  = (0.045 + Math.random() * 0.035 * s.rm) * s.dm;
+      const peak = 0.13 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.045 }, lp, s.wave);
+      t += dur + 0.05 + Math.random() * 0.08 * s.rm;
+    }
   }
   finishInsect("matsumushi");
 }
@@ -967,21 +977,26 @@ function playMatsumushi(intensity) {
 function playKorogi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("korogi");
-  const pan = panNode(0.9, s.p.pan);
-  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  const pulses = 4 + Math.floor(Math.random() * 5);
-  const baseF  = (3200 + Math.random() * 400) * s.p.pitch;
-  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
-  const lp = body.in;
-  let t = start;
-  for (let i = 0; i < pulses; i++) {
-    const phase = pulses === 1 ? 0 : i / (pulses - 1);
-    const freq  = baseF * (1 + (Math.random() - 0.5) * 0.04 * s.rm);
-    const dur   = (0.035 + Math.random() * 0.025 * s.rm) * s.dm;
-    const peak  = 0.12 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-    bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.035 }, lp, s.wave);
-    const gap = 0.045 + 0.025 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.02 * s.rm;
-    t += dur + gap;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const pulses = 4 + Math.floor(Math.random() * 5);
+    const baseF  = (3200 + Math.random() * 400) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < pulses; i++) {
+      const phase = pulses === 1 ? 0 : i / (pulses - 1);
+      const freq  = baseF * (1 + (Math.random() - 0.5) * 0.04 * s.rm);
+      const dur   = (0.035 + Math.random() * 0.025 * s.rm) * s.dm;
+      const peak  = 0.12 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.035 }, lp, s.wave);
+      const gap = 0.045 + 0.025 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.02 * s.rm;
+      t += dur + gap;
+    }
   }
   finishInsect("korogi");
 }
@@ -989,19 +1004,24 @@ function playKorogi(intensity) {
 function playKanetataki(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("kanetataki");
-  const pan = panNode(0.9, s.p.pan);
-  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  const strikes = 1 + Math.floor(Math.random() * 3);
-  const baseF   = (6700 + Math.random() * 700) * s.p.pitch;
-  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
-  const lp = body.in;
-  let t = start;
-  for (let i = 0; i < strikes; i++) {
-    const freq = baseF + (Math.random() - 0.5) * 80 * s.rm;
-    const dur  = (0.025 + Math.random() * 0.025 * s.rm) * s.dm;
-    const peak = 0.085 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-    bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.05 }, lp, s.wave);
-    t += dur + 0.18 + Math.random() * 0.32 * s.rm;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const strikes = 1 + Math.floor(Math.random() * 3);
+    const baseF   = (6700 + Math.random() * 700) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < strikes; i++) {
+      const freq = baseF + (Math.random() - 0.5) * 80 * s.rm;
+      const dur  = (0.025 + Math.random() * 0.025 * s.rm) * s.dm;
+      const peak = 0.085 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.05 }, lp, s.wave);
+      t += dur + 0.18 + Math.random() * 0.32 * s.rm;
+    }
   }
   finishInsect("kanetataki");
 }
@@ -1009,38 +1029,43 @@ function playKanetataki(intensity) {
 function playHigurashi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("higurashi");
-  const pan = panNode(0.9, s.p.pan);
-  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  const tones = 3 + Math.floor(Math.random() * 4);
-  const baseStart = (2400 + Math.random() * 200) * s.p.pitch;
-  const baseEnd   = baseStart * 0.72;
-  /* body tracks the mid-phrase frequency for stability */
-  const body = makeBody((baseStart + baseEnd) * 0.5, s.p.body); body.out.connect(filt);
-  const lp = body.in;
-  let t = start;
-  for (let i = 0; i < tones; i++) {
-    const phase = tones === 1 ? 0 : i / (tones - 1);
-    const dur   = (0.13 + Math.random() * 0.06 * s.rm) * s.dm;
-    const fS    = baseStart + (Math.random() - 0.5) * 60 * s.rm;
-    const fE    = baseEnd   + (Math.random() - 0.5) * 50 * s.rm;
-    const peak  = 0.13 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const tones = 3 + Math.floor(Math.random() * 4);
+    const baseStart = (2400 + Math.random() * 200) * s.p.pitch * detune;
+    const baseEnd   = baseStart * 0.72;
+    /* body tracks the mid-phrase frequency for stability */
+    const body = makeBody((baseStart + baseEnd) * 0.5, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < tones; i++) {
+      const phase = tones === 1 ? 0 : i / (tones - 1);
+      const dur   = (0.13 + Math.random() * 0.06 * s.rm) * s.dm;
+      const fS    = baseStart + (Math.random() - 0.5) * 60 * s.rm;
+      const fE    = baseEnd   + (Math.random() - 0.5) * 50 * s.rm;
+      const peak  = 0.13 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
-    const src = makeToneRamp(s.wave, fS, fE, t, dur);
-    const env = actx.createGain();
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(peak, t + 0.02);
-    env.gain.setValueAtTime(peak, t + dur - 0.04);
-    env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
-    src.connect(env);
-    for (const h of [{m:2, g:0.10}, {m:3, g:0.04}]) {
-      const ho = makeToneRamp(s.wave, fS * h.m, fE * h.m, t, dur);
-      const g = actx.createGain(); g.gain.value = h.g;
-      ho.connect(g).connect(env);
+      const src = makeToneRamp(s.wave, fS, fE, t, dur);
+      const env = actx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(peak, t + 0.02);
+      env.gain.setValueAtTime(peak, t + dur - 0.04);
+      env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      src.connect(env);
+      for (const h of [{m:2, g:0.10}, {m:3, g:0.04}]) {
+        const ho = makeToneRamp(s.wave, fS * h.m, fE * h.m, t, dur);
+        const g = actx.createGain(); g.gain.value = h.g;
+        ho.connect(g).connect(env);
+      }
+      env.connect(lp);
+
+      const gap = 0.06 + 0.10 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.04 * s.rm;
+      t += dur + gap;
     }
-    env.connect(lp);
-
-    const gap = 0.06 + 0.10 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.04 * s.rm;
-    t += dur + gap;
   }
   finishInsect("higurashi");
 }
@@ -1048,36 +1073,41 @@ function playHigurashi(intensity) {
 function playKantan(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("kantan");
-  const pan    = panNode(0.9, s.p.pan);
-  const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  const dur    = (1.0 + Math.random() * 1.5) * s.dm;
-  const baseF  = (3900 + Math.random() * 350) * s.p.pitch;
-  const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
-  const lp     = body.in;
-  const amRate = 22 + Math.random() * 8;
-  const peak   = 0.085 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan    = panNode(0.9, s.p.pan);
+    const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const dur    = (1.0 + Math.random() * 1.5) * s.dm;
+    const baseF  = (3900 + Math.random() * 350) * s.p.pitch * detune;
+    const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp     = body.in;
+    const amRate = 22 + Math.random() * 8;
+    const peak   = 0.085 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
-  const src  = makeTone(s.wave, baseF,     start, dur);
-  const src2 = makeTone(s.wave, baseF * 2, start, dur);
-  const g2 = actx.createGain(); g2.gain.value = 0.06;
-  src2.connect(g2);
+    const src  = makeTone(s.wave, baseF,     start, dur);
+    const src2 = makeTone(s.wave, baseF * 2, start, dur);
+    const g2 = actx.createGain(); g2.gain.value = 0.06;
+    src2.connect(g2);
 
-  const amOsc = actx.createOscillator();
-  amOsc.type = "sine"; amOsc.frequency.value = amRate;
-  const amDepth = actx.createGain(); amDepth.gain.value = 0.5;
-  amOsc.connect(amDepth);
-  const am = actx.createGain(); am.gain.value = 0.5;
-  amDepth.connect(am.gain);
+    const amOsc = actx.createOscillator();
+    amOsc.type = "sine"; amOsc.frequency.value = amRate;
+    const amDepth = actx.createGain(); amDepth.gain.value = 0.5;
+    amOsc.connect(amDepth);
+    const am = actx.createGain(); am.gain.value = 0.5;
+    amDepth.connect(am.gain);
 
-  const env = actx.createGain();
-  env.gain.setValueAtTime(0, start);
-  env.gain.linearRampToValueAtTime(peak, start + 0.15);
-  env.gain.setValueAtTime(peak, start + dur - 0.30);
-  env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
+    const env = actx.createGain();
+    env.gain.setValueAtTime(0, start);
+    env.gain.linearRampToValueAtTime(peak, start + 0.15);
+    env.gain.setValueAtTime(peak, start + dur - 0.30);
+    env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
 
-  src.connect(am); g2.connect(am);
-  am.connect(env).connect(lp);
-  amOsc.start(start); amOsc.stop(start + dur + 0.05);
+    src.connect(am); g2.connect(am);
+    am.connect(env).connect(lp);
+    amOsc.start(start); amOsc.stop(start + dur + 0.05);
+  }
   finishInsect("kantan");
 }
 
@@ -1085,48 +1115,53 @@ function playKantan(intensity) {
 function playUmaoi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("umaoi");
-  const pan = panNode(0.9, s.p.pan);
-  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  /* body tracks the typical sui/cho centre — about 3 kHz × pitch */
-  const body = makeBody(3000 * s.p.pitch, s.p.body); body.out.connect(filt);
-  const lp = body.in;
-  const pairs = Math.random() < 0.30 ? 2 : 1;
-  let t = start;
-  for (let pp = 0; pp < pairs; pp++) {
-    const suiF = (3200 + Math.random() * 200) * s.p.pitch;
-    const suiDur = (0.075 + Math.random() * 0.025 * s.rm) * s.dm;
-    {
-      const src = makeToneRamp(s.wave, suiF, suiF * 1.06, t, suiDur);
-      const env = actx.createGain();
-      const peak = 0.11 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(peak, t + 0.012);
-      env.gain.exponentialRampToValueAtTime(0.0005, t + suiDur);
-      src.connect(env);
-      const h = makeToneRamp(s.wave, suiF * 2, suiF * 2 * 1.06, t, suiDur);
-      const hg = actx.createGain(); hg.gain.value = 0.06;
-      h.connect(hg).connect(env);
-      env.connect(lp);
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    /* body tracks the typical sui/cho centre — about 3 kHz × pitch */
+    const body = makeBody(3000 * s.p.pitch * detune, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    const pairs = Math.random() < 0.30 ? 2 : 1;
+    let t = start;
+    for (let pp = 0; pp < pairs; pp++) {
+      const suiF = (3200 + Math.random() * 200) * s.p.pitch * detune;
+      const suiDur = (0.075 + Math.random() * 0.025 * s.rm) * s.dm;
+      {
+        const src = makeToneRamp(s.wave, suiF, suiF * 1.06, t, suiDur);
+        const env = actx.createGain();
+        const peak = 0.11 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(peak, t + 0.012);
+        env.gain.exponentialRampToValueAtTime(0.0005, t + suiDur);
+        src.connect(env);
+        const h = makeToneRamp(s.wave, suiF * 2, suiF * 2 * 1.06, t, suiDur);
+        const hg = actx.createGain(); hg.gain.value = 0.06;
+        h.connect(hg).connect(env);
+        env.connect(lp);
+      }
+      t += suiDur + 0.04;
+      const choF   = suiF * 0.92;
+      const choDur = (0.16 + Math.random() * 0.05 * s.rm) * s.dm;
+      {
+        const src = makeToneRamp(s.wave, choF, choF * 0.86, t, choDur);
+        const vib = actx.createOscillator();
+        vib.frequency.value = 12 + Math.random() * 4;
+        const vibG = actx.createGain(); vibG.gain.value = 9;
+        vib.connect(vibG).connect(src.frequency);
+        const env = actx.createGain();
+        const peak = 0.12 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(peak, t + 0.018);
+        env.gain.setValueAtTime(peak, t + choDur - 0.04);
+        env.gain.exponentialRampToValueAtTime(0.0005, t + choDur);
+        src.connect(env).connect(lp);
+        vib.start(t); vib.stop(t + choDur + 0.02);
+      }
+      t += choDur + 0.35 + Math.random() * 0.30 * s.rm;
     }
-    t += suiDur + 0.04;
-    const choF   = suiF * 0.92;
-    const choDur = (0.16 + Math.random() * 0.05 * s.rm) * s.dm;
-    {
-      const src = makeToneRamp(s.wave, choF, choF * 0.86, t, choDur);
-      const vib = actx.createOscillator();
-      vib.frequency.value = 12 + Math.random() * 4;
-      const vibG = actx.createGain(); vibG.gain.value = 9;
-      vib.connect(vibG).connect(src.frequency);
-      const env = actx.createGain();
-      const peak = 0.12 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(peak, t + 0.018);
-      env.gain.setValueAtTime(peak, t + choDur - 0.04);
-      env.gain.exponentialRampToValueAtTime(0.0005, t + choDur);
-      src.connect(env).connect(lp);
-      vib.start(t); vib.stop(t + choDur + 0.02);
-    }
-    t += choDur + 0.35 + Math.random() * 0.30 * s.rm;
   }
   finishInsect("umaoi");
 }
@@ -1136,32 +1171,37 @@ function playUmaoi(intensity) {
 function playKusahibari(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("kusahibari");
-  const pan    = panNode(0.9, s.p.pan);
-  const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  const dur    = (0.8 + Math.random() * 0.9) * s.dm;
-  const baseF  = (7200 + Math.random() * 500) * s.p.pitch;
-  const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
-  const lp     = body.in;
-  const amRate = 28 + Math.random() * 10;
-  const peak   = 0.06 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan    = panNode(0.9, s.p.pan);
+    const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const dur    = (0.8 + Math.random() * 0.9) * s.dm;
+    const baseF  = (7200 + Math.random() * 500) * s.p.pitch * detune;
+    const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp     = body.in;
+    const amRate = 28 + Math.random() * 10;
+    const peak   = 0.06 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
-  const src = makeTone(s.wave, baseF, start, dur);
+    const src = makeTone(s.wave, baseF, start, dur);
 
-  const amOsc = actx.createOscillator();
-  amOsc.type = "sine"; amOsc.frequency.value = amRate;
-  const amDepth = actx.createGain(); amDepth.gain.value = 0.5;
-  amOsc.connect(amDepth);
-  const am = actx.createGain(); am.gain.value = 0.5;
-  amDepth.connect(am.gain);
+    const amOsc = actx.createOscillator();
+    amOsc.type = "sine"; amOsc.frequency.value = amRate;
+    const amDepth = actx.createGain(); amDepth.gain.value = 0.5;
+    amOsc.connect(amDepth);
+    const am = actx.createGain(); am.gain.value = 0.5;
+    amDepth.connect(am.gain);
 
-  const env = actx.createGain();
-  env.gain.setValueAtTime(0, start);
-  env.gain.linearRampToValueAtTime(peak, start + 0.10);
-  env.gain.setValueAtTime(peak, start + dur - 0.20);
-  env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
+    const env = actx.createGain();
+    env.gain.setValueAtTime(0, start);
+    env.gain.linearRampToValueAtTime(peak, start + 0.10);
+    env.gain.setValueAtTime(peak, start + dur - 0.20);
+    env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
 
-  src.connect(am).connect(env).connect(lp);
-  amOsc.start(start); amOsc.stop(start + dur + 0.05);
+    src.connect(am).connect(env).connect(lp);
+    amOsc.start(start); amOsc.stop(start + dur + 0.05);
+  }
   finishInsect("kusahibari");
 }
 
@@ -1169,21 +1209,26 @@ function playKusahibari(intensity) {
 function playEnmakorogi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("enmakorogi");
-  const pan = panNode(0.9, s.p.pan);
-  const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  const pulses = 5 + Math.floor(Math.random() * 5);
-  const baseF  = (2400 + Math.random() * 300) * s.p.pitch;
-  const body = makeBody(baseF, s.p.body); body.out.connect(filt);
-  const lp = body.in;
-  let t = start;
-  for (let i = 0; i < pulses; i++) {
-    const phase = pulses === 1 ? 0 : i / (pulses - 1);
-    const freq  = baseF * (1 + (Math.random() - 0.5) * 0.035 * s.rm);
-    const dur   = (0.055 + Math.random() * 0.030 * s.rm) * s.dm;
-    const peak  = 0.14 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
-    bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.055 }, lp, s.wave);
-    const gap = 0.060 + 0.040 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.020 * s.rm;
-    t += dur + gap;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const pulses = 5 + Math.floor(Math.random() * 5);
+    const baseF  = (2400 + Math.random() * 300) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < pulses; i++) {
+      const phase = pulses === 1 ? 0 : i / (pulses - 1);
+      const freq  = baseF * (1 + (Math.random() - 0.5) * 0.035 * s.rm);
+      const dur   = (0.055 + Math.random() * 0.030 * s.rm) * s.dm;
+      const peak  = 0.14 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.055 }, lp, s.wave);
+      const gap = 0.060 + 0.040 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.020 * s.rm;
+      t += dur + gap;
+    }
   }
   finishInsect("enmakorogi");
 }
@@ -1192,36 +1237,41 @@ function playEnmakorogi(intensity) {
 function playAomatsumushi(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("aomatsumushi");
-  const pan    = panNode(0.9, s.p.pan);
-  const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
-  const dur    = (1.2 + Math.random() * 1.6) * s.dm;
-  const baseF  = (4500 + Math.random() * 400) * s.p.pitch;
-  const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
-  const lp     = body.in;
-  const amRate = 13 + Math.random() * 4;
-  const peak   = 0.10 * intensity * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan    = panNode(0.9, s.p.pan);
+    const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const dur    = (1.2 + Math.random() * 1.6) * s.dm;
+    const baseF  = (4500 + Math.random() * 400) * s.p.pitch * detune;
+    const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp     = body.in;
+    const amRate = 13 + Math.random() * 4;
+    const peak   = 0.10 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
 
-  const src  = makeTone(s.wave, baseF,     start, dur);
-  const src2 = makeTone(s.wave, baseF * 2, start, dur);
-  const g2 = actx.createGain(); g2.gain.value = 0.05;
-  src2.connect(g2);
+    const src  = makeTone(s.wave, baseF,     start, dur);
+    const src2 = makeTone(s.wave, baseF * 2, start, dur);
+    const g2 = actx.createGain(); g2.gain.value = 0.05;
+    src2.connect(g2);
 
-  const amOsc = actx.createOscillator();
-  amOsc.type = "triangle"; amOsc.frequency.value = amRate;
-  const amDepth = actx.createGain(); amDepth.gain.value = 0.55;
-  amOsc.connect(amDepth);
-  const am = actx.createGain(); am.gain.value = 0.45;
-  amDepth.connect(am.gain);
+    const amOsc = actx.createOscillator();
+    amOsc.type = "triangle"; amOsc.frequency.value = amRate;
+    const amDepth = actx.createGain(); amDepth.gain.value = 0.55;
+    amOsc.connect(amDepth);
+    const am = actx.createGain(); am.gain.value = 0.45;
+    amDepth.connect(am.gain);
 
-  const env = actx.createGain();
-  env.gain.setValueAtTime(0, start);
-  env.gain.linearRampToValueAtTime(peak, start + 0.18);
-  env.gain.setValueAtTime(peak, start + dur - 0.30);
-  env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
+    const env = actx.createGain();
+    env.gain.setValueAtTime(0, start);
+    env.gain.linearRampToValueAtTime(peak, start + 0.18);
+    env.gain.setValueAtTime(peak, start + dur - 0.30);
+    env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
 
-  src.connect(am); g2.connect(am);
-  am.connect(env).connect(lp);
-  amOsc.start(start); amOsc.stop(start + dur + 0.05);
+    src.connect(am); g2.connect(am);
+    am.connect(env).connect(lp);
+    amOsc.start(start); amOsc.stop(start + dur + 0.05);
+  }
   finishInsect("aomatsumushi");
 }
 
@@ -1605,7 +1655,7 @@ const fmtHz = v => v >= 1000 ? (v/1000).toFixed(1) + "k" : Math.round(v) + "";
 const fmtWave = v => WAVE_LABEL[WAVES[Math.round(v)]] || "—";
 const fmtDB = v => v <= 0.0005 ? "−∞" : ((v >= 1 ? "+" : "") + (20 * Math.log10(v)).toFixed(1));
 
-/* one insect species knob set — 9 dials (3 × 3 grid via cols-3) */
+/* one insect species knob set — 11 dials, laid out in a 3-column grid */
 function insectKnobs() {
   return [
     { id:"density", lbl:"Density", min:0,   max:3,     def:1.0,   fmt: fmt2 },
@@ -1617,7 +1667,17 @@ function insectKnobs() {
     { id:"decay",   lbl:"Decay",   min:0.3, max:3,     def:1.0,   fmt: fmt2 },
     { id:"random",  lbl:"Random",  min:0,   max:2,     def:1.0,   fmt: fmt2 },
     { id:"body",    lbl:"Body",    min:0,   max:1,     def:0.4,   fmt: fmt2 },
+    { id:"voices",  lbl:"Voices",  min:1,   max:6,     def:1,     step:1, fmt: v => Math.round(v) + "" },
+    { id:"detune",  lbl:"Detune",  min:0,   max:60,    def:8,     fmt: v => v.toFixed(0) + "c" },
   ];
+}
+
+/* For chorus: returns a per-voice pitch multiplier. voiceCount=1 → 1.0
+   (exact same behaviour as before the chorus was added). */
+function chorusDetune(species, voiceCount) {
+  if (voiceCount <= 1) return 1;
+  const cents = (Math.random() - 0.5) * 2 * species.p.detune;
+  return Math.pow(2, cents / 1200);
 }
 
 const SECTIONS = [
