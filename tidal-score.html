@@ -70,9 +70,26 @@
     font-size: 12px; color: var(--dim); margin-top: 12px; max-width: 56ch; line-height: 1.5;
   }
   .meta {
-    display: grid; grid-template-columns: repeat(3, auto); gap: 4px 36px;
+    display: grid; grid-template-columns: auto repeat(3, auto); gap: 4px 28px;
     align-items: end; text-align: right;
   }
+  /* Play / Stop transport toggle in the meta strip */
+  .play-toggle {
+    align-self: end;
+    width: 44px; height: 44px;
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--rule);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    padding: 0;
+  }
+  .play-toggle:hover { border-color: var(--dim); }
+  .play-toggle.playing { background: var(--fg); color: var(--bg); border-color: var(--fg); }
   .meta .k { font-size: 9px; letter-spacing: 0.28em; color: var(--faint); text-transform: uppercase; }
   .meta .v { font-size: 20px; font-weight: 200; font-feature-settings: "tnum" 1; line-height: 1.05; }
 
@@ -205,11 +222,39 @@
   .mix-list { display: flex; flex-direction: column; }
   .mix-row {
     display: grid;
-    grid-template-columns: 9px 1fr 22px 22px 22px;
-    gap: 5px 7px;
+    grid-template-columns: 9px 1fr 22px 22px 22px 24px;
+    gap: 5px 5px;
     align-items: center;
     padding: 5px 0;
     border-bottom: 1px solid var(--rule);
+  }
+  .mix-row .mix-vol {
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mix-row .mix-vol .dial {
+    width: 24px; height: 24px;
+    border: 1px solid var(--rule);
+    border-radius: 50%;
+    position: relative;
+    cursor: ns-resize;
+    touch-action: none;
+    background: rgba(255,255,255,0.005);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .mix-row .mix-vol .dial::after {
+    content: "";
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 1px; height: 10px;
+    background: var(--fg);
+    transform-origin: 50% 100%;
+    transform: translate(-50%, -100%) rotate(var(--angle, -135deg));
+  }
+  .mix-row .mix-vol .dial:hover,
+  .mix-row .mix-vol .dial.dragging {
+    border-color: var(--dim);
+    background: rgba(255,255,255,0.015);
   }
   .mix-row:last-child { border-bottom: none; }
   .mix-row .mix-dot {
@@ -419,6 +464,7 @@
       </div>
     </div>
     <div class="meta">
+      <button type="button" id="play-toggle" class="play-toggle" aria-label="Play / Stop">&#9654;</button>
       <div>
         <div class="k">Time</div>
         <div class="v num" id="m-time">00:00:00</div>
@@ -477,7 +523,7 @@ const params = {
   eq:           { low: 0, mid: 0, high: 0 },  // dB, master 3-band
   score:        { mix: 0 },                   // 0 = tide sine, 1 = hand-drawn curve
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
-  drone:        { lvl: 1.0, pan: 0.0 },
+  drone:        { lvl: 1.0, pan: 0.0, key: 55 },
   /* ten independently-controlled night insects (each gets a full synth) */
   suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
   matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
@@ -1575,9 +1621,10 @@ function startDrone() {
   const inner = actx.createGain();
   inner.gain.value = 0.14;
 
-  const a = actx.createOscillator(); a.type = "sine"; a.frequency.value = 55;
-  const b = actx.createOscillator(); b.type = "sine"; b.frequency.value = 55.5;
-  const c = actx.createOscillator(); c.type = "sine"; c.frequency.value = 110.2;
+  const k = params.drone.key;
+  const a = actx.createOscillator(); a.type = "sine"; a.frequency.value = k;
+  const b = actx.createOscillator(); b.type = "sine"; b.frequency.value = k + 0.5;
+  const c = actx.createOscillator(); c.type = "sine"; c.frequency.value = k * 2 + 0.2;
   const cg = actx.createGain(); cg.gain.value = 0.4;
   c.connect(cg);
 
@@ -1597,7 +1644,7 @@ function startDrone() {
   inner.connect(droneOut).connect(dronePan).connect(master);
 
   a.start(now); b.start(now); c.start(now); swell.start(now);
-  droneNodes = { inner, droneOut, dronePan };
+  droneNodes = { inner, droneOut, dronePan, a, b, c };
   flash.drone = 1;
 }
 
@@ -1972,6 +2019,7 @@ const SECTIONS = [
     knobs: [
       { id:"lvl", lbl:"Level", min:0,    max:1.5, def:1.0, fmt: fmt2 },
       { id:"pan", lbl:"Pan",   min:-1,   max:1,   def:0.0, fmt: fmtPan },
+      { id:"key", lbl:"Key",   min:30,   max:200, def:55,  step:0.5, fmt: v => v.toFixed(1) + "Hz" },
     ] },
 
   /* --- ten night insects --- */
@@ -2104,10 +2152,13 @@ function addTrackControls(head, sec) {
   headBtnEls[id] = { solo, mute, trig };
 }
 
-function bindKnob(el, secId, def) {
+const linkedKnobs = {};  // "secId.knobId" -> array of refs
+
+function bindKnob(el, secId, def, opts) {
   const ANG_MIN = -135, ANG_MAX = 135;
   const dial = el.querySelector(".dial");
   const valEl = el.querySelector(".val");
+  const skipDefault = opts && opts.skipDefault;
 
   function get() { return params[secId][def.id]; }
   function set(v) {
@@ -2115,17 +2166,22 @@ function bindKnob(el, secId, def) {
     v = Math.max(def.min, Math.min(def.max, v));
     params[secId][def.id] = v;
     applyParam(secId, def.id);
+    /* re-render every linked knob so duplicates (e.g. section + Mix
+       row volume) stay in lockstep when either one is dragged. */
+    const linked = linkedKnobs[secId + "." + def.id];
+    if (linked) for (const r of linked) r.render();
   }
   function render() {
     const v = get();
     const norm = (v - def.min) / (def.max - def.min);
     const angle = ANG_MIN + norm * (ANG_MAX - ANG_MIN);
     dial.style.setProperty("--angle", angle + "deg");
-    valEl.textContent = def.fmt(v);
+    if (valEl) valEl.textContent = def.fmt(v);
   }
 
-  /* init from default */
-  params[secId][def.id] = def.def;
+  /* Only the first binding for a given param writes the default
+     into params — secondary bindings (Mix row volume) just attach. */
+  if (!skipDefault) params[secId][def.id] = def.def;
   render();
 
   let dragging = false, startY = 0, startV = 0;
@@ -2165,7 +2221,11 @@ function bindKnob(el, secId, def) {
     render();
   }, { passive: false });
 
-  return { render, get, set };
+  const ref = { render, get, set };
+  const key = secId + "." + def.id;
+  if (!linkedKnobs[key]) linkedKnobs[key] = [];
+  linkedKnobs[key].push(ref);
+  return ref;
 }
 
 /* ==================================================================
@@ -2200,6 +2260,7 @@ function buildMixSection(root, sec) {
       <button class="mix-btn solo" type="button" aria-label="Solo ${name}">S</button>
       <button class="mix-btn mute" type="button" aria-label="Mute ${name}">M</button>
       <button class="mix-btn trig" type="button" aria-label="Trigger ${name}">&#9654;</button>
+      <div class="mix-vol" aria-label="Volume ${name}"><div class="dial"></div></div>
     `;
     list.appendChild(row);
     mixDotEls[trackId] = row.querySelector(".mix-dot");
@@ -2211,6 +2272,13 @@ function buildMixSection(root, sec) {
       trigBtn.classList.add("fire");
       setTimeout(() => trigBtn.classList.remove("fire"), 120);
     });
+    /* Volume mini-knob, linked to the same params.<track>.lvl as the
+       section's full-size Level knob. skipDefault keeps the section
+       binding's def value intact. */
+    const trackSec = SECTION_BY_ID[trackId];
+    const lvlDef = trackSec && trackSec.knobs && trackSec.knobs.find(k => k.id === "lvl");
+    const volEl = row.querySelector(".mix-vol");
+    if (lvlDef && volEl) bindKnob(volEl, trackId, lvlDef, { skipDefault: true });
   }
   group.appendChild(list);
 
@@ -2950,6 +3018,15 @@ function applyParam(secId, knobId) {
     } else if (knobId === "pan") {
       droneNodes.dronePan.pan.cancelScheduledValues(now);
       droneNodes.dronePan.pan.linearRampToValueAtTime(params.drone.pan, now + 0.1);
+    } else if (knobId === "key") {
+      const k = params.drone.key;
+      const ramp = now + 0.15;
+      droneNodes.a.frequency.cancelScheduledValues(now);
+      droneNodes.a.frequency.linearRampToValueAtTime(k,           ramp);
+      droneNodes.b.frequency.cancelScheduledValues(now);
+      droneNodes.b.frequency.linearRampToValueAtTime(k + 0.5,     ramp);
+      droneNodes.c.frequency.cancelScheduledValues(now);
+      droneNodes.c.frequency.linearRampToValueAtTime(k * 2 + 0.2, ramp);
     }
   }
   /* per-voice density / lvl / character / pan are read at trigger time */
@@ -2992,7 +3069,32 @@ async function startAudio() {
     /* stagger first events so the piece doesn't burst on START */
     ALL_KINDS.forEach((k, i) => { nextDue[k] = now + 0.3 + i * 0.25 + Math.random() * 0.5; });
   }
+  updatePlayBtn();
 }
+
+/* General play / stop transport toggle in the header. */
+const playBtnEl = document.getElementById("play-toggle");
+async function togglePlay() {
+  if (!actx) { await startAudio(); return; }
+  if (running) {
+    running = false;
+    try { await actx.suspend(); } catch (_) {}
+  } else {
+    if (actx.state === "suspended") {
+      try { await actx.resume(); } catch (_) {}
+    }
+    running = true;
+    const now = performance.now() / 1000;
+    ALL_KINDS.forEach((k, i) => { nextDue[k] = now + 0.3 + i * 0.25 + Math.random() * 0.5; });
+  }
+  updatePlayBtn();
+}
+function updatePlayBtn() {
+  if (!playBtnEl) return;
+  playBtnEl.innerHTML = running ? "&#9632;" : "&#9654;";   /* ■ / ▶ */
+  playBtnEl.classList.toggle("playing", running);
+}
+if (playBtnEl) playBtnEl.addEventListener("click", togglePlay);
 startEl.addEventListener("click", startAudio);
 
 /* Manual one-shot trigger used by the Mix panel's ▶ buttons.
