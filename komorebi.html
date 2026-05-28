@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#e9c98b">
+<meta name="color-scheme" content="light">
 <title>木漏れ日</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -16,36 +17,16 @@
     overscroll-behavior: none;
   }
   #stage { position: fixed; inset: 0; }
-  canvas {
+  #stage canvas {
     position: absolute;
     inset: 0;
     width: 100%; height: 100%;
     display: block;
   }
-  /* 太陽光が当たった壁／床 */
-  #wall { z-index: 0; }
-  /* 奥（太い枝・房）由来のとても柔らかい影 */
-  #shadowSoft {
-    z-index: 1;
-    filter: blur(22px);
-    mix-blend-mode: multiply;
-    opacity: 0.85;
-  }
-  /* 手前（個々の葉）の少しシャープな影 */
-  #shadowSharp {
-    z-index: 2;
-    filter: blur(3.5px);
-    mix-blend-mode: multiply;
-    opacity: 0.9;
-  }
-  /* 葉の隙間からの強い光（プチハイライト） */
-  #spec {
-    z-index: 3;
-    mix-blend-mode: screen;
-    filter: blur(2px);
-    opacity: 0.7;
-    pointer-events: none;
-  }
+  #surface { z-index: 0; }
+  #soft    { z-index: 1; filter: blur(22px);  mix-blend-mode: multiply; opacity: 0.85; }
+  #sharp   { z-index: 2; filter: blur(3.5px); mix-blend-mode: multiply; opacity: 0.9; }
+  #spec    { z-index: 3; filter: blur(2px);   mix-blend-mode: screen;   opacity: 0.7; pointer-events: none; }
   .vignette {
     position: absolute; inset: 0; z-index: 4;
     background: radial-gradient(ellipse at 65% 25%, transparent 45%, rgba(60,30,10,0.30) 100%);
@@ -60,81 +41,60 @@
     letter-spacing: 0.25em;
     pointer-events: none; user-select: none;
   }
+  @media (prefers-reduced-motion: reduce) {
+    .hint { display: none; }
+  }
 </style>
 </head>
 <body>
-<div id="stage">
-  <canvas id="wall"></canvas>
-  <canvas id="shadowSoft"></canvas>
-  <canvas id="shadowSharp"></canvas>
+<div id="stage" aria-hidden="true" role="presentation">
+  <canvas id="surface"></canvas>
+  <canvas id="soft"></canvas>
+  <canvas id="sharp"></canvas>
   <canvas id="spec"></canvas>
   <div class="vignette"></div>
   <div class="hint">TAP&nbsp;:&nbsp;WIND</div>
 </div>
 <script>
 (() => {
-  const wall   = document.getElementById('wall');
-  const soft   = document.getElementById('shadowSoft');
-  const sharp  = document.getElementById('shadowSharp');
-  const spec   = document.getElementById('spec');
+  'use strict';
 
-  const wCtx = wall.getContext('2d');
-  const sfCtx = soft.getContext('2d');
-  const shCtx = sharp.getContext('2d');
-  const spCtx = spec.getContext('2d');
+  // ============================================================
+  // Config — single source of truth for tweakables
+  // ============================================================
+  const Config = {
+    palette: {
+      surface: ['#fff3d4', '#f3d8a3', '#cc9b62', '#7a4f24'],
+      sunCenter: { x: 0.72, y: 0.22 },
+      shadowSoft:  'rgba(48, 30, 14, 0.85)',
+      shadowSharp: 'rgba(38, 24, 10, 1)',
+    },
+    density: { clusters: 1/28000, leaflets: 1/5500, gaps: 1/22000 },
+    motion:  { driftAmpX: 12, driftAmpY: 6, driftSpeedX: 0.08, driftSpeedY: 0.06, windDecay: 0.6 },
+    quality: { dprCap: 2, fpsLow: 45, minLevel: 0.45, sampleWindow: 60, cooldownFrames: 60 },
+    sprites: { variants: 16, sizeMin: 10, sizeMax: 28 },
+  };
 
-  let W = 0, H = 0, DPR = 1;
-  let wallTexture = null;  // 事前生成した壁テクスチャ
-
-  function rand(a, b) { return a + Math.random() * (b - a); }
-
-  function resize() {
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
-    W = innerWidth; H = innerHeight;
-    for (const cv of [wall, soft, sharp, spec]) {
-      cv.width  = Math.floor(W * DPR);
-      cv.height = Math.floor(H * DPR);
-    }
-    wCtx.setTransform(DPR,0,0,DPR,0,0);
-    sfCtx.setTransform(DPR,0,0,DPR,0,0);
-    shCtx.setTransform(DPR,0,0,DPR,0,0);
-    spCtx.setTransform(DPR,0,0,DPR,0,0);
-    buildWallTexture();
-    rebuild();
+  // ============================================================
+  // PRNG (mulberry32) — deterministic, seedable scenes
+  // ============================================================
+  function makeRng(seed) {
+    let s = (seed >>> 0) || ((Math.random() * 0xffffffff) >>> 0);
+    return () => {
+      s = (s + 0x6D2B79F5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   }
+  const rand = (rng, a, b) => a + rng() * (b - a);
 
-  // ---- 壁／床のテクスチャ（一度だけ生成、毎フレーム使い回す） ----
-  function buildWallTexture() {
-    const off = document.createElement('canvas');
-    off.width = W * DPR; off.height = H * DPR;
-    const c = off.getContext('2d');
-    c.setTransform(DPR,0,0,DPR,0,0);
-
-    // ベース：太陽の方向にむかって明るくなるグラデ
-    const g = c.createRadialGradient(W * 0.72, H * 0.22, 0, W * 0.72, H * 0.22, Math.max(W,H));
-    g.addColorStop(0.00, '#fff3d4');
-    g.addColorStop(0.35, '#f3d8a3');
-    g.addColorStop(0.75, '#cc9b62');
-    g.addColorStop(1.00, '#7a4f24');
-    c.fillStyle = g;
-    c.fillRect(0, 0, W, H);
-
-    // ノイズ（紙肌・コンクリート的）
-    const img = c.getImageData(0, 0, off.width, off.height);
-    const d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const n = (Math.random() - 0.5) * 18;
-      d[i]   = Math.max(0, Math.min(255, d[i]   + n));
-      d[i+1] = Math.max(0, Math.min(255, d[i+1] + n * 0.9));
-      d[i+2] = Math.max(0, Math.min(255, d[i+2] + n * 0.8));
-    }
-    c.putImageData(img, 0, 0);
-    wallTexture = off;
-  }
-
-  // ---- 葉の形（広葉樹 3 種） ----
-  const leafShapes = [
-    (ctx, s) => {  // 楕円葉
+  // ============================================================
+  // Leaf shape primitives
+  // ============================================================
+  const LeafShapes = [
+    (ctx, s) => {
       ctx.beginPath();
       ctx.moveTo(0, -s);
       ctx.bezierCurveTo( s*0.55, -s*0.85,  s*0.65, -s*0.10,  s*0.50,  s*0.40);
@@ -143,7 +103,7 @@
       ctx.bezierCurveTo(-s*0.65, -s*0.10, -s*0.55, -s*0.85, 0,       -s);
       ctx.fill();
     },
-    (ctx, s) => {  // 楓風（やや裂葉）
+    (ctx, s) => {
       ctx.beginPath();
       ctx.moveTo(0, -s);
       ctx.bezierCurveTo( s*0.35, -s*0.85,  s*0.90, -s*0.45,  s*0.95, -s*0.10);
@@ -154,7 +114,7 @@
       ctx.bezierCurveTo(-s*0.90, -s*0.45, -s*0.35, -s*0.85, 0,       -s);
       ctx.fill();
     },
-    (ctx, s) => {  // 細長葉
+    (ctx, s) => {
       ctx.beginPath();
       ctx.moveTo(0, -s);
       ctx.bezierCurveTo( s*0.28, -s*0.5,  s*0.30,  s*0.5, 0,  s);
@@ -163,179 +123,342 @@
     },
   ];
 
-  // ---- ランタイムデータ ----
-  let clusters = [];  // 大きな房（奥のぼけた影）
-  let leaflets = [];  // 個々の葉（手前のシャープな影）
-  let gaps = [];      // 葉の隙間（強い光が落ちるところ）
-  let wind = 0;
-  let parallaxX = 0, parallaxY = 0;
-  // 全体ドリフト（無風時もゆっくり流れる）
-  let driftX = 0, driftY = 0;
+  // ============================================================
+  // Sprites — bake leaf shapes once into bitmaps
+  // ============================================================
+  const Sprites = {
+    list: [],
+    build(rng, color) {
+      this.list = [];
+      const { variants, sizeMin, sizeMax } = Config.sprites;
+      for (let i = 0; i < variants; i++) {
+        const shape = LeafShapes[i % LeafShapes.length];
+        const size  = rand(rng, sizeMin, sizeMax);
+        const pad   = 2;
+        const side  = Math.ceil(size * 2 + pad * 2);
+        const cv    = document.createElement('canvas');
+        cv.width = cv.height = side;
+        const c = cv.getContext('2d');
+        c.translate(side * 0.5, side * 0.5);
+        c.fillStyle = color;
+        shape(c, size);
+        this.list.push({ bmp: cv, half: side * 0.5 });
+      }
+    },
+    pick(rng) { return this.list[(rng() * this.list.length) | 0]; },
+  };
 
-  function rebuild() {
-    const area = W * H;
+  // ============================================================
+  // Surface — sunlit wall/floor, baked once per resize
+  // ============================================================
+  const Surface = {
+    build(ctx, W, H) {
+      const sx = W * Config.palette.sunCenter.x;
+      const sy = H * Config.palette.sunCenter.y;
+      const g  = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(W, H));
+      const stops = Config.palette.surface;
+      g.addColorStop(0.00, stops[0]);
+      g.addColorStop(0.35, stops[1]);
+      g.addColorStop(0.75, stops[2]);
+      g.addColorStop(1.00, stops[3]);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
 
-    // 大房（ぼけた影）：画面全体に散らす
-    clusters = [];
-    const clusterCount = Math.round(area / 28000);
-    for (let i = 0; i < clusterCount; i++) {
-      clusters.push({
-        x: rand(-W*0.1, W*1.1),
-        y: rand(-H*0.1, H*1.1),
-        rx: rand(80, 220),
-        ry: rand(60, 180),
-        rot: rand(0, Math.PI * 2),
-        alpha: rand(0.18, 0.42),
-        phase: rand(0, Math.PI * 2),
-        speed: rand(0.10, 0.30),
-        amp:   rand(8, 22),
-      });
-    }
+      // Faint grain via tiled pattern (cheap vs. full-screen imageData)
+      const TS = 128;
+      const tile = document.createElement('canvas');
+      tile.width = tile.height = TS;
+      const tc = tile.getContext('2d');
+      const img = tc.createImageData(TS, TS);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const n = (Math.random() * 255) | 0;
+        d[i] = d[i+1] = d[i+2] = n;
+        d[i+3] = 14;
+      }
+      tc.putImageData(img, 0, 0);
+      ctx.fillStyle = ctx.createPattern(tile, 'repeat');
+      ctx.fillRect(0, 0, W, H);
+    },
+  };
 
-    // 個々の葉：影として
-    leaflets = [];
-    const leafletCount = Math.round(area / 5500);
-    for (let i = 0; i < leafletCount; i++) {
-      leaflets.push({
-        x: rand(-W*0.1, W*1.1),
-        y: rand(-H*0.1, H*1.1),
-        size: rand(10, 28),
-        rot: rand(0, Math.PI * 2),
-        shape: leafShapes[(Math.random() * leafShapes.length) | 0],
-        alpha: rand(0.22, 0.50),
-        phase: rand(0, Math.PI * 2),
-        speed: rand(0.35, 0.75),
-        amp:   rand(4, 12),
-        flutterPhase: rand(0, Math.PI * 2),
-        flutterSpeed: rand(2.0, 4.5),
-        flutterAmp:   rand(0.05, 0.18),
-      });
-    }
+  // ============================================================
+  // Scene — pure data, regenerable
+  // ============================================================
+  const Scene = {
+    clusters: [], leaflets: [], gaps: [],
+    generate(W, H, rng, level) {
+      const area = W * H;
+      const nC = Math.max(4,  Math.round(area * Config.density.clusters * level));
+      const nL = Math.max(20, Math.round(area * Config.density.leaflets * level));
+      const nG = Math.max(8,  Math.round(area * Config.density.gaps     * level));
 
-    // 葉の隙間から漏れる強い光（ハイライト）
-    gaps = [];
-    const gapCount = Math.round(area / 22000);
-    for (let i = 0; i < gapCount; i++) {
-      gaps.push({
-        x: rand(0, W),
-        y: rand(0, H),
-        r: rand(8, 30),
-        brightness: rand(0.25, 0.7),
-        phase: rand(0, Math.PI * 2),
-        speed: rand(0.4, 0.9),
-        amp:   rand(3, 10),
-      });
-    }
-  }
+      this.clusters = new Array(nC);
+      for (let i = 0; i < nC; i++) this.clusters[i] = {
+        x: rand(rng, -W*0.1, W*1.1), y: rand(rng, -H*0.1, H*1.1),
+        rx: rand(rng, 80, 220), ry: rand(rng, 60, 180),
+        rot: rand(rng, 0, Math.PI*2),
+        alpha: rand(rng, 0.18, 0.42),
+        phase: rand(rng, 0, Math.PI*2),
+        speed: rand(rng, 0.10, 0.30),
+        amp:   rand(rng, 8, 22),
+      };
 
-  // ---- 描画 ----
-  function drawWall() {
-    wCtx.clearRect(0, 0, W, H);
-    if (wallTexture) {
-      wCtx.drawImage(wallTexture, 0, 0, W, H);
-    }
-  }
+      this.leaflets = new Array(nL);
+      for (let i = 0; i < nL; i++) this.leaflets[i] = {
+        x: rand(rng, -W*0.1, W*1.1), y: rand(rng, -H*0.1, H*1.1),
+        sprite: Sprites.pick(rng),
+        rot: rand(rng, 0, Math.PI*2),
+        alpha: rand(rng, 0.22, 0.50),
+        phase: rand(rng, 0, Math.PI*2),
+        speed: rand(rng, 0.35, 0.75),
+        amp:   rand(rng, 4, 12),
+        flutterPhase: rand(rng, 0, Math.PI*2),
+        flutterSpeed: rand(rng, 2.0, 4.5),
+        flutterAmp:   rand(rng, 0.05, 0.18),
+      };
 
-  function drawSoftShadows(t) {
-    sfCtx.clearRect(0, 0, W, H);
-    sfCtx.fillStyle = 'rgba(48, 30, 14, 0.85)';
-    for (const cl of clusters) {
-      const dx = Math.sin(t * cl.speed + cl.phase) * cl.amp + driftX * 0.6 + wind * 28;
-      const dy = Math.cos(t * cl.speed * 0.7 + cl.phase) * cl.amp * 0.6 + driftY * 0.6 + wind * 6;
-      sfCtx.save();
-      sfCtx.translate(cl.x + dx + parallaxX * 10, cl.y + dy + parallaxY * 6);
-      sfCtx.rotate(cl.rot);
-      sfCtx.globalAlpha = cl.alpha;
-      sfCtx.beginPath();
-      sfCtx.ellipse(0, 0, cl.rx, cl.ry, 0, 0, Math.PI * 2);
-      sfCtx.fill();
-      sfCtx.restore();
-    }
-  }
+      this.gaps = new Array(nG);
+      for (let i = 0; i < nG; i++) this.gaps[i] = {
+        x: rand(rng, 0, W), y: rand(rng, 0, H),
+        r: rand(rng, 8, 30),
+        brightness: rand(rng, 0.25, 0.7),
+        phase: rand(rng, 0, Math.PI*2),
+        speed: rand(rng, 0.4, 0.9),
+        amp:   rand(rng, 3, 10),
+      };
+    },
+  };
 
-  function drawSharpShadows(t) {
-    shCtx.clearRect(0, 0, W, H);
-    shCtx.fillStyle = 'rgba(40, 25, 12, 1)';
-    for (const lf of leaflets) {
-      const dx = Math.sin(t * lf.speed + lf.phase) * lf.amp + driftX + wind * 36;
-      const dy = Math.cos(t * lf.speed * 0.8 + lf.phase) * lf.amp * 0.5 + driftY + wind * 8;
-      const flutter = Math.sin(t * lf.flutterSpeed + lf.flutterPhase) * lf.flutterAmp
-                    + wind * 0.4 * Math.sin(lf.flutterPhase);
-      shCtx.save();
-      shCtx.translate(lf.x + dx + parallaxX * 14, lf.y + dy + parallaxY * 9);
-      shCtx.rotate(lf.rot + flutter);
-      shCtx.globalAlpha = lf.alpha;
-      lf.shape(shCtx, lf.size);
-      shCtx.restore();
-    }
-  }
+  // ============================================================
+  // Animator — global motion state
+  // ============================================================
+  const Anim = {
+    wind: 0, parallaxX: 0, parallaxY: 0,
+    driftX: 0, driftY: 0, t: 0,
+    update(dt, now) {
+      this.t = now;
+      this.wind *= Math.pow(Config.motion.windDecay, dt);
+      this.driftX = Math.sin(now * Config.motion.driftSpeedX) * Config.motion.driftAmpX;
+      this.driftY = Math.cos(now * Config.motion.driftSpeedY) * Config.motion.driftAmpY;
+    },
+    gust() { this.wind = Math.min(1.5, this.wind + 0.9); },
+    tilt(g, b) {
+      this.parallaxX = Math.max(-1, Math.min(1, (g || 0) / 45));
+      this.parallaxY = Math.max(-1, Math.min(1, ((b || 0) - 45) / 45));
+    },
+  };
 
-  function drawSpec(t) {
-    spCtx.clearRect(0, 0, W, H);
-    for (const sp of gaps) {
-      const dx = Math.sin(t * sp.speed + sp.phase) * sp.amp + driftX * 0.8 + wind * 30;
-      const dy = Math.cos(t * sp.speed * 0.6 + sp.phase) * sp.amp * 0.5 + driftY * 0.8 + wind * 6;
-      const x = sp.x + dx + parallaxX * 10;
-      const y = sp.y + dy + parallaxY * 6;
-      const g = spCtx.createRadialGradient(x, y, 0, x, y, sp.r);
-      g.addColorStop(0,    `rgba(255, 250, 220, ${sp.brightness})`);
-      g.addColorStop(0.5,  `rgba(255, 230, 170, ${sp.brightness * 0.45})`);
-      g.addColorStop(1,    `rgba(255, 210, 130, 0)`);
-      spCtx.fillStyle = g;
-      spCtx.beginPath();
-      spCtx.arc(x, y, sp.r, 0, Math.PI * 2);
-      spCtx.fill();
-    }
-  }
+  // ============================================================
+  // Render — per-layer draw
+  // ============================================================
+  const Render = {
+    soft(ctx, W, H) {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = Config.palette.shadowSoft;
+      const t  = Anim.t;
+      const wx = Anim.wind * 28, wy = Anim.wind * 6;
+      const px = Anim.parallaxX * 10, py = Anim.parallaxY * 6;
+      for (const cl of Scene.clusters) {
+        const dx = Math.sin(t * cl.speed + cl.phase) * cl.amp + Anim.driftX * 0.6 + wx;
+        const dy = Math.cos(t * cl.speed * 0.7 + cl.phase) * cl.amp * 0.6 + Anim.driftY * 0.6 + wy;
+        ctx.save();
+        ctx.translate(cl.x + dx + px, cl.y + dy + py);
+        ctx.rotate(cl.rot);
+        ctx.globalAlpha = cl.alpha;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, cl.rx, cl.ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    },
 
-  // ---- ループ ----
-  let last = performance.now();
+    sharp(ctx, W, H) {
+      ctx.clearRect(0, 0, W, H);
+      const t  = Anim.t;
+      const wx = Anim.wind * 36, wy = Anim.wind * 8;
+      const px = Anim.parallaxX * 14, py = Anim.parallaxY * 9;
+      const margin = 60;
+      for (const lf of Scene.leaflets) {
+        const dx = Math.sin(t * lf.speed + lf.phase) * lf.amp + Anim.driftX + wx;
+        const dy = Math.cos(t * lf.speed * 0.8 + lf.phase) * lf.amp * 0.5 + Anim.driftY + wy;
+        const x = lf.x + dx + px;
+        const y = lf.y + dy + py;
+        if (x < -margin || x > W + margin || y < -margin || y > H + margin) continue;
+        const flutter = Math.sin(t * lf.flutterSpeed + lf.flutterPhase) * lf.flutterAmp
+                      + Anim.wind * 0.4 * Math.sin(lf.flutterPhase);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(lf.rot + flutter);
+        ctx.globalAlpha = lf.alpha;
+        ctx.drawImage(lf.sprite.bmp, -lf.sprite.half, -lf.sprite.half);
+        ctx.restore();
+      }
+    },
+
+    spec(ctx, W, H) {
+      ctx.clearRect(0, 0, W, H);
+      const t  = Anim.t;
+      const wx = Anim.wind * 30, wy = Anim.wind * 6;
+      const px = Anim.parallaxX * 10, py = Anim.parallaxY * 6;
+      for (const sp of Scene.gaps) {
+        const dx = Math.sin(t * sp.speed + sp.phase) * sp.amp + Anim.driftX * 0.8 + wx;
+        const dy = Math.cos(t * sp.speed * 0.6 + sp.phase) * sp.amp * 0.5 + Anim.driftY * 0.8 + wy;
+        const x = sp.x + dx + px;
+        const y = sp.y + dy + py;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, sp.r);
+        const b = sp.brightness;
+        g.addColorStop(0,   `rgba(255,250,220,${b})`);
+        g.addColorStop(0.5, `rgba(255,230,170,${b * 0.45})`);
+        g.addColorStop(1,   'rgba(255,210,130,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, sp.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    },
+  };
+
+  // ============================================================
+  // Quality — adaptive density based on FPS
+  // ============================================================
+  const Quality = {
+    level: 1.0, samples: [], cooldown: 0, onChange: null,
+    measure(dt) {
+      this.samples.push(dt);
+      if (this.samples.length > Config.quality.sampleWindow) this.samples.shift();
+      if (this.cooldown > 0) this.cooldown--;
+    },
+    fps() {
+      if (!this.samples.length) return 60;
+      const sum = this.samples.reduce((a, b) => a + b, 0);
+      return this.samples.length / sum;
+    },
+    maybeAdjust() {
+      if (this.samples.length < Config.quality.sampleWindow) return;
+      if (this.cooldown > 0) return;
+      if (this.fps() < Config.quality.fpsLow && this.level > Config.quality.minLevel) {
+        this.level *= 0.8;
+        this.samples = [];
+        this.cooldown = Config.quality.cooldownFrames;
+        this.onChange && this.onChange();
+      }
+    },
+  };
+
+  // ============================================================
+  // Stage — canvas lifecycle + scene assembly
+  // ============================================================
+  const Stage = {
+    canvases: {
+      surface: document.getElementById('surface'),
+      soft:    document.getElementById('soft'),
+      sharp:   document.getElementById('sharp'),
+      spec:    document.getElementById('spec'),
+    },
+    ctx: {},
+    W: 0, H: 0, DPR: 1, seed: 0,
+
+    init() {
+      this.DPR = Math.min(window.devicePixelRatio || 1, Config.quality.dprCap);
+      this.W = window.innerWidth;
+      this.H = window.innerHeight;
+      for (const k of Object.keys(this.canvases)) {
+        const cv = this.canvases[k];
+        cv.width  = Math.floor(this.W * this.DPR);
+        cv.height = Math.floor(this.H * this.DPR);
+        const c = cv.getContext('2d');
+        c.setTransform(this.DPR, 0, 0, this.DPR, 0, 0);
+        this.ctx[k] = c;
+      }
+      const rng = makeRng(this.seed || ((Math.random() * 0xffffffff) >>> 0));
+      Sprites.build(rng, Config.palette.shadowSharp);
+      Scene.generate(this.W, this.H, rng, Quality.level);
+      Surface.build(this.ctx.surface, this.W, this.H);
+    },
+    regenerate() {
+      const rng = makeRng((Math.random() * 0xffffffff) >>> 0);
+      Sprites.build(rng, Config.palette.shadowSharp);
+      Scene.generate(this.W, this.H, rng, Quality.level);
+    },
+  };
+  Quality.onChange = () => Stage.regenerate();
+
+  // ============================================================
+  // Loop / lifecycle
+  // ============================================================
+  let running = false, last = 0;
   function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const nowSec = now / 1000;
+    const dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
     last = now;
-    const t = now / 1000;
-
-    wind   *= Math.pow(0.6, dt);
-    // 無風時もごくゆっくり横に流れる
-    driftX = Math.sin(t * 0.08) * 12;
-    driftY = Math.cos(t * 0.06) * 6;
-
-    drawWall();
-    drawSoftShadows(t);
-    drawSharpShadows(t);
-    drawSpec(t);
-
+    Anim.update(dt, nowSec);
+    Quality.measure(dt);
+    Render.soft (Stage.ctx.soft,  Stage.W, Stage.H);
+    Render.sharp(Stage.ctx.sharp, Stage.W, Stage.H);
+    Render.spec (Stage.ctx.spec,  Stage.W, Stage.H);
+    Quality.maybeAdjust();
+    if (running) requestAnimationFrame(frame);
+  }
+  function start() {
+    if (running) return;
+    running = true; last = 0;
     requestAnimationFrame(frame);
   }
-
-  // ---- インタラクション ----
-  function gust() {
-    wind = Math.min(1.5, wind + 0.9);
+  function stop() { running = false; }
+  function drawStatic() {
+    Anim.update(0.016, 0);
+    Render.soft (Stage.ctx.soft,  Stage.W, Stage.H);
+    Render.sharp(Stage.ctx.sharp, Stage.W, Stage.H);
+    Render.spec (Stage.ctx.spec,  Stage.W, Stage.H);
   }
-  addEventListener('touchstart', gust, { passive: true });
-  addEventListener('click', gust);
 
-  let permRequested = false;
-  function enableTilt() {
+  // ============================================================
+  // Input + system events
+  // ============================================================
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  addEventListener('touchstart', () => Anim.gust(), { passive: true });
+  addEventListener('click',      () => Anim.gust());
+
+  let tiltPermRequested = false;
+  addEventListener('touchend', () => {
     if (typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function' &&
-        !permRequested) {
-      permRequested = true;
+        !tiltPermRequested) {
+      tiltPermRequested = true;
       DeviceOrientationEvent.requestPermission().catch(() => {});
     }
-  }
-  addEventListener('touchend', enableTilt, { once: true });
-  addEventListener('deviceorientation', (e) => {
-    const g = (e.gamma || 0) / 45;
-    const b = ((e.beta || 0) - 45) / 45;
-    parallaxX = Math.max(-1, Math.min(1, g));
-    parallaxY = Math.max(-1, Math.min(1, b));
+  }, { once: true });
+  addEventListener('deviceorientation', (e) => Anim.tilt(e.gamma, e.beta));
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stop();
+    else if (!reducedMotion) start();
   });
 
-  // 初期化
-  resize();
-  addEventListener('resize', resize);
-  requestAnimationFrame(frame);
+  let resizeTimer = 0;
+  addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      Stage.init();
+      if (reducedMotion) drawStatic();
+    }, 150);
+  });
+
+  // ============================================================
+  // Boot + public API
+  // ============================================================
+  Stage.init();
+  if (reducedMotion) drawStatic();
+  else start();
+
+  window.komorebi = {
+    regenerate: () => Stage.regenerate(),
+    setSeed:    (s) => { Stage.seed = s; Stage.init(); },
+    setQuality: (l) => { Quality.level = Math.max(0.1, Math.min(1, l)); Stage.regenerate(); },
+    fps:        () => Quality.fps(),
+  };
 })();
 </script>
 </body>
