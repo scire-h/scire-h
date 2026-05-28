@@ -479,16 +479,16 @@ const params = {
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
-  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0 },
-  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0 },
-  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0 },
-  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0,     shape:0, anti:0 },
-  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30, track:0, bend:0.008, shape:0, anti:0 },
-  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0 },
-  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0,     shape:0, anti:0 },
-  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0 },
-  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0 },
-  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0.005, shape:0, anti:0 },
+  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0 },
+  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0 },
+  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0, depth:0 },
+  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0,     shape:0, anti:0, depth:0 },
+  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30, track:0, bend:0.008, shape:0, anti:0, depth:0 },
+  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0, depth:0 },
+  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0,     shape:0, anti:0, depth:0 },
+  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0, depth:0 },
+  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0, depth:0 },
+  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0.005, shape:0, anti:0, depth:0 },
   rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
   scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0 },
   wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0 },
@@ -931,11 +931,17 @@ function readSpecies(sp) {
   const p = params[sp];
   const c = params.master.chaos;
   const chaosWobble = c <= 1 ? 1 : 1 + (c - 1) * 0.35;
+  /* Per-event distance — rolls each time the species fires. Depth = 0
+     means always near (no effect); Depth = 1 means events range from
+     dead-on to fully distant. Distance darkens the cutoff and dims
+     the per-event intensity. */
+  const dist = Math.random() * (p.depth || 0);
   const trackedCut = p.cutoff * Math.pow(Math.max(0.01, p.pitch), p.track || 0);
   return {
     p,
     wave: WAVES[Math.round(p.wave)] || "sine",
-    cut:  Math.max(100, Math.min(20000, trackedCut)),
+    cut:  Math.max(100, Math.min(20000, trackedCut * (1 - dist * 0.55))),
+    dim:  1 - dist * 0.5,
     dm:   p.decay,
     rm:   p.random * chaosWobble,
   };
@@ -1003,6 +1009,7 @@ function finishInsect(kind) {
 function playSuzumushi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("suzumushi");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1029,6 +1036,7 @@ function playSuzumushi(intensity) {
 function playMatsumushi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("matsumushi");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1055,6 +1063,7 @@ function playMatsumushi(intensity) {
 function playKorogi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("korogi");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1083,6 +1092,7 @@ function playKorogi(intensity) {
 function playKanetataki(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("kanetataki");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1109,6 +1119,7 @@ function playKanetataki(intensity) {
 function playHigurashi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("higurashi");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1154,6 +1165,7 @@ function playHigurashi(intensity) {
 function playKantan(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("kantan");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1199,6 +1211,7 @@ function playKantan(intensity) {
 function playUmaoi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("umaoi");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1256,6 +1269,7 @@ function playUmaoi(intensity) {
 function playKusahibari(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("kusahibari");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1296,6 +1310,7 @@ function playKusahibari(intensity) {
 function playEnmakorogi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("enmakorogi");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1325,6 +1340,7 @@ function playEnmakorogi(intensity) {
 function playAomatsumushi(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("aomatsumushi");
+  intensity *= s.dim;
   const voices = Math.max(1, Math.round(s.p.voices));
   const intScale = 1 / Math.sqrt(voices);
   for (let v = 0; v < voices; v++) {
@@ -1779,6 +1795,7 @@ function insectKnobs() {
     { id:"bend",    lbl:"Bend",    min:0,   max:0.05,  def:0.012, fmt: v => (v*100).toFixed(1) + "%" },
     { id:"shape",   lbl:"Shape",   min:0,   max:2,     def:0,     step:1, fmt: v => ["1pk","2pk","plat"][Math.round(v)] || "?" },
     { id:"anti",    lbl:"Anti",    min:0,   max:1,     def:0,     fmt: fmt2 },
+    { id:"depth",   lbl:"Depth",   min:0,   max:1,     def:0,     fmt: fmt2 },
   ];
 }
 
