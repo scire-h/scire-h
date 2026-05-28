@@ -902,7 +902,7 @@ function playSuzumushi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("suzumushi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan);
+  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const pulses = 3 + Math.floor(Math.random() * 6);
   const baseF  = (4200 + Math.random() * 500) * s.p.pitch;
   let t = start;
@@ -920,7 +920,7 @@ function playMatsumushi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("matsumushi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan);
+  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const pulses = 5 + Math.floor(Math.random() * 8);
   const baseF  = (5600 + Math.random() * 600) * s.p.pitch;
   let t = start;
@@ -938,7 +938,7 @@ function playKorogi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("korogi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan);
+  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const pulses = 4 + Math.floor(Math.random() * 5);
   const baseF  = (3200 + Math.random() * 400) * s.p.pitch;
   let t = start;
@@ -958,7 +958,7 @@ function playKanetataki(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("kanetataki");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan);
+  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const strikes = 1 + Math.floor(Math.random() * 3);
   const baseF   = (6700 + Math.random() * 700) * s.p.pitch;
   let t = start;
@@ -976,7 +976,7 @@ function playHigurashi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("higurashi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan);
+  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const tones = 3 + Math.floor(Math.random() * 4);
   const baseStart = (2400 + Math.random() * 200) * s.p.pitch;
   const baseEnd   = baseStart * 0.72;
@@ -1012,7 +1012,7 @@ function playKantan(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("kantan");
   const pan    = panNode(0.9, s.p.pan);
-  const lp     = makeLP(s.cut); lp.connect(pan);
+  const lp     = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const dur    = (1.0 + Math.random() * 1.5) * s.dm;
   const baseF  = (3900 + Math.random() * 350) * s.p.pitch;
   const amRate = 22 + Math.random() * 8;
@@ -1047,7 +1047,7 @@ function playUmaoi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("umaoi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan);
+  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const pairs = Math.random() < 0.30 ? 2 : 1;
   let t = start;
   for (let pp = 0; pp < pairs; pp++) {
@@ -1095,7 +1095,7 @@ function playKusahibari(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("kusahibari");
   const pan    = panNode(0.9, s.p.pan);
-  const lp     = makeLP(s.cut); lp.connect(pan);
+  const lp     = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const dur    = (0.8 + Math.random() * 0.9) * s.dm;
   const baseF  = (7200 + Math.random() * 500) * s.p.pitch;
   const amRate = 28 + Math.random() * 10;
@@ -1126,7 +1126,7 @@ function playEnmakorogi(intensity) {
   const start = actx.currentTime;
   const s = readSpecies("enmakorogi");
   const pan = panNode(0.9, s.p.pan);
-  const lp = makeLP(s.cut); lp.connect(pan);
+  const lp = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const pulses = 5 + Math.floor(Math.random() * 5);
   const baseF  = (2400 + Math.random() * 300) * s.p.pitch;
   let t = start;
@@ -1147,7 +1147,7 @@ function playAomatsumushi(intensity) {
   const start  = actx.currentTime;
   const s      = readSpecies("aomatsumushi");
   const pan    = panNode(0.9, s.p.pan);
-  const lp     = makeLP(s.cut); lp.connect(pan);
+  const lp     = makeLP(s.cut); lp.connect(pan); if (grainBus) lp.connect(grainBus.send);
   const dur    = (1.2 + Math.random() * 1.6) * s.dm;
   const baseF  = (4500 + Math.random() * 400) * s.p.pitch;
   const amRate = 13 + Math.random() * 4;
@@ -1185,6 +1185,11 @@ function playRasp(intensity) {
   const baseFreq = 1800 + Math.random() * 2800;
   const drift = (Math.random() < 0.5 ? -1 : 1) * (0.10 + Math.random() * 0.30);
   const pan = panNode(0.85, params.rasp.pan);
+  /* a shared tap so every tick feeds both the dry pan and the granular bus */
+  const tap = actx.createGain();
+  tap.gain.value = 1;
+  tap.connect(pan);
+  if (grainBus) tap.connect(grainBus.send);
   const lvl  = params.rasp.lvl;
   const rate = params.rasp.rate;
 
@@ -1201,7 +1206,7 @@ function playRasp(intensity) {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(0.22 * intensity * lvl, t + 0.0008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + tickDur);
-    osc.connect(g).connect(pan);
+    osc.connect(g).connect(tap);
     osc.start(t);
     osc.stop(t + tickDur + 0.002);
 
