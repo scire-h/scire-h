@@ -479,16 +479,16 @@ const params = {
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
-  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
-  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
-  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
-  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
-  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
-  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
-  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
-  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
-  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
-  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8 },
+  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
+  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
+  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
+  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20 },
+  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30 },
+  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15 },
+  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
+  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15 },
+  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
+  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20 },
   rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
   scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0 },
   wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0 },
@@ -840,6 +840,27 @@ function makeToneRamp(waveType, fStart, fEnd, t, dur) {
   }
 }
 
+/* Sharp band-passed white-noise transient added at the start of a
+   pulse — emulates the "tooth strike" instant of insect stridulation
+   before the resonant body rings. Zero-cost at amount=0. */
+function addClick(t, freq, peak, amount, dest) {
+  if (!amount || amount <= 0 || !noiseBufs || !noiseBufs.white) return;
+  const dur = 0.0028;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBufs.white;
+  src.loop = false;
+  const bp = actx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = Math.min(15000, Math.max(400, freq * 1.4));
+  bp.Q.value = 5;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(peak * 0.55 * amount, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp).connect(g).connect(dest);
+  src.start(t);
+  src.stop(t + dur + 0.001);
+}
+
 function makeLP(freq) {
   const lp = actx.createBiquadFilter();
   lp.type = "lowpass";
@@ -943,6 +964,7 @@ function playSuzumushi(intensity) {
       const dur  = (0.10 + Math.random() * 0.07 * s.rm) * s.dm;
       const peak = 0.18 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.06 }, lp, s.wave);
+      addClick(t, freq, peak, s.p.click, lp);
       t += dur + 0.15 + Math.random() * 0.18 * s.rm;
     }
   }
@@ -968,6 +990,7 @@ function playMatsumushi(intensity) {
       const dur  = (0.045 + Math.random() * 0.035 * s.rm) * s.dm;
       const peak = 0.13 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.045 }, lp, s.wave);
+      addClick(t, freq, peak, s.p.click, lp);
       t += dur + 0.05 + Math.random() * 0.08 * s.rm;
     }
   }
@@ -994,6 +1017,7 @@ function playKorogi(intensity) {
       const dur   = (0.035 + Math.random() * 0.025 * s.rm) * s.dm;
       const peak  = 0.12 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.035 }, lp, s.wave);
+      addClick(t, freq, peak, s.p.click, lp);
       const gap = 0.045 + 0.025 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.02 * s.rm;
       t += dur + gap;
     }
@@ -1020,6 +1044,7 @@ function playKanetataki(intensity) {
       const dur  = (0.025 + Math.random() * 0.025 * s.rm) * s.dm;
       const peak = 0.085 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.05 }, lp, s.wave);
+      addClick(t, freq, peak, s.p.click, lp);
       t += dur + 0.18 + Math.random() * 0.32 * s.rm;
     }
   }
@@ -1062,6 +1087,7 @@ function playHigurashi(intensity) {
         ho.connect(g).connect(env);
       }
       env.connect(lp);
+      addClick(t, fS, peak, s.p.click, lp);
 
       const gap = 0.06 + 0.10 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.04 * s.rm;
       t += dur + gap;
@@ -1106,6 +1132,7 @@ function playKantan(intensity) {
 
     src.connect(am); g2.connect(am);
     am.connect(env).connect(lp);
+    addClick(start, baseF, peak, s.p.click, lp);
     amOsc.start(start); amOsc.stop(start + dur + 0.05);
   }
   finishInsect("kantan");
@@ -1141,6 +1168,7 @@ function playUmaoi(intensity) {
         const hg = actx.createGain(); hg.gain.value = 0.06;
         h.connect(hg).connect(env);
         env.connect(lp);
+        addClick(t, suiF, peak, s.p.click, lp);
       }
       t += suiDur + 0.04;
       const choF   = suiF * 0.92;
@@ -1200,6 +1228,7 @@ function playKusahibari(intensity) {
     env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
 
     src.connect(am).connect(env).connect(lp);
+    addClick(start, baseF, peak, s.p.click, lp);
     amOsc.start(start); amOsc.stop(start + dur + 0.05);
   }
   finishInsect("kusahibari");
@@ -1226,6 +1255,7 @@ function playEnmakorogi(intensity) {
       const dur   = (0.055 + Math.random() * 0.030 * s.rm) * s.dm;
       const peak  = 0.14 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
       bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.055 }, lp, s.wave);
+      addClick(t, freq, peak, s.p.click, lp);
       const gap = 0.060 + 0.040 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.020 * s.rm;
       t += dur + gap;
     }
@@ -1270,6 +1300,7 @@ function playAomatsumushi(intensity) {
 
     src.connect(am); g2.connect(am);
     am.connect(env).connect(lp);
+    addClick(start, baseF, peak, s.p.click, lp);
     amOsc.start(start); amOsc.stop(start + dur + 0.05);
   }
   finishInsect("aomatsumushi");
@@ -1669,6 +1700,7 @@ function insectKnobs() {
     { id:"body",    lbl:"Body",    min:0,   max:1,     def:0.4,   fmt: fmt2 },
     { id:"voices",  lbl:"Voices",  min:1,   max:6,     def:1,     step:1, fmt: v => Math.round(v) + "" },
     { id:"detune",  lbl:"Detune",  min:0,   max:60,    def:8,     fmt: v => v.toFixed(0) + "c" },
+    { id:"click",   lbl:"Click",   min:0,   max:1,     def:0.25,  fmt: fmt2 },
   ];
 }
 
