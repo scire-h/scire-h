@@ -468,8 +468,12 @@
 const TWO_PI = Math.PI * 2;
 
 /* --- runtime state, driven by knobs --- */
+const SAMPLE_RATES       = [44100, 48000, 96000, 176400, 192000, 384000];
+const SAMPLE_RATE_LABELS = ["44.1k", "48k", "96k", "176.4k", "192k", "384k"];
+function pickedRate() { return SAMPLE_RATES[Math.round(params.master.rateIdx)] || 96000; }
+
 const params = {
-  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0 },
+  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0, rateIdx: 2 },
   eq:           { low: 0, mid: 0, high: 0 },  // dB, master 3-band
   score:        { mix: 0 },                   // 0 = tide sine, 1 = hand-drawn curve
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
@@ -578,13 +582,12 @@ const events  = [];
    AUDIO ENGINE
    ================================================================== */
 function initAudio() {
-  /* Try to run at 96 kHz for the hi-res Record export. Some browsers
-     (especially Safari on older iOS) ignore the option and fall back
-     to the hardware rate — in that case actx.sampleRate just reports
-     the real value, and the WAV is tagged with whatever we actually got. */
+  /* AudioContext sample rate from the Master Rate knob (44.1k → 384k).
+     If the browser rejects the request, actx.sampleRate just reports
+     the real rate; the recorder/UI follow that value. */
   const Ctor = window.AudioContext || window.webkitAudioContext;
   try {
-    actx = new Ctor({ sampleRate: 96000, latencyHint: "interactive" });
+    actx = new Ctor({ sampleRate: pickedRate(), latencyHint: "interactive" });
   } catch (e) {
     actx = new Ctor();
   }
@@ -1580,6 +1583,8 @@ const SECTIONS = [
       { id:"revMix",   lbl:"Reverb", min:0,   max:1,    def:0.30, fmt: fmt2 },
       { id:"revSize",  lbl:"Size",   min:0.3, max:6,    def:2.8,  fmt: v => v.toFixed(1)+"s" },
       { id:"chaos",    lbl:"Chaos",  min:0,   max:6,    def:1.0,  fmt: fmt2 },
+      { id:"rateIdx",  lbl:"Rate",   min:0,   max:SAMPLE_RATES.length - 1,
+        def:2, step:1, fmt: v => SAMPLE_RATE_LABELS[Math.round(v)] || "?" },
     ] },
   { id: "eq", name: "EQ", color: "var(--fg)",
     knobs: [
@@ -2496,6 +2501,28 @@ function updateMixUI() {
 /* push knob value into live audio params where it must take effect immediately */
 let revSizeTimer = null;
 let grainIRTimer = null;
+let rateRebuildTimer = null;
+
+/* Tear down the current AudioContext and re-init at the new rate.
+   If recording is active, stop and save first; if the schedule was
+   running, restart it once the new engine is up. */
+function rebuildAudio() {
+  if (!actx) return;
+  const wasRunning = running;
+  if (recActive) stopRecording();
+  running = false;
+  try { actx.close(); } catch (_) {}
+  actx = null; master = null; limiter = null; reverb = null;
+  eqNodes = null; grainBus = null; droneNodes = null; noiseBufs = null;
+  silentPrimer = null; outputBridge = null;
+  initAudio();
+  if (actx && actx.state === "suspended") actx.resume().catch(() => {});
+  if (wasRunning) {
+    running = true;
+    const now = performance.now() / 1000;
+    ALL_KINDS.forEach((k, i) => { nextDue[k] = now + 0.3 + i * 0.25 + Math.random() * 0.5; });
+  }
+}
 function applyParam(secId, knobId) {
   if (!actx) return;
   const now = actx.currentTime;
@@ -2515,6 +2542,15 @@ function applyParam(secId, knobId) {
         reverb.convolver.buffer = makeIR(params.master.revSize, 2.6);
         revSizeTimer = null;
       }, 80);
+    } else if (knobId === "rateIdx") {
+      /* sample-rate change: rebuild the whole AudioContext. Heavily
+         debounced so dragging the knob through several rates only
+         triggers one tear-down at the end. */
+      if (rateRebuildTimer) clearTimeout(rateRebuildTimer);
+      rateRebuildTimer = setTimeout(() => {
+        rebuildAudio();
+        rateRebuildTimer = null;
+      }, 400);
     }
     /* width is read at panNode creation time — no live patch */
   } else if (secId === "eq" && eqNodes) {
