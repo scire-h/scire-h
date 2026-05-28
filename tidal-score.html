@@ -479,16 +479,16 @@ const params = {
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
   drone:        { lvl: 1.0, pan: 0.0 },
   /* ten independently-controlled night insects (each gets a full synth) */
-  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
-  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
-  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
-  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20 },
-  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30 },
-  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15 },
-  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
-  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15 },
-  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25 },
-  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20 },
+  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0 },
+  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0 },
+  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0 },
+  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0 },
+  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30, track:0 },
+  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0 },
+  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0 },
+  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0 },
+  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0 },
+  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0 },
   rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
   scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0 },
   wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0 },
@@ -911,15 +911,19 @@ function makeBody(baseFreq, amount) {
 /* pull a species's settings into a compact object.
    Chaos amplifies the per-pulse yuragi (pitch / amp / timing wobble)
    in addition to bumping trigger rates, so a denser chorus also feels
-   more agitated, not just busier. */
+   more agitated, not just busier.
+   Pitch-tracking lowpass: when Track > 0, the effective cutoff scales
+   with pitch^track. At track = 1 the filter slides exactly with the
+   carrier; at track = 0 it stays at the absolute cutoff knob value. */
 function readSpecies(sp) {
   const p = params[sp];
   const c = params.master.chaos;
   const chaosWobble = c <= 1 ? 1 : 1 + (c - 1) * 0.35;
+  const trackedCut = p.cutoff * Math.pow(Math.max(0.01, p.pitch), p.track || 0);
   return {
     p,
     wave: WAVES[Math.round(p.wave)] || "sine",
-    cut:  p.cutoff,
+    cut:  Math.max(100, Math.min(20000, trackedCut)),
     dm:   p.decay,
     rm:   p.random * chaosWobble,
   };
@@ -1718,6 +1722,7 @@ function insectKnobs() {
     { id:"voices",  lbl:"Voices",  min:1,   max:6,     def:1,     step:1, fmt: v => Math.round(v) + "" },
     { id:"detune",  lbl:"Detune",  min:0,   max:60,    def:8,     fmt: v => v.toFixed(0) + "c" },
     { id:"click",   lbl:"Click",   min:0,   max:1,     def:0.25,  fmt: fmt2 },
+    { id:"track",   lbl:"Track",   min:0,   max:1,     def:0,     fmt: fmt2 },
   ];
 }
 
