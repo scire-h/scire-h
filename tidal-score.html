@@ -473,7 +473,7 @@ const SAMPLE_RATE_LABELS = ["44.1k", "48k", "96k", "176.4k", "192k", "384k"];
 function pickedRate() { return SAMPLE_RATES[Math.round(params.master.rateIdx)] || 96000; }
 
 const params = {
-  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0, rateIdx: 2, breath: 0.3 },
+  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0, rateIdx: 2, breath: 0.3, temp: 22 },
   eq:           { low: 0, mid: 0, high: 0 },  // dB, master 3-band
   score:        { mix: 0 },                   // 0 = tide sine, 1 = hand-drawn curve
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
@@ -1578,20 +1578,25 @@ function rates(level, deriv) {
   /* Global Chaos multiplier — lifts every trigger rate uniformly so
      1.0 = the curated default and e.g. 4.0 = four-times-denser chorus. */
   const c = params.master.chaos;
+  /* Dolbear-style Temperature scaling — at 22 °C the factor is 1.0;
+     it drops toward 0 near 5 °C (silent cold) and reaches ~1.76 at
+     35 °C (peak summer activity). */
+  const tf = Math.max(0, (params.master.temp - 5) / 17);
+  const k = c * tf;
   return {
-    suzumushi:    c * (0.012 + 0.135 * night) * params.suzumushi.density,
-    matsumushi:   c * (0.006 + 0.070 * night) * params.matsumushi.density,
-    korogi:       c * (0.006 + 0.070 * night) * params.korogi.density,
-    higurashi:    c * (0.004 + 0.045 * Math.max(0, 1 - Math.abs(level))) * params.higurashi.density,
-    kanetataki:   c * (0.007 + 0.080 * night) * params.kanetataki.density,
-    kantan:       c * (0.003 + 0.035 * night) * params.kantan.density,
-    umaoi:        c * (0.003 + 0.030 * night) * params.umaoi.density,
-    kusahibari:   c * (0.005 + 0.050 * night) * params.kusahibari.density,
-    enmakorogi:   c * (0.004 + 0.050 * night) * params.enmakorogi.density,
-    aomatsumushi: c * (0.005 + 0.060 * night) * params.aomatsumushi.density,
-    rasp:   c * (0.10 + 1.0 * Math.max(0, level + 0.25) ** 1.1) * params.rasp.density,
-    scrape: c * (0.05 + 0.9 * Math.max(0, -level) ** 1.4 + 0.4 * falling) * params.scrape.density,
-    wind:   c * (0.03 + 0.9 * rising * Math.sqrt(Math.max(0, 1 - level * level))) * params.wind.density,
+    suzumushi:    k * (0.012 + 0.135 * night) * params.suzumushi.density,
+    matsumushi:   k * (0.006 + 0.070 * night) * params.matsumushi.density,
+    korogi:       k * (0.006 + 0.070 * night) * params.korogi.density,
+    higurashi:    k * (0.004 + 0.045 * Math.max(0, 1 - Math.abs(level))) * params.higurashi.density,
+    kanetataki:   k * (0.007 + 0.080 * night) * params.kanetataki.density,
+    kantan:       k * (0.003 + 0.035 * night) * params.kantan.density,
+    umaoi:        k * (0.003 + 0.030 * night) * params.umaoi.density,
+    kusahibari:   k * (0.005 + 0.050 * night) * params.kusahibari.density,
+    enmakorogi:   k * (0.004 + 0.050 * night) * params.enmakorogi.density,
+    aomatsumushi: k * (0.005 + 0.060 * night) * params.aomatsumushi.density,
+    rasp:   k * (0.10 + 1.0 * Math.max(0, level + 0.25) ** 1.1) * params.rasp.density,
+    scrape: k * (0.05 + 0.9 * Math.max(0, -level) ** 1.4 + 0.4 * falling) * params.scrape.density,
+    wind:   k * (0.03 + 0.9 * rising * Math.sqrt(Math.max(0, 1 - level * level))) * params.wind.density,
   };
 }
 
@@ -1787,6 +1792,7 @@ const SECTIONS = [
       { id:"rateIdx",  lbl:"Rate",   min:0,   max:SAMPLE_RATES.length - 1,
         def:2, step:1, fmt: v => SAMPLE_RATE_LABELS[Math.round(v)] || "?" },
       { id:"breath",   lbl:"Breath", min:0,   max:1,    def:0.3,  fmt: fmt2 },
+      { id:"temp",     lbl:"Temp",   min:5,   max:35,   def:22,   step:0.5, fmt: v => v.toFixed(1) + "°C" },
     ] },
   { id: "eq", name: "EQ", color: "var(--fg)",
     knobs: [
