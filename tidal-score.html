@@ -473,7 +473,7 @@ const SAMPLE_RATE_LABELS = ["44.1k", "48k", "96k", "176.4k", "192k", "384k"];
 function pickedRate() { return SAMPLE_RATES[Math.round(params.master.rateIdx)] || 96000; }
 
 const params = {
-  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0, rateIdx: 2 },
+  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0, rateIdx: 2, breath: 0.3 },
   eq:           { low: 0, mid: 0, high: 0 },  // dB, master 3-band
   score:        { mix: 0 },                   // 0 = tide sine, 1 = hand-drawn curve
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
@@ -557,6 +557,8 @@ let reverb = null;       // { convolver, wet }
 let eqNodes = null;      // { low, mid, high } biquads in series before lim
 let grainBus = null;     // { send, convolver, out } — granular reverb aux
                          // bus tapped by scrape & wind voices
+let breathNodes = null;  // { gain, lfo, depth } — slow LFO modulating master
+                         // gain to suggest wind and field-recording motion
 let noiseBufs = null;    // { white, pink, brown }
 let droneNodes = null;
 let silentPrimer = null; // hidden <audio> looping silence so iOS/macOS
@@ -604,6 +606,21 @@ function initAudio() {
   lim.release.value = 0.08;
   limiter = lim;
 
+  /* Breath / wind LFO — a slow sine (~0.12 Hz) modulates the gain of a
+     unity stage between master and EQ. Depth is params.master.breath
+     × 0.25 (so breath = 1 swings ±0.25 = roughly ±2.5 dB). */
+  const breathGain = actx.createGain();
+  breathGain.gain.value = 1;
+  master.connect(breathGain);
+  const breathLFO = actx.createOscillator();
+  breathLFO.type = "sine";
+  breathLFO.frequency.value = 0.12;
+  const breathDepth = actx.createGain();
+  breathDepth.gain.value = params.master.breath * 0.25;
+  breathLFO.connect(breathDepth).connect(breathGain.gain);
+  breathLFO.start();
+  breathNodes = { gain: breathGain, lfo: breathLFO, depth: breathDepth };
+
   /* 3-band master EQ — tuned to where the insect chorus actually lives.
      Sits between master and the dry/wet split so it shapes both reverb
      send and direct output. Gains in dB live in params.eq.{low,mid,high}. */
@@ -613,7 +630,7 @@ function initAudio() {
   eqMid.type   = "peaking";   eqMid.frequency.value  = 1500; eqMid.Q.value = 0.7; eqMid.gain.value = params.eq.mid;
   const eqHigh = actx.createBiquadFilter();
   eqHigh.type  = "highshelf"; eqHigh.frequency.value = 5000; eqHigh.gain.value = params.eq.high;
-  master.connect(eqLow).connect(eqMid).connect(eqHigh);
+  breathGain.connect(eqLow).connect(eqMid).connect(eqHigh);
   eqNodes = { low: eqLow, mid: eqMid, high: eqHigh };
 
   /* dry path: EQ tail -> limiter -> destination */
@@ -1723,6 +1740,7 @@ const SECTIONS = [
       { id:"chaos",    lbl:"Chaos",  min:0,   max:6,    def:1.0,  fmt: fmt2 },
       { id:"rateIdx",  lbl:"Rate",   min:0,   max:SAMPLE_RATES.length - 1,
         def:2, step:1, fmt: v => SAMPLE_RATE_LABELS[Math.round(v)] || "?" },
+      { id:"breath",   lbl:"Breath", min:0,   max:1,    def:0.3,  fmt: fmt2 },
     ] },
   { id: "eq", name: "EQ", color: "var(--fg)",
     knobs: [
@@ -2651,7 +2669,8 @@ function rebuildAudio() {
   running = false;
   try { actx.close(); } catch (_) {}
   actx = null; master = null; limiter = null; reverb = null;
-  eqNodes = null; grainBus = null; droneNodes = null; noiseBufs = null;
+  eqNodes = null; grainBus = null; breathNodes = null;
+  droneNodes = null; noiseBufs = null;
   silentPrimer = null; outputBridge = null;
   initAudio();
   if (actx && actx.state === "suspended") actx.resume().catch(() => {});
@@ -2689,6 +2708,9 @@ function applyParam(secId, knobId) {
         rebuildAudio();
         rateRebuildTimer = null;
       }, 400);
+    } else if (knobId === "breath" && breathNodes) {
+      breathNodes.depth.gain.cancelScheduledValues(now);
+      breathNodes.depth.gain.linearRampToValueAtTime(params.master.breath * 0.25, now + 0.1);
     }
     /* width is read at panNode creation time — no live patch */
   } else if (secId === "eq" && eqNodes) {
