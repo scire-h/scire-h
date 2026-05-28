@@ -473,7 +473,7 @@ const SAMPLE_RATE_LABELS = ["44.1k", "48k", "96k", "176.4k", "192k", "384k"];
 function pickedRate() { return SAMPLE_RATES[Math.round(params.master.rateIdx)] || 96000; }
 
 const params = {
-  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0, rateIdx: 2, breath: 0.3, temp: 22 },
+  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0, rateIdx: 2, breath: 0.3, temp: 22, bed: 0 },
   eq:           { low: 0, mid: 0, high: 0 },  // dB, master 3-band
   score:        { mix: 0 },                   // 0 = tide sine, 1 = hand-drawn curve
   grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
@@ -559,6 +559,7 @@ let grainBus = null;     // { send, convolver, out } — granular reverb aux
                          // bus tapped by scrape & wind voices
 let breathNodes = null;  // { gain, lfo, depth } — slow LFO modulating master
                          // gain to suggest wind and field-recording motion
+let chorusBedNodes = null;  // { out } — distant ambient chorus layer
 let noiseBufs = null;    // { white, pink, brown }
 let droneNodes = null;
 let silentPrimer = null; // hidden <audio> looping silence so iOS/macOS
@@ -666,6 +667,7 @@ function initAudio() {
     brown: makeNoise(4.0, "brown"),
   };
   startDrone();
+  startChorusBed();
 }
 
 /* Algorithmic impulse response: exp-decaying white noise, stereo decorrelated */
@@ -1599,6 +1601,54 @@ function startDrone() {
   flash.drone = 1;
 }
 
+/* Distant chorus bed — a continuous ambient layer of slowly-drifting
+   high sines, sent into both master (faintly) and the granular bus
+   (heavily) for a deep-distance shimmer. Master Bed dial controls
+   loudness; at Bed = 0 nothing is heard. */
+function startChorusBed() {
+  const now = actx.currentTime;
+  const out = actx.createGain();
+  out.gain.value = params.master.bed * 0.25;
+
+  const lp = actx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 6500;
+
+  for (let i = 0; i < 5; i++) {
+    const baseFreq = 3000 + Math.random() * 4500;
+    const osc = actx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = baseFreq;
+
+    /* slow random frequency drift */
+    const drift = actx.createOscillator();
+    drift.type = "sine";
+    drift.frequency.value = 0.04 + Math.random() * 0.10;
+    const driftG = actx.createGain();
+    driftG.gain.value = baseFreq * 0.018;
+    drift.connect(driftG).connect(osc.frequency);
+
+    /* slow amplitude wave per voice */
+    const g = actx.createGain();
+    g.gain.value = 0.03 + Math.random() * 0.02;
+    const lfo = actx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.02 + Math.random() * 0.08;
+    const lfoG = actx.createGain();
+    lfoG.gain.value = 0.018;
+    lfo.connect(lfoG).connect(g.gain);
+
+    osc.connect(g).connect(lp);
+    osc.start(now); drift.start(now); lfo.start(now);
+  }
+
+  lp.connect(out);
+  out.connect(master);
+  if (grainBus) out.connect(grainBus.send);
+
+  chorusBedNodes = { out };
+}
+
 /* ==================================================================
    TIDAL CONDUCTOR
    ================================================================== */
@@ -1899,6 +1949,7 @@ const SECTIONS = [
         def:2, step:1, fmt: v => SAMPLE_RATE_LABELS[Math.round(v)] || "?" },
       { id:"breath",   lbl:"Breath", min:0,   max:1,    def:0.3,  fmt: fmt2 },
       { id:"temp",     lbl:"Temp",   min:5,   max:35,   def:22,   step:0.5, fmt: v => v.toFixed(1) + "°C" },
+      { id:"bed",      lbl:"Bed",    min:0,   max:1,    def:0,    fmt: fmt2 },
     ] },
   { id: "eq", name: "EQ", color: "var(--fg)",
     knobs: [
@@ -2828,6 +2879,7 @@ function rebuildAudio() {
   try { actx.close(); } catch (_) {}
   actx = null; master = null; limiter = null; reverb = null;
   eqNodes = null; grainBus = null; breathNodes = null;
+  chorusBedNodes = null;
   droneNodes = null; noiseBufs = null;
   silentPrimer = null; outputBridge = null;
   initAudio();
@@ -2869,6 +2921,9 @@ function applyParam(secId, knobId) {
     } else if (knobId === "breath" && breathNodes) {
       breathNodes.depth.gain.cancelScheduledValues(now);
       breathNodes.depth.gain.linearRampToValueAtTime(params.master.breath * 0.25, now + 0.1);
+    } else if (knobId === "bed" && chorusBedNodes) {
+      chorusBedNodes.out.gain.cancelScheduledValues(now);
+      chorusBedNodes.out.gain.linearRampToValueAtTime(params.master.bed * 0.25, now + 0.1);
     }
     /* width is read at panNode creation time — no live patch */
   } else if (secId === "eq" && eqNodes) {
