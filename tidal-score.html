@@ -536,8 +536,8 @@ const params = {
   enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
   aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0.005, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
   rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
-  scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0 },
-  wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0, yuragi: 0.5 },
+  scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0, yuragi: 0.5, grainSend: 1.0 },
+  wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0, yuragi: 0.5, grainSend: 1.0 },
 };
 
 const INSECT_KINDS = [
@@ -606,7 +606,9 @@ let grainBus = null;     // { send, convolver, out } — granular reverb aux
 let breathNodes = null;  // { gain, lfo, depth } — slow LFO modulating master
                          // gain to suggest wind and field-recording motion
 let chorusBedNodes = null;  // { out } — distant ambient chorus layer
-let windBedNodes = null;    // continuous wind layer (source + filters + LFOs)
+let windBedNodes = null;    // continuous wind layer
+let scrapeBedNodes = null;  // continuous scrape layer
+let voiceSends = null;      // { wind, scrape } — per-voice grain-send gains
 let noiseBufs = null;    // { white, pink, brown }
 let droneNodes = null;
 let silentPrimer = null; // hidden <audio> looping silence so iOS/macOS
@@ -706,6 +708,15 @@ function initAudio() {
   grSend.connect(grConv).connect(grOut).connect(lim);
   grainBus = { send: grSend, convolver: grConv, out: grOut };
 
+  /* Per-voice grain-send gains for the voices that expose a Grain dial */
+  voiceSends = {};
+  for (const v of ["wind", "scrape"]) {
+    const sg = actx.createGain();
+    sg.gain.value = params[v] && params[v].grainSend !== undefined ? params[v].grainSend : 1.0;
+    sg.connect(grSend);
+    voiceSends[v] = sg;
+  }
+
   master.gain.linearRampToValueAtTime(params.master.vol, actx.currentTime + 1.5);
 
   noiseBufs = {
@@ -716,6 +727,7 @@ function initAudio() {
   startDrone();
   startChorusBed();
   startWindBed();
+  startScrapeBed();
 }
 
 /* Algorithmic impulse response: exp-decaying white noise, stereo decorrelated */
@@ -1554,7 +1566,8 @@ function playScrape(intensity) {
 
   src.connect(bp).connect(grain).connect(lp).connect(env);
   env.connect(panNode(0.7, params.scrape.pan));
-  if (grainBus) env.connect(grainBus.send);
+  const gtS = grainTarget("scrape");
+  if (gtS) env.connect(gtS);
   src.start(now); lfo.start(now);
   src.stop(now + dur + 0.05); lfo.stop(now + dur + 0.05);
 
@@ -1608,7 +1621,8 @@ function playTubeWind(intensity) {
 
   merge.connect(env);
   env.connect(panNode(0.55, params.wind.pan));
-  if (grainBus) env.connect(grainBus.send);
+  const gtW = grainTarget("wind");
+  if (gtW) env.connect(gtW);
   src.start(now);
   src.stop(now + dur + 0.05);
 
@@ -1678,6 +1692,57 @@ function startDrone() {
   flash.drone = 1;
 }
 
+/* Resolve a voice's granular-bus tap. Falls back to the shared
+   grainBus.send when the voice has no per-voice send knob. */
+function grainTarget(voiceName) {
+  if (!grainBus) return null;
+  return (voiceSends && voiceSends[voiceName]) ? voiceSends[voiceName] : grainBus.send;
+}
+
+/* Continuous scrape bed — brown noise through a band-pass that sits
+   in the low-mid range with a slow Yuragi LFO modulating the centre.
+   Quiet by default; the triggered playScrape() events still fire as
+   discrete strokes on top. */
+function startScrapeBed() {
+  const now = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBufs.brown;
+  src.loop = true;
+  src.playbackRate.value = 0.4 + Math.random() * 0.3;
+
+  const hp = actx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 90;
+
+  const bp = actx.createBiquadFilter();
+  bp.type = "bandpass";
+  const baseF = 280 * params.scrape.grit;
+  bp.frequency.value = baseF;
+  bp.Q.value = 7;
+
+  const lp = actx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 2200;
+
+  const bedG = actx.createGain();
+  bedG.gain.value = params.scrape.lvl * 0.08;
+  const bedPan = actx.createStereoPanner();
+  bedPan.pan.value = params.scrape.pan;
+
+  src.connect(hp).connect(bp).connect(lp).connect(bedG).connect(bedPan).connect(master);
+  const gt = grainTarget("scrape");
+  if (gt) bedG.connect(gt);
+
+  const yLFO = actx.createOscillator();
+  yLFO.type = "sine"; yLFO.frequency.value = 0.09;
+  const yDepth = actx.createGain();
+  yDepth.gain.value = params.scrape.yuragi * baseF * 0.5;
+  yLFO.connect(yDepth).connect(bp.frequency);
+
+  src.start(now); yLFO.start(now);
+  scrapeBedNodes = { src, hp, bp, lp, bedG, bedPan, yLFO, yDepth };
+}
+
 /* Continuous wind bed — pink noise through a high-pass and two
    uncorrelated resonant band-passes tracking the Tube fundamental
    and its 3rd partial. Two slow LFOs modulate the band-pass centres
@@ -1720,7 +1785,8 @@ function startWindBed() {
   hp.connect(bp1).connect(g1).connect(mix);
   hp.connect(bp2).connect(g2).connect(mix);
   mix.connect(bedG).connect(bedPan).connect(master);
-  if (grainBus) bedG.connect(grainBus.send);
+  const gtWB = grainTarget("wind");
+  if (gtWB) bedG.connect(gtWB);
 
   /* Yuragi LFOs on the band-pass centres */
   const yLFO1 = actx.createOscillator();
@@ -2136,18 +2202,21 @@ const SECTIONS = [
     ] },
   { id: "scrape", name: "Scrape",  color: "var(--scrape)",
     knobs: [
-      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
-      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
-      { id:"grit",    lbl:"Grit",    min:0.3, max:2,   def:1.0, fmt: fmt2 },
-      { id:"pan",     lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
+      { id:"density",   lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
+      { id:"lvl",       lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
+      { id:"grit",      lbl:"Grit",    min:0.3, max:2,   def:1.0, fmt: fmt2 },
+      { id:"pan",       lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
+      { id:"yuragi",    lbl:"Yuragi",  min:0,   max:1,   def:0.5, fmt: fmt2 },
+      { id:"grainSend", lbl:"Grain",   min:0,   max:3,   def:1.0, fmt: fmt2 },
     ] },
   { id: "wind",   name: "Wind",    color: "var(--wind)",
     knobs: [
-      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
-      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
-      { id:"tube",    lbl:"Tube",    min:0.4, max:2,   def:1.0, fmt: fmt2 },
-      { id:"pan",     lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
-      { id:"yuragi",  lbl:"Yuragi",  min:0,   max:1,   def:0.5, fmt: fmt2 },
+      { id:"density",   lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
+      { id:"lvl",       lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
+      { id:"tube",      lbl:"Tube",    min:0.4, max:2,   def:1.0, fmt: fmt2 },
+      { id:"pan",       lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
+      { id:"yuragi",    lbl:"Yuragi",  min:0,   max:1,   def:0.5, fmt: fmt2 },
+      { id:"grainSend", lbl:"Grain",   min:0,   max:3,   def:1.0, fmt: fmt2 },
     ] },
 ];
 
@@ -3009,6 +3078,7 @@ function afterMixChange() {
   updateMixUI();
   applyDroneAudibility();
   applyWindBedAudibility();
+  applyScrapeBedAudibility();
 }
 function updateMixUI() {
   document.querySelectorAll(".mix-row").forEach(row => {
@@ -3042,7 +3112,8 @@ function rebuildAudio() {
   try { actx.close(); } catch (_) {}
   actx = null; master = null; limiter = null; reverb = null;
   eqNodes = null; grainBus = null; breathNodes = null;
-  chorusBedNodes = null; windBedNodes = null;
+  chorusBedNodes = null; windBedNodes = null; scrapeBedNodes = null;
+  voiceSends = null;
   droneNodes = null; noiseBufs = null;
   silentPrimer = null; outputBridge = null;
   initAudio();
@@ -3134,34 +3205,69 @@ function applyParam(secId, knobId) {
       droneNodes.polyCB.gain.cancelScheduledValues(now);
       droneNodes.polyCB.gain.linearRampToValueAtTime(p *  35, now + 0.12);
     }
-  } else if (secId === "wind" && windBedNodes) {
-    /* the continuous wind bed reacts live to lvl / tube / pan / yuragi.
-       (density still affects only the triggered gust events.) */
-    const fund = 230 * params.wind.tube;
-    if (knobId === "lvl") {
-      applyWindBedAudibility();
-    } else if (knobId === "pan") {
-      windBedNodes.bedPan.pan.cancelScheduledValues(now);
-      windBedNodes.bedPan.pan.linearRampToValueAtTime(params.wind.pan, now + 0.1);
-    } else if (knobId === "tube") {
-      const ramp = now + 0.15;
-      windBedNodes.bp1.frequency.cancelScheduledValues(now);
-      windBedNodes.bp1.frequency.linearRampToValueAtTime(fund,     ramp);
-      windBedNodes.bp2.frequency.cancelScheduledValues(now);
-      windBedNodes.bp2.frequency.linearRampToValueAtTime(fund * 3, ramp);
-      /* yuragi depth scales with fundamental so the swing follows pitch */
-      windBedNodes.yDepth1.gain.cancelScheduledValues(now);
-      windBedNodes.yDepth1.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 0.35, ramp);
-      windBedNodes.yDepth2.gain.cancelScheduledValues(now);
-      windBedNodes.yDepth2.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 3 * 0.35, ramp);
-    } else if (knobId === "yuragi") {
-      windBedNodes.yDepth1.gain.cancelScheduledValues(now);
-      windBedNodes.yDepth1.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 0.35, now + 0.1);
-      windBedNodes.yDepth2.gain.cancelScheduledValues(now);
-      windBedNodes.yDepth2.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 3 * 0.35, now + 0.1);
+  } else if (secId === "wind") {
+    if (windBedNodes) {
+      const fund = 230 * params.wind.tube;
+      if (knobId === "lvl") {
+        applyWindBedAudibility();
+      } else if (knobId === "pan") {
+        windBedNodes.bedPan.pan.cancelScheduledValues(now);
+        windBedNodes.bedPan.pan.linearRampToValueAtTime(params.wind.pan, now + 0.1);
+      } else if (knobId === "tube") {
+        const ramp = now + 0.15;
+        windBedNodes.bp1.frequency.cancelScheduledValues(now);
+        windBedNodes.bp1.frequency.linearRampToValueAtTime(fund,     ramp);
+        windBedNodes.bp2.frequency.cancelScheduledValues(now);
+        windBedNodes.bp2.frequency.linearRampToValueAtTime(fund * 3, ramp);
+        windBedNodes.yDepth1.gain.cancelScheduledValues(now);
+        windBedNodes.yDepth1.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 0.35, ramp);
+        windBedNodes.yDepth2.gain.cancelScheduledValues(now);
+        windBedNodes.yDepth2.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 3 * 0.35, ramp);
+      } else if (knobId === "yuragi") {
+        windBedNodes.yDepth1.gain.cancelScheduledValues(now);
+        windBedNodes.yDepth1.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 0.35, now + 0.1);
+        windBedNodes.yDepth2.gain.cancelScheduledValues(now);
+        windBedNodes.yDepth2.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 3 * 0.35, now + 0.1);
+      }
+    }
+    if (knobId === "grainSend" && voiceSends && voiceSends.wind) {
+      voiceSends.wind.gain.cancelScheduledValues(now);
+      voiceSends.wind.gain.linearRampToValueAtTime(params.wind.grainSend, now + 0.1);
+    }
+  } else if (secId === "scrape") {
+    if (scrapeBedNodes) {
+      const baseF = 280 * params.scrape.grit;
+      if (knobId === "lvl") {
+        applyScrapeBedAudibility();
+      } else if (knobId === "pan") {
+        scrapeBedNodes.bedPan.pan.cancelScheduledValues(now);
+        scrapeBedNodes.bedPan.pan.linearRampToValueAtTime(params.scrape.pan, now + 0.1);
+      } else if (knobId === "grit") {
+        const ramp = now + 0.15;
+        scrapeBedNodes.bp.frequency.cancelScheduledValues(now);
+        scrapeBedNodes.bp.frequency.linearRampToValueAtTime(baseF, ramp);
+        scrapeBedNodes.yDepth.gain.cancelScheduledValues(now);
+        scrapeBedNodes.yDepth.gain.linearRampToValueAtTime(params.scrape.yuragi * baseF * 0.5, ramp);
+      } else if (knobId === "yuragi") {
+        scrapeBedNodes.yDepth.gain.cancelScheduledValues(now);
+        scrapeBedNodes.yDepth.gain.linearRampToValueAtTime(params.scrape.yuragi * baseF * 0.5, now + 0.1);
+      }
+    }
+    if (knobId === "grainSend" && voiceSends && voiceSends.scrape) {
+      voiceSends.scrape.gain.cancelScheduledValues(now);
+      voiceSends.scrape.gain.linearRampToValueAtTime(params.scrape.grainSend, now + 0.1);
     }
   }
   /* per-voice density / lvl / character / pan are read at trigger time */
+}
+
+/* gate the continuous scrape bed on its mute/solo state */
+function applyScrapeBedAudibility() {
+  if (!scrapeBedNodes) return;
+  const target = isAudible("scrape") ? params.scrape.lvl * 0.08 : 0;
+  const now = actx.currentTime;
+  scrapeBedNodes.bedG.gain.cancelScheduledValues(now);
+  scrapeBedNodes.bedG.gain.linearRampToValueAtTime(target, now + 0.1);
 }
 
 /* gate the continuous wind bed on its mute/solo state */
