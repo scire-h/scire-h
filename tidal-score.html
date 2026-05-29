@@ -2545,10 +2545,13 @@ function fmtClock() {
 
 function snapshotPatch() {
   return {
-    v: 1,
+    v: 2,
     params: JSON.parse(JSON.stringify(params)),
     mute: TRACKS.filter(t => muted[t]),
     solo: TRACKS.filter(t => soloed[t]),
+    /* The hand-drawn graphic score, if any. Stored as a plain array of
+       Float32 values so it survives JSON.stringify round-tripping. */
+    score: drawnCurve ? Array.from(drawnCurve) : null,
   };
 }
 
@@ -2570,6 +2573,14 @@ function applyPatchObject(patch) {
   if (Array.isArray(patch.solo)) {
     for (const t of TRACKS) soloed[t] = patch.solo.indexOf(t) >= 0;
   }
+  /* restore the hand-drawn score curve if the patch carried one */
+  if (patch.score === null || patch.score === undefined) {
+    /* leave drawnCurve alone — explicit null in v2 patches; older
+       v1 patches omit the field entirely */
+    if (patch.score === null) drawnCurve = null;
+  } else if (Array.isArray(patch.score) && patch.score.length === SCORE_SAMPLES) {
+    drawnCurve = new Float32Array(patch.score);
+  }
   /* re-render each bound knob from the new params; applyParam pushes
      live values into the audio graph for the ones that need it. */
   for (const sec of Object.keys(knobRefs)) {
@@ -2580,6 +2591,8 @@ function applyPatchObject(patch) {
   }
   updateMixUI();
   applyDroneAudibility();
+  applyWindBedAudibility();
+  applyScrapeBedAudibility();
   return true;
 }
 
