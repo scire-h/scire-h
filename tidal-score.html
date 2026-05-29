@@ -537,7 +537,7 @@ const params = {
   aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0.005, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
   rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
   scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0 },
-  wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0 },
+  wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0, yuragi: 0.5 },
 };
 
 const INSECT_KINDS = [
@@ -606,6 +606,7 @@ let grainBus = null;     // { send, convolver, out } — granular reverb aux
 let breathNodes = null;  // { gain, lfo, depth } — slow LFO modulating master
                          // gain to suggest wind and field-recording motion
 let chorusBedNodes = null;  // { out } — distant ambient chorus layer
+let windBedNodes = null;    // continuous wind layer (source + filters + LFOs)
 let noiseBufs = null;    // { white, pink, brown }
 let droneNodes = null;
 let silentPrimer = null; // hidden <audio> looping silence so iOS/macOS
@@ -714,6 +715,7 @@ function initAudio() {
   };
   startDrone();
   startChorusBed();
+  startWindBed();
 }
 
 /* Algorithmic impulse response: exp-decaying white noise, stereo decorrelated */
@@ -1676,6 +1678,67 @@ function startDrone() {
   flash.drone = 1;
 }
 
+/* Continuous wind bed — pink noise through a high-pass and two
+   uncorrelated resonant band-passes tracking the Tube fundamental
+   and its 3rd partial. Two slow LFOs modulate the band-pass centres
+   so the timbre is constantly moving; depth = params.wind.yuragi.
+   The triggered playTubeWind() events still sound on top as gusts. */
+function startWindBed() {
+  const now = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBufs.pink;
+  src.loop = true;
+  src.playbackRate.value = 0.5 + Math.random() * 0.5;
+
+  const hp = actx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 80;
+
+  const fund = 230 * params.wind.tube;
+
+  const bp1 = actx.createBiquadFilter();
+  bp1.type = "bandpass";
+  bp1.frequency.value = fund;
+  bp1.Q.value = 12;
+
+  const bp2 = actx.createBiquadFilter();
+  bp2.type = "bandpass";
+  bp2.frequency.value = fund * 3;
+  bp2.Q.value = 16;
+
+  const g1 = actx.createGain(); g1.gain.value = 1.0;
+  const g2 = actx.createGain(); g2.gain.value = 0.45;
+
+  const mix = actx.createGain(); mix.gain.value = 1.0;
+  const bedG = actx.createGain();
+  bedG.gain.value = params.wind.lvl * 0.16;
+  const bedPan = actx.createStereoPanner();
+  bedPan.pan.value = params.wind.pan;
+
+  /* one source fans out to two parallel filter paths */
+  src.connect(hp);
+  hp.connect(bp1).connect(g1).connect(mix);
+  hp.connect(bp2).connect(g2).connect(mix);
+  mix.connect(bedG).connect(bedPan).connect(master);
+  if (grainBus) bedG.connect(grainBus.send);
+
+  /* Yuragi LFOs on the band-pass centres */
+  const yLFO1 = actx.createOscillator();
+  yLFO1.type = "sine"; yLFO1.frequency.value = 0.13;
+  const yDepth1 = actx.createGain();
+  yDepth1.gain.value = params.wind.yuragi * fund * 0.35;
+  yLFO1.connect(yDepth1).connect(bp1.frequency);
+
+  const yLFO2 = actx.createOscillator();
+  yLFO2.type = "sine"; yLFO2.frequency.value = 0.19;
+  const yDepth2 = actx.createGain();
+  yDepth2.gain.value = params.wind.yuragi * fund * 3 * 0.35;
+  yLFO2.connect(yDepth2).connect(bp2.frequency);
+
+  src.start(now); yLFO1.start(now); yLFO2.start(now);
+  windBedNodes = { src, hp, bp1, bp2, g1, g2, mix, bedG, bedPan, yLFO1, yLFO2, yDepth1, yDepth2 };
+}
+
 /* Distant chorus bed — a continuous ambient layer of slowly-drifting
    high sines, sent into both master (faintly) and the granular bus
    (heavily) for a deep-distance shimmer. Master Bed dial controls
@@ -2084,6 +2147,7 @@ const SECTIONS = [
       { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
       { id:"tube",    lbl:"Tube",    min:0.4, max:2,   def:1.0, fmt: fmt2 },
       { id:"pan",     lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
+      { id:"yuragi",  lbl:"Yuragi",  min:0,   max:1,   def:0.5, fmt: fmt2 },
     ] },
 ];
 
@@ -2944,6 +3008,7 @@ function clearMix() {
 function afterMixChange() {
   updateMixUI();
   applyDroneAudibility();
+  applyWindBedAudibility();
 }
 function updateMixUI() {
   document.querySelectorAll(".mix-row").forEach(row => {
@@ -2977,7 +3042,7 @@ function rebuildAudio() {
   try { actx.close(); } catch (_) {}
   actx = null; master = null; limiter = null; reverb = null;
   eqNodes = null; grainBus = null; breathNodes = null;
-  chorusBedNodes = null;
+  chorusBedNodes = null; windBedNodes = null;
   droneNodes = null; noiseBufs = null;
   silentPrimer = null; outputBridge = null;
   initAudio();
@@ -3069,8 +3134,43 @@ function applyParam(secId, knobId) {
       droneNodes.polyCB.gain.cancelScheduledValues(now);
       droneNodes.polyCB.gain.linearRampToValueAtTime(p *  35, now + 0.12);
     }
+  } else if (secId === "wind" && windBedNodes) {
+    /* the continuous wind bed reacts live to lvl / tube / pan / yuragi.
+       (density still affects only the triggered gust events.) */
+    const fund = 230 * params.wind.tube;
+    if (knobId === "lvl") {
+      applyWindBedAudibility();
+    } else if (knobId === "pan") {
+      windBedNodes.bedPan.pan.cancelScheduledValues(now);
+      windBedNodes.bedPan.pan.linearRampToValueAtTime(params.wind.pan, now + 0.1);
+    } else if (knobId === "tube") {
+      const ramp = now + 0.15;
+      windBedNodes.bp1.frequency.cancelScheduledValues(now);
+      windBedNodes.bp1.frequency.linearRampToValueAtTime(fund,     ramp);
+      windBedNodes.bp2.frequency.cancelScheduledValues(now);
+      windBedNodes.bp2.frequency.linearRampToValueAtTime(fund * 3, ramp);
+      /* yuragi depth scales with fundamental so the swing follows pitch */
+      windBedNodes.yDepth1.gain.cancelScheduledValues(now);
+      windBedNodes.yDepth1.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 0.35, ramp);
+      windBedNodes.yDepth2.gain.cancelScheduledValues(now);
+      windBedNodes.yDepth2.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 3 * 0.35, ramp);
+    } else if (knobId === "yuragi") {
+      windBedNodes.yDepth1.gain.cancelScheduledValues(now);
+      windBedNodes.yDepth1.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 0.35, now + 0.1);
+      windBedNodes.yDepth2.gain.cancelScheduledValues(now);
+      windBedNodes.yDepth2.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 3 * 0.35, now + 0.1);
+    }
   }
   /* per-voice density / lvl / character / pan are read at trigger time */
+}
+
+/* gate the continuous wind bed on its mute/solo state */
+function applyWindBedAudibility() {
+  if (!windBedNodes) return;
+  const target = isAudible("wind") ? params.wind.lvl * 0.16 : 0;
+  const now = actx.currentTime;
+  windBedNodes.bedG.gain.cancelScheduledValues(now);
+  windBedNodes.bedG.gain.linearRampToValueAtTime(target, now + 0.1);
 }
 
 /* gate the drone's continuous gain on its mute/solo state */
