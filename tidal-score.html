@@ -551,18 +551,25 @@ const ALL_KINDS = [...INSECT_KINDS, "rasp", "scrape", "wind"];
    defines the curated starting state. Save / Load lives in localStorage. */
 const FACTORY_PATCH = {
   master:       { cycleMin: 1.0, width: 0.61, revMix: 0.13, revSize: 0.5 },
-  drone:        { lvl: 1.46 },
-  suzumushi:    { lvl: 1.52, cutoff: 1300, decay: 0.30 },
-  matsumushi:   { lvl: 1.97, pitch: 1.61, cutoff: 14000, decay: 1.35, random: 1.19 },
-  korogi:       { density: 3.00, lvl: 1.12, pitch: 1.81, pan: -0.46, cutoff: 2400, decay: 1.72, random: 0.97 },
-  higurashi:    { density: 3.00, decay: 0.37 },
-  kanetataki:   { density: 1.83, pan: 0.50, wave: 3, decay: 0.64 },
-  kantan:       { pitch: 0.68, cutoff: 1500, decay: 0.62, random: 1.14 },
+  drone:        { lvl: 0.17, key: 45.5, yuragi: 0.67, poly: 0.44 },
+  suzumushi:    { lvl: 0.72, pitch: 1.49, pan: 0.11, cutoff: 1300, decay: 0.30, move: 0.24, doppler: 0.27 },
+  matsumushi:   { lvl: 1.97, pitch: 1.61, pan: 0.02, cutoff: 14000, decay: 1.35, random: 1.19 },
+  korogi:       { density: 3.00, lvl: 1.12, pitch: 1.81, pan: 0.00, cutoff: 2400, decay: 1.72, random: 0.97 },
+  higurashi:    { density: 3.00, pan: -0.62, wave: 5, decay: 0.37 },
+  kanetataki:   { density: 1.83, pitch: 1.86, pan: -0.02, wave: 3, decay: 0.64 },
+  kantan:       { pitch: 1.93, pan: 0.71, cutoff: 1500, decay: 0.62, random: 1.14 },
+  umaoi:        {},
   kusahibari:   { pitch: 0.64, wave: 2, cutoff: 3900, decay: 1.52, random: 0.47 },
-  enmakorogi:   { pitch: 1.75, cutoff: 2500 },
+  enmakorogi:   { lvl: 0.36, pitch: 2.00, pan: -0.84, cutoff: 1400, decay: 0.65,
+                  random: 2.00, body: 0.90, click: 0.47,
+                  anti: 0.38, depth: 0.32, phrase: 1, doppler: 0.36, buzz: 0.37 },
+  aomatsumushi: { lvl: 0.06 },
+  rasp:         { lvl: 0.07 },
+  scrape:       { lvl: 0.07, pan: 0.31, yuragi: 0.73, grainSend: 2.58 },
+  wind:         { lvl: 0.32, pan: -0.37, yuragi: 0.63, grainSend: 2.37 },
 };
-const FACTORY_MUTES = ["drone", "higurashi", "umaoi", "aomatsumushi", "scrape", "wind"];
-const FACTORY_SOLOS = ["suzumushi"];
+const FACTORY_MUTES = ["umaoi", "kusahibari", "aomatsumushi", "rasp"];
+const FACTORY_SOLOS = ["enmakorogi"];
 const PATCH_KEY    = "tidal-score-patch-v1";
 
 /* Hand-drawn graphic score — a Float32Array of length SCORE_SAMPLES
