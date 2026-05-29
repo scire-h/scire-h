@@ -730,23 +730,37 @@ function initAudio() {
   startScrapeBed();
 }
 
-/* Algorithmic impulse response: exp-decaying white noise, stereo decorrelated */
+/* Algorithmic impulse response: exp-decaying white noise, stereo decorrelated.
+   The tail uses true exponential decay (matches the way a room actually
+   loses energy) and the last 10 % of the IR is windowed to zero with a
+   cosine fade so the convolution doesn't end on a non-zero sample —
+   without this, the reverb tail dropped suddenly to silence. */
 function makeIR(durationSec, decay) {
   const sr = actx.sampleRate;
   const len = Math.max(512, Math.floor(sr * Math.max(0.1, durationSec)));
   const buf = actx.createBuffer(2, len, sr);
+  /* `decay` argument now acts as a softness scalar — higher values mean
+     a faster RT60, lower values mean a longer, more diffuse tail. */
+  const rt60Samples = len * 0.85 / Math.max(0.5, decay * 0.4);
+  const rate = Math.log(1000) / rt60Samples;   /* -60 dB at rt60Samples */
+  const fadeStart = Math.floor(len * 0.90);
   for (let ch = 0; ch < 2; ch++) {
     const d = buf.getChannelData(ch);
-    /* early reflections: small sparse impulses in the first 60 ms, then diffuse tail */
+    /* sparse early reflections in the first 60 ms */
     const earlyLen = Math.min(len, Math.floor(sr * 0.06));
     for (let i = 0; i < earlyLen; i++) d[i] = 0;
     for (let k = 0; k < 4; k++) {
       const i = Math.floor(Math.random() * earlyLen);
       d[i] += (Math.random() * 2 - 1) * 0.4 * (1 - i / earlyLen);
     }
+    /* exponentially-decaying diffuse tail */
     for (let i = earlyLen; i < len; i++) {
-      const t = (i - earlyLen) / (len - earlyLen);
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-rate * (i - earlyLen));
+    }
+    /* cosine fade-out over the last 10 % so amplitude reaches 0 cleanly */
+    for (let i = fadeStart; i < len; i++) {
+      const phase = (i - fadeStart) / Math.max(1, len - fadeStart);
+      d[i] *= 0.5 + 0.5 * Math.cos(Math.PI * phase);
     }
   }
   return buf;
@@ -754,19 +768,23 @@ function makeIR(durationSec, decay) {
 
 /* Granular-character impulse response: an exponentially decaying noise
    bed with a cloud of short sine grains scattered throughout. The
-   grains are what gives the tail its sparkle / "cloud" feel rather
-   than the smooth wash of a plain noise IR. Stereo-decorrelated. */
+   bed amplitude and each grain's amplitude share the same exponential
+   envelope so the tail recedes coherently into the distance instead of
+   stopping. A cosine fade-out over the last 10 % drives everything to
+   exactly zero at the IR's end. Stereo-decorrelated. */
 function makeGranularIR(durationSec, sparkle) {
   const sr = actx.sampleRate;
   const len = Math.max(2048, Math.floor(sr * Math.max(0.5, durationSec)));
   const buf = actx.createBuffer(2, len, sr);
-  const decay = 3.2;
+  /* RT60 ≈ 80 % of the IR length — leaves room for the final fade */
+  const rt60Samples = len * 0.80;
+  const rate = Math.log(1000) / rt60Samples;
+  const fadeStart = Math.floor(len * 0.90);
   for (let ch = 0; ch < 2; ch++) {
     const d = buf.getChannelData(ch);
-    /* base decaying noise bed (quiet) */
+    /* exponentially-decaying noise bed */
     for (let i = 0; i < len; i++) {
-      const t = i / len;
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay) * 0.08;
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-rate * i) * 0.08;
     }
     /* sparse early reflections in the first 60 ms */
     const early = Math.min(len, Math.floor(sr * 0.06));
@@ -774,13 +792,15 @@ function makeGranularIR(durationSec, sparkle) {
       const i = Math.floor(Math.random() * early);
       d[i] += (Math.random() * 2 - 1) * 0.35 * (1 - i / early);
     }
-    /* granular cloud — tiny windowed sine grains at random times and
-       pitches. Density scales with sparkle. */
+    /* granular cloud — Hann-windowed sine grains scattered through the
+       tail. Grain amplitude shares the bed's exponential envelope so
+       later grains naturally recede instead of cutting off. */
     const grainCount = Math.floor(sr * 0.018 * Math.max(0.05, sparkle));
     for (let g = 0; g < grainCount; g++) {
-      const centre = Math.floor(Math.random() * len);
+      /* bias grain centre toward the head so density also tapers */
+      const centre = Math.floor(Math.pow(Math.random(), 0.75) * len);
       const gLen   = Math.max(32, Math.floor(sr * (0.004 + Math.random() * 0.012)));
-      const env    = Math.pow(1 - centre / len, 1.4);
+      const env    = Math.exp(-rate * centre);
       const freq   = 400 + Math.random() * 6800;
       const amp    = (0.10 + 0.18 * Math.random()) * env * sparkle;
       for (let i = 0; i < gLen; i++) {
@@ -789,6 +809,11 @@ function makeGranularIR(durationSec, sparkle) {
         const w = 0.5 - 0.5 * Math.cos((TWO_PI * i) / (gLen - 1)); // Hann
         d[idx] += amp * w * Math.sin((TWO_PI * freq * i) / sr);
       }
+    }
+    /* cosine fade-out over the last 10 % so the IR ends on zero */
+    for (let i = fadeStart; i < len; i++) {
+      const phase = (i - fadeStart) / Math.max(1, len - fadeStart);
+      d[i] *= 0.5 + 0.5 * Math.cos(Math.PI * phase);
     }
   }
   return buf;
