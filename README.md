@@ -6,6 +6,7 @@ a four-channel analog drum synthesiser in the Pollard Syndrum family.
 ```
 scire-h/
 ├── index.html        ← single-file HTML / Web Audio clone
+├── rain.html         ← single-file rain-on-water ripples + rain synth
 └── ds4-native/       ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
 ```
 
@@ -93,6 +94,28 @@ audio behaviour.
 ```bash
 cd ds4-native/tests
 ./run_all.sh
+```
+
+## 3. Rain on Water (`rain.html`)
+
+A single self-contained `rain.html` (no dependencies): a water surface
+seen from straight above, rendered as expanding white concentric
+wavefronts on black with a constant stroke width and angular shading
+for a sketch-like 3-D dimple. Each raindrop also fires a short
+synthesised grain.
+
+The rain is driven mathematically: impacts are a **Poisson point
+process** in time (exponential inter-arrival times), drop sizes follow
+a **Marshall-Palmer-like** exponential law, and every impact spawns
+both a ripple and an audio grain — so the picture and the sound share
+the same physics. The grain is a selectable oscillator
+(sine / triangle / saw / square / noise) with a fast percussive
+envelope, a Minnaert-style upward pitch sweep, a broadband impact
+"tick" for granularity, and stereo panning matched to the on-screen
+position. Rate, random jitter, volume and waveform are adjustable.
+
+```
+xdg-open rain.html    # then tap to begin (audio needs a gesture)
 ```
 
 ## License

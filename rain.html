@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#000000" />
+<title>雨の水面 — Rain on Water</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", sans-serif;
+    color: #cfcfcf;
+  }
+  #stage { position: fixed; inset: 0; display: block; background: #000; }
+
+  /* ---- start overlay ---- */
+  #gate {
+    position: fixed; inset: 0; z-index: 30; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; background: rgba(0,0,0,.92); cursor: pointer;
+    transition: opacity .6s ease;
+  }
+  #gate h1 { font-weight: 300; font-size: 22px; letter-spacing: .35em; margin: 0; color: #eee; }
+  #gate p  { font-size: 12px; letter-spacing: .2em; color: #777; margin: 0; }
+  #gate.hide { opacity: 0; pointer-events: none; }
+
+  /* ---- controls ---- */
+  #panel {
+    position: fixed; z-index: 20; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    padding: 12px 16px; border-radius: 14px;
+    background: rgba(14,14,16,.66); backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.07);
+    transition: opacity .5s ease; max-width: calc(100vw - 24px);
+  }
+  #panel.dim { opacity: .12; }
+  .ctl { display: flex; flex-direction: column; gap: 4px; }
+  .ctl label { font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: #8a8a8a; }
+  .ctl .val { font-variant-numeric: tabular-nums; color: #c9c9c9; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 104px; height: 3px;
+    background: #3a3a3a; border-radius: 2px; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px;
+    border-radius: 50%; background: #e8e8e8; cursor: pointer; }
+  input[type=range]::-moz-range-thumb { width: 13px; height: 13px; border: none; border-radius: 50%;
+    background: #e8e8e8; cursor: pointer; }
+  select, button.tg {
+    background: #1b1b1e; color: #ddd; border: 1px solid rgba(255,255,255,.12);
+    border-radius: 8px; padding: 6px 9px; font-size: 12px; cursor: pointer;
+  }
+  button.tg.off { color: #777; }
+  .hint { position: fixed; z-index: 20; top: 14px; left: 0; right: 0; text-align: center;
+    font-size: 10px; letter-spacing: .25em; color: #4a4a4a; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div class="hint">RAIN ON WATER · 真上視点</div>
+
+<div id="panel" class="dim">
+  <div class="ctl">
+    <label>雨量 rate</label>
+    <input id="rate" type="range" min="1" max="60" step="1" value="16" />
+  </div>
+  <div class="ctl">
+    <label>揺らぎ jitter</label>
+    <input id="jit" type="range" min="0" max="100" step="1" value="40" />
+  </div>
+  <div class="ctl">
+    <label>音量 vol</label>
+    <input id="vol" type="range" min="0" max="100" step="1" value="70" />
+  </div>
+  <div class="ctl">
+    <label>波形 osc</label>
+    <select id="osc">
+      <option value="sine">sine</option>
+      <option value="triangle">triangle</option>
+      <option value="sawtooth">saw</option>
+      <option value="square">square</option>
+      <option value="noise">noise</option>
+    </select>
+  </div>
+  <button id="sound" class="tg">SOUND ON</button>
+</div>
+
+<div id="gate">
+  <h1>雨 の 水 面</h1>
+  <p>TAP TO BEGIN</p>
+</div>
+
+<script>
+"use strict";
+/* ================================================================
+   雨の水面 — top-down ripples + mathematically-driven rain synth
+   Single file, no dependencies.
+
+   Two coupled systems share one event: a raindrop impact.
+     1. Visual  : expanding concentric wavefronts seen from straight above.
+     2. Audio   : a short enveloped grain ("粒々感") per impact.
+
+   Rain is modelled as a Poisson point process in time; drop sizes
+   follow a Marshall-Palmer-like exponential law (small drops common,
+   large drops rare). Every impact spawns both a ripple and a grain,
+   so what you see and what you hear come from the same physics.
+   ================================================================ */
+
+/* ---------------------------------------------------------------- */
+/* Canvas setup                                                     */
+/* ---------------------------------------------------------------- */
+const cv  = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+let mobile = matchMedia('(max-width: 720px)').matches;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  cv.width  = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  cv.style.width  = W + 'px';
+  cv.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  mobile = W < 720;
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ---------------------------------------------------------------- */
+/* Controls                                                         */
+/* ---------------------------------------------------------------- */
+const elRate = document.getElementById('rate');
+const elJit  = document.getElementById('jit');
+const elVol  = document.getElementById('vol');
+const elOsc  = document.getElementById('osc');
+const elSnd  = document.getElementById('sound');
+const panel  = document.getElementById('panel');
+
+const params = {
+  get rate() { return +elRate.value; },          // mean impacts / second (Poisson lambda)
+  get jitter() { return +elJit.value / 100; },   // 0..1 random fluctuation amount
+  get vol() { return +elVol.value / 100; },
+  get osc() { return elOsc.value; },
+  soundOn: true,
+};
+
+elSnd.addEventListener('click', () => {
+  params.soundOn = !params.soundOn;
+  elSnd.textContent = params.soundOn ? 'SOUND ON' : 'SOUND OFF';
+  elSnd.classList.toggle('off', !params.soundOn);
+  if (master) master.gain.setTargetAtTime(params.soundOn ? params.vol : 0, ac.currentTime, 0.05);
+});
+elVol.addEventListener('input', () => {
+  if (master && params.soundOn) master.gain.setTargetAtTime(params.vol, ac.currentTime, 0.03);
+});
+
+/* auto-dim the panel when idle */
+let dimTimer = null;
+function wake() {
+  panel.classList.remove('dim');
+  clearTimeout(dimTimer);
+  dimTimer = setTimeout(() => panel.classList.add('dim'), 2600);
+}
+['pointermove', 'pointerdown', 'input'].forEach(e => window.addEventListener(e, wake));
+
+/* ---------------------------------------------------------------- */
+/* Math helpers                                                     */
+/* ---------------------------------------------------------------- */
+const rnd  = Math.random;
+const TAU  = Math.PI * 2;
+// exponential variate with mean = 1/lambda   →   -ln(U)/lambda
+function expVar(lambda) { return -Math.log(1 - rnd()) / lambda; }
+function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
+
+/* ---------------------------------------------------------------- */
+/* Audio engine                                                     */
+/* ---------------------------------------------------------------- */
+let ac = null, master = null, noiseBuf = null, started = false;
+
+function initAudio() {
+  if (ac) return;
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain();
+  master.gain.value = params.soundOn ? params.vol : 0;
+
+  // gentle bus compression-ish soft clip via waveshaper keeps dense rain from clipping
+  const shaper = ac.createWaveShaper();
+  const n = 1024, curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; curve[i] = Math.tanh(x * 1.4); }
+  shaper.curve = curve;
+  master.connect(shaper).connect(ac.destination);
+
+  // pre-render a buffer of white noise for grains & the ambient bed
+  const len = ac.sampleRate * 2;
+  noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = rnd() * 2 - 1;
+
+  startAmbience();
+}
+
+/* faint continuous rain hiss; its level tracks the rate so heavier
+   rain has a denser bed under the discrete drops */
+let ambGain = null;
+function startAmbience() {
+  const src = ac.createBufferSource();
+  src.buffer = noiseBuf; src.loop = true;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 0.5;
+  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
+  ambGain = ac.createGain(); ambGain.gain.value = 0.0;
+  src.connect(hp).connect(bp).connect(ambGain).connect(master);
+  src.start();
+}
+
+/* one raindrop grain.
+   size  : 0..1  (Marshall-Palmer sample)  → big drops = lower & longer
+   panX  : -1..1 stereo position matching the on-screen x
+   A water impact has two parts: a broadband "tick" (surface splash) and
+   a short tonal "plip" from the entrained-bubble (Minnaert) resonance,
+   which sweeps slightly UPWARD in pitch as the bubble shrinks. */
+function playDrop(size, panX) {
+  if (!ac || !params.soundOn) return;
+  const t = ac.currentTime;
+  const j = params.jitter;
+
+  const dur  = (0.035 + 0.13 * size) * (1 + (rnd() - 0.5) * 0.5 * j);
+  // bigger drop → lower base pitch; plus up to ~±0.5 octave random wobble
+  const wob  = Math.pow(2, (rnd() - 0.5) * 1.2 * j);
+  const f0   = (1900 * Math.pow(2, -2.6 * size)) * wob;
+  const amp  = (0.12 + 0.5 * size) * (0.8 + 0.4 * rnd());
+
+  const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+  if (pan) pan.pan.value = clamp(panX, -1, 1);
+  const out = pan || ac.createGain();
+
+  // --- tonal "plip" (selectable oscillator) ---
+  const vca = ac.createGain();
+  vca.gain.setValueAtTime(0.0001, t);
+  vca.gain.exponentialRampToValueAtTime(amp, t + 0.004);
+  vca.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+  let voice;
+  if (params.osc === 'noise') {
+    voice = ac.createBufferSource(); voice.buffer = noiseBuf; voice.loop = true;
+    voice.playbackRate.value = 0.6 + rnd() * 0.8;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 6 + 8 * size;
+    bp.frequency.setValueAtTime(f0, t);
+    bp.frequency.exponentialRampToValueAtTime(f0 * 1.45, t + dur); // Minnaert-style up-sweep
+    voice.connect(bp).connect(vca);
+  } else {
+    voice = ac.createOscillator(); voice.type = params.osc;
+    voice.frequency.setValueAtTime(f0, t);
+    voice.frequency.exponentialRampToValueAtTime(f0 * 1.5, t + dur);
+    voice.connect(vca);
+  }
+  vca.connect(out);
+
+  // --- broadband impact "tick" for the granular bite ---
+  const click = ac.createBufferSource(); click.buffer = noiseBuf; click.loop = true;
+  click.playbackRate.value = 1 + rnd();
+  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1500 + 2000 * size;
+  const cg = ac.createGain();
+  cg.gain.setValueAtTime(amp * 0.5, t);
+  cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.02 + 0.02 * size);
+  click.connect(hp).connect(cg).connect(out);
+
+  if (pan) out.connect(master);
+
+  voice.start(t); voice.stop(t + dur + 0.02);
+  click.start(t); click.stop(t + 0.08);
+}
+
+/* ---------------------------------------------------------------- */
+/* Ripple field (visual)                                            */
+/* ---------------------------------------------------------------- */
+const WAVE_SPEED = 92;     // px / s — how fast wavefronts travel outward
+const WAVELENGTH = 27;     // px between successive concentric crests
+const RINGS      = 5;      // visible wavefronts per impact
+const DECAY_TAU  = 2.3;    // s — amplitude e-folding time
+const LIGHT_ANG  = -2.2;   // virtual light direction for the "dessin" shading
+const drops = [];
+const MAX_DROPS = mobile ? 38 : 70;
+
+function spawnDrop(x, y, size) {
+  if (drops.length >= MAX_DROPS) drops.shift();
+  // a few low-frequency angular harmonics give each ripple an organic,
+  // not-perfectly-circular outline while the stroke width stays constant
+  const harm = [];
+  const modes = [2, 3, 5];
+  for (const m of modes) harm.push({ m, a: 0.006 + rnd() * 0.022, p: rnd() * TAU });
+  drops.push({ x, y, t0: performance.now() / 1000, size, harm });
+}
+
+const SEG = mobile ? 30 : 46;   // angular segments per ring
+
+function drawDrop(d, now) {
+  const age = now - d.t0;
+  const front = WAVE_SPEED * age;                 // leading wavefront radius
+  if (front - RINGS * WAVELENGTH > Math.hypot(W, H)) return false; // off-screen → dead
+  const tEnv = Math.exp(-age / DECAY_TAU);
+  if (tEnv < 0.02) return false;
+  const birth = Math.min(1, age / 0.09);          // quick fade-in
+  const baseAmp = (0.55 + 0.85 * d.size) * tEnv * birth;
+
+  for (let k = 0; k < RINGS; k++) {
+    const r = front - k * WAVELENGTH;
+    if (r < 3) continue;
+    // amplitude falls with distance (~1/sqrt r, energy spread over circumference)
+    const dist = Math.sqrt(40 / (r + 40));
+    const ringAmp = baseAmp * Math.exp(-k * 0.34) * dist;
+    if (ringAmp < 0.012) continue;
+
+    let px = 0, py = 0, pa = 0, first = true;
+    for (let i = 0; i <= SEG; i++) {
+      const th = (i / SEG) * TAU;
+      // organic radius perturbation (uniform stroke, wobbly outline)
+      let rr = r;
+      for (const h of d.harm) rr += r * h.a * Math.sin(h.m * th + h.p);
+      const x = d.x + rr * Math.cos(th);
+      const y = d.y + rr * Math.sin(th);
+      // directional shading → reads as a 3-D dimple (デッサン的立体感)
+      const shade = 0.4 + 0.6 * (0.5 + 0.5 * Math.cos(th - LIGHT_ANG));
+      const a = clamp(ringAmp * shade, 0, 1);
+      if (first) { px = x; py = y; pa = a; first = false; continue; }
+      ctx.strokeStyle = 'rgba(255,255,255,' + ((a + pa) * 0.5).toFixed(3) + ')';
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+      px = x; py = y; pa = a;
+    }
+  }
+  return true;
+}
+
+/* ---------------------------------------------------------------- */
+/* Main loop — Poisson scheduling + render                          */
+/* ---------------------------------------------------------------- */
+let lastFrame = performance.now() / 1000;
+let nextDropIn = 0;   // seconds until next Poisson event
+
+function frame() {
+  const nowMs = performance.now();
+  const now = nowMs / 1000;
+  let dt = now - lastFrame;
+  lastFrame = now;
+  if (dt > 0.1) dt = 0.1;  // clamp after tab-switch
+
+  // --- schedule raindrop impacts as a Poisson process ---
+  const lambda = params.rate;
+  nextDropIn -= dt;
+  let guard = 0;
+  while (nextDropIn <= 0 && guard++ < 40) {
+    // Marshall-Palmer-ish size: exponential, mostly small, occasionally big
+    const size = clamp(1 - Math.exp(-expVar(2.4)), 0.04, 1);
+    const x = rnd() * W, y = rnd() * H;
+    spawnDrop(x, y, size);
+    if (started) playDrop(size, (x / W) * 2 - 1);
+    nextDropIn += expVar(lambda);     // exponential inter-arrival time
+  }
+
+  // ambient bed level follows the rate
+  if (ambGain) ambGain.gain.setTargetAtTime(0.004 + 0.012 * (lambda / 60), ac.currentTime, 0.2);
+
+  // --- render ---
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  ctx.lineWidth = 1.4;            // constant stroke width
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.globalCompositeOperation = 'lighter';   // overlapping wavefronts add up
+  for (let i = drops.length - 1; i >= 0; i--) {
+    if (!drawDrop(drops[i], now)) drops.splice(i, 1);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------------------------------------------------------------- */
+/* Start gate (audio needs a user gesture)                          */
+/* ---------------------------------------------------------------- */
+const gate = document.getElementById('gate');
+function begin() {
+  if (started) return;
+  started = true;
+  initAudio();
+  if (ac.state === 'suspended') ac.resume();
+  gate.classList.add('hide');
+  wake();
+}
+gate.addEventListener('click', begin);
+gate.addEventListener('touchstart', begin, { passive: true });
+</script>
+</body>
+</html>
