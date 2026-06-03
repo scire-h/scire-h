@@ -16,7 +16,6 @@
   }
   #stage { position: fixed; inset: 0; display: block; background: #000; }
 
-  /* ---- start overlay ---- */
   #gate {
     position: fixed; inset: 0; z-index: 30; display: flex;
     flex-direction: column; align-items: center; justify-content: center;
@@ -27,19 +26,17 @@
   #gate p  { font-size: 12px; letter-spacing: .2em; color: #777; margin: 0; }
   #gate.hide { opacity: 0; pointer-events: none; }
 
-  /* ---- controls ---- */
   #panel {
     position: fixed; z-index: 20; left: 50%; bottom: 18px; transform: translateX(-50%);
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
     padding: 12px 16px; border-radius: 14px;
-    background: rgba(14,14,16,.66); backdrop-filter: blur(10px);
+    background: rgba(14,14,16,.6); backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.07);
     transition: opacity .5s ease; max-width: calc(100vw - 24px);
   }
   #panel.dim { opacity: .12; }
   .ctl { display: flex; flex-direction: column; gap: 4px; }
   .ctl label { font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: #8a8a8a; }
-  .ctl .val { font-variant-numeric: tabular-nums; color: #c9c9c9; }
   input[type=range] { -webkit-appearance: none; appearance: none; width: 104px; height: 3px;
     background: #3a3a3a; border-radius: 2px; outline: none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px;
@@ -63,7 +60,7 @@
 <div id="panel" class="dim">
   <div class="ctl">
     <label>雨量 rate</label>
-    <input id="rate" type="range" min="1" max="60" step="1" value="16" />
+    <input id="rate" type="range" min="1" max="60" step="1" value="18" />
   </div>
   <div class="ctl">
     <label>揺らぎ jitter</label>
@@ -71,7 +68,7 @@
   </div>
   <div class="ctl">
     <label>音量 vol</label>
-    <input id="vol" type="range" min="0" max="100" step="1" value="70" />
+    <input id="vol" type="range" min="0" max="100" step="1" value="78" />
   </div>
   <div class="ctl">
     <label>波形 osc</label>
@@ -94,37 +91,135 @@
 <script>
 "use strict";
 /* ================================================================
-   雨の水面 — top-down ripples + mathematically-driven rain synth
-   Single file, no dependencies.
+   雨の水面 — a real water HEIGHT FIELD, lit from above.
 
-   Two coupled systems share one event: a raindrop impact.
-     1. Visual  : expanding concentric wavefronts seen from straight above.
-     2. Audio   : a short enveloped grain ("粒々感") per impact.
+   Instead of drawing rings as lines, the water surface is a height
+   field h(x,y,t). Every raindrop launches an expanding, decaying
+   ripple wave-packet; the height contributions of all drops are
+   SUMMED, so wavefronts genuinely interfere. A WebGL fragment shader
+   evaluates the surface (and its slope) per pixel, derives a surface
+   normal and shades it — giving a smooth, three-dimensional wet relief
+   with no hard outlines and no dots.
 
-   Rain is modelled as a Poisson point process in time; drop sizes
-   follow a Marshall-Palmer-like exponential law (small drops common,
-   large drops rare). Every impact spawns both a ripple and a grain,
-   so what you see and what you hear come from the same physics.
+   Rain timing is a Poisson process; drop sizes follow a
+   Marshall-Palmer-like law. Each impact also fires a short water-drop
+   grain (selectable oscillator), so picture and sound share one event.
    ================================================================ */
 
 /* ---------------------------------------------------------------- */
-/* Canvas setup                                                     */
+/* Canvas / WebGL2                                                  */
 /* ---------------------------------------------------------------- */
-const cv  = document.getElementById('stage');
-const ctx = cv.getContext('2d');
-let W = 0, H = 0, DPR = 1;
+const MAXN = 48;                                  // max simultaneous drops in the shader
+const cv = document.getElementById('stage');
+const gl = cv.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false });
+
+let W = 0, H = 0, RS = 1;
 let mobile = matchMedia('(max-width: 720px)').matches;
 
-function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = window.innerWidth;
-  H = window.innerHeight;
-  cv.width  = Math.round(W * DPR);
-  cv.height = Math.round(H * DPR);
-  cv.style.width  = W + 'px';
-  cv.style.height = H + 'px';
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+const VERT = `#version 300 es
+in vec2 aPos;
+void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+const FRAG = `#version 300 es
+precision highp float;
+out vec4 outColor;
+uniform vec2  uRes;
+uniform int   uCount;
+uniform vec4  uDrop[${MAXN}];   // x, y(top-down px), age(s), amp
+
+#define SPEED  150.0            // wavefront speed (px/s)
+#define LAMBDA 34.0             // crest wavelength (px)
+#define KK     (6.28318530718/LAMBDA)
+#define WIDTH  66.0             // wave-packet width (px) -> a few crests
+#define TAUD   2.7              // amplitude decay time (s)
+#define R0     26.0             // softens 1/sqrt(r) near the impact
+#define GAIN   9.0              // slope -> normal / edge exaggeration
+
+void main(){
+  // pixel position in top-down coordinates (matches drop coords)
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+
+  float h = 0.0;     // summed surface height  (interference happens here)
+  vec2  g = vec2(0.0); // summed surface gradient (analytic)
+
+  for (int i = 0; i < uCount; i++){
+    vec4 d = uDrop[i];
+    vec2 rel = p - d.xy;
+    float r  = length(rel) + 1e-3;
+    float age = d.z;
+
+    float s   = r - SPEED * age;          // signed distance from the moving front
+    float env = exp(-(s*s)/(WIDTH*WIDTH)); // gaussian packet envelope
+    float sp  = inversesqrt(r + R0);       // circular energy spreading ~ 1/sqrt(r)
+    float td  = exp(-age / TAUD);
+    float A   = d.w * td;
+    float ph  = KK * s;
+    float c   = cos(ph), sn = sin(ph);
+
+    h += A * sp * env * sn;
+
+    // d/dr of [ A * sp * env * sin(KK*s) ], with ds/dr = 1
+    float dsp  = -0.5 * sp / (r + R0);          // d(sp)/dr
+    float denv = env * (-2.0 * s / (WIDTH*WIDTH));
+    float dhdr = A * ( dsp*env*sn + sp*denv*sn + sp*env*c*KK );
+    g += dhdr * (rel / r);                       // chain rule: dr/dp = rel/r
+  }
+
+  // surface normal from the slope, then light it from above-left
+  vec3 N = normalize(vec3(-g.x * GAIN, -g.y * GAIN, 1.0));
+  vec3 L = normalize(vec3(0.5, 0.58, 0.45));
+  vec3 V = vec3(0.0, 0.0, 1.0);
+  vec3 Hh = normalize(L + V);
+
+  float spec  = pow(max(dot(N, Hh), 0.0), 28.0);    // glossy 3-D catchlights
+  float slope = length(g) * GAIN;
+  float edge  = slope / (1.0 + slope);               // smooth white ripple definition
+
+  // near-black water; ripples are bright, with a directional sheen for depth
+  float lum = 0.012 + 1.7 * spec + 0.32 * edge + 0.05 * clamp(h * 0.7, -1.0, 1.0);
+  lum = clamp(lum, 0.0, 1.0);
+
+  // gentle vignette so the frame settles into black
+  vec2 q = (gl_FragCoord.xy / uRes) - 0.5;
+  lum *= 1.0 - 0.45 * dot(q, q);
+
+  outColor = vec4(vec3(lum), 1.0);
+}`;
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+// full-screen triangle
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const uRes   = gl.getUniformLocation(prog, 'uRes');
+const uCount = gl.getUniformLocation(prog, 'uCount');
+const uDrop  = gl.getUniformLocation(prog, 'uDrop');
+const dropBuf = new Float32Array(MAXN * 4);
+
+function resize(){
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
   mobile = W < 720;
+  RS = Math.min(dpr, mobile ? 1.0 : 1.25);   // cap backing-store resolution for fill-rate
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  cv.width = Math.round(W * RS); cv.height = Math.round(H * RS);
+  gl.viewport(0, 0, cv.width, cv.height);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -140,10 +235,10 @@ const elSnd  = document.getElementById('sound');
 const panel  = document.getElementById('panel');
 
 const params = {
-  get rate() { return +elRate.value; },          // mean impacts / second (Poisson lambda)
-  get jitter() { return +elJit.value / 100; },   // 0..1 random fluctuation amount
-  get vol() { return +elVol.value / 100; },
-  get osc() { return elOsc.value; },
+  get rate()   { return +elRate.value; },
+  get jitter() { return +elJit.value / 100; },
+  get vol()    { return +elVol.value / 100; },
+  get osc()    { return elOsc.value; },
   soundOn: true,
 };
 
@@ -157,9 +252,8 @@ elVol.addEventListener('input', () => {
   if (master && params.soundOn) master.gain.setTargetAtTime(params.vol, ac.currentTime, 0.03);
 });
 
-/* auto-dim the panel when idle */
 let dimTimer = null;
-function wake() {
+function wake(){
   panel.classList.remove('dim');
   clearTimeout(dimTimer);
   dimTimer = setTimeout(() => panel.classList.add('dim'), 2600);
@@ -169,230 +263,161 @@ function wake() {
 /* ---------------------------------------------------------------- */
 /* Math helpers                                                     */
 /* ---------------------------------------------------------------- */
-const rnd  = Math.random;
-const TAU  = Math.PI * 2;
-// exponential variate with mean = 1/lambda   →   -ln(U)/lambda
-function expVar(lambda) { return -Math.log(1 - rnd()) / lambda; }
-function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
+const rnd = Math.random;
+function expVar(lambda){ return -Math.log(1 - rnd()) / lambda; }
+function clamp(x, a, b){ return x < a ? a : x > b ? b : x; }
 
 /* ---------------------------------------------------------------- */
 /* Audio engine                                                     */
 /* ---------------------------------------------------------------- */
-let ac = null, master = null, noiseBuf = null, started = false;
+let ac = null, master = null, analyser = null, noiseBuf = null, ambGain = null, started = false;
 
-function initAudio() {
+function initAudio(){
   if (ac) return;
   ac = new (window.AudioContext || window.webkitAudioContext)();
   master = ac.createGain();
   master.gain.value = params.soundOn ? params.vol : 0;
 
-  // gentle bus compression-ish soft clip via waveshaper keeps dense rain from clipping
+  // soft clip keeps dense rain from clipping
   const shaper = ac.createWaveShaper();
   const n = 1024, curve = new Float32Array(n);
-  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; curve[i] = Math.tanh(x * 1.4); }
+  for (let i = 0; i < n; i++){ const x = (i / (n - 1)) * 2 - 1; curve[i] = Math.tanh(x * 1.5); }
   shaper.curve = curve;
-  master.connect(shaper).connect(ac.destination);
 
-  // pre-render a buffer of white noise for grains & the ambient bed
+  analyser = ac.createAnalyser();   // also used by the test harness to confirm output
+  analyser.fftSize = 1024;
+  master.connect(shaper).connect(analyser).connect(ac.destination);
+
   const len = ac.sampleRate * 2;
   noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
-  const d = noiseBuf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = rnd() * 2 - 1;
+  const dd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) dd[i] = rnd() * 2 - 1;
 
-  startAmbience();
-}
-
-/* faint continuous rain hiss; its level tracks the rate so heavier
-   rain has a denser bed under the discrete drops */
-let ambGain = null;
-function startAmbience() {
-  const src = ac.createBufferSource();
-  src.buffer = noiseBuf; src.loop = true;
-  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 0.5;
-  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
+  // faint continuous rain hiss whose level tracks the rate
+  const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 0.5;
+  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 700;
   ambGain = ac.createGain(); ambGain.gain.value = 0.0;
   src.connect(hp).connect(bp).connect(ambGain).connect(master);
   src.start();
+
+  // expose RMS for verification
+  const td = new Float32Array(analyser.fftSize);
+  window.__rms = () => { analyser.getFloatTimeDomainData(td);
+    let s = 0; for (let i = 0; i < td.length; i++) s += td[i] * td[i];
+    return Math.sqrt(s / td.length); };
 }
 
-/* one raindrop grain.
-   size  : 0..1  (Marshall-Palmer sample)  → big drops = lower & longer
-   panX  : -1..1 stereo position matching the on-screen x
-   A water impact has two parts: a broadband "tick" (surface splash) and
-   a short tonal "plip" from the entrained-bubble (Minnaert) resonance,
-   which sweeps slightly UPWARD in pitch as the bubble shrinks. */
-function playDrop(size, panX) {
+/* one water-drop grain: a broadband impact "tick" plus a short tonal
+   "plip" (selectable oscillator) whose pitch sweeps slightly UP, like the
+   Minnaert resonance of the entrained bubble. Big drops are lower & longer. */
+function playDrop(size, panX){
   if (!ac || !params.soundOn) return;
-  const t = ac.currentTime;
-  const j = params.jitter;
+  const t = ac.currentTime, j = params.jitter;
 
-  const dur  = (0.035 + 0.13 * size) * (1 + (rnd() - 0.5) * 0.5 * j);
-  // bigger drop → lower base pitch; plus up to ~±0.5 octave random wobble
-  const wob  = Math.pow(2, (rnd() - 0.5) * 1.2 * j);
-  const f0   = (1900 * Math.pow(2, -2.6 * size)) * wob;
-  const amp  = (0.12 + 0.5 * size) * (0.8 + 0.4 * rnd());
+  const dur = (0.09 + 0.28 * size) * (1 + (rnd() - 0.5) * 0.5 * j);
+  const wob = Math.pow(2, (rnd() - 0.5) * 0.9 * j);
+  const f0  = (240 + 1200 * Math.pow(1 - size, 1.6)) * wob; // small ~1.4k, big ~240
+  const amp = (0.22 + 0.7 * size) * (0.75 + 0.5 * rnd());
 
-  const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
-  if (pan) pan.pan.value = clamp(panX, -1, 1);
-  const out = pan || ac.createGain();
+  const pan = ac.createStereoPanner ? ac.createStereoPanner() : ac.createGain();
+  if (pan.pan) pan.pan.value = clamp(panX, -1, 1);
+  pan.connect(master);
 
-  // --- tonal "plip" (selectable oscillator) ---
   const vca = ac.createGain();
   vca.gain.setValueAtTime(0.0001, t);
   vca.gain.exponentialRampToValueAtTime(amp, t + 0.004);
   vca.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  vca.connect(pan);
 
   let voice;
-  if (params.osc === 'noise') {
+  if (params.osc === 'noise'){
     voice = ac.createBufferSource(); voice.buffer = noiseBuf; voice.loop = true;
     voice.playbackRate.value = 0.6 + rnd() * 0.8;
-    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 6 + 8 * size;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 5 + 9 * size;
     bp.frequency.setValueAtTime(f0, t);
-    bp.frequency.exponentialRampToValueAtTime(f0 * 1.45, t + dur); // Minnaert-style up-sweep
+    bp.frequency.exponentialRampToValueAtTime(f0 * 1.6, t + dur);
     voice.connect(bp).connect(vca);
   } else {
     voice = ac.createOscillator(); voice.type = params.osc;
     voice.frequency.setValueAtTime(f0, t);
-    voice.frequency.exponentialRampToValueAtTime(f0 * 1.5, t + dur);
+    voice.frequency.exponentialRampToValueAtTime(f0 * 1.7, t + dur);
     voice.connect(vca);
   }
-  vca.connect(out);
+  voice.start(t); voice.stop(t + dur + 0.03);
 
-  // --- broadband impact "tick" for the granular bite ---
+  // attack tick for the granular bite
   const click = ac.createBufferSource(); click.buffer = noiseBuf; click.loop = true;
   click.playbackRate.value = 1 + rnd();
-  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1500 + 2000 * size;
+  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1200 + 1800 * size;
   const cg = ac.createGain();
-  cg.gain.setValueAtTime(amp * 0.5, t);
-  cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.02 + 0.02 * size);
-  click.connect(hp).connect(cg).connect(out);
-
-  if (pan) out.connect(master);
-
-  voice.start(t); voice.stop(t + dur + 0.02);
-  click.start(t); click.stop(t + 0.08);
+  cg.gain.setValueAtTime(amp * 0.6, t);
+  cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.018 + 0.02 * size);
+  click.connect(hp).connect(cg).connect(pan);
+  click.start(t); click.stop(t + 0.09);
 }
 
 /* ---------------------------------------------------------------- */
-/* Ripple field (visual)                                            */
+/* Drops                                                            */
 /* ---------------------------------------------------------------- */
-const WAVE_SPEED = 92;     // px / s — how fast the wavefront travels outward
-const WAVELENGTH = 30;     // px between successive crests (at the source)
-const DISPERSION = 0.07;   // crest spacing opens up slightly with each ring
-const RINGS      = 6;      // crests in the wave packet per impact
-const DECAY_TAU  = 2.3;    // s — amplitude e-folding time
-const WOBBLE_R   = 110;    // px — radius over which the splash irregularity smooths out
-const LIGHT_ANG  = -2.2;   // virtual light direction for the "dessin" shading
+const WAVE_SPEED = 150;   // must match SPEED in the shader (for culling)
+const PACKET     = 66;    // must match WIDTH
+const DECAY_TAU  = 2.7;   // must match TAUD
 const drops = [];
-const MAX_DROPS = mobile ? 38 : 70;
+const MAX_DROPS = mobile ? 30 : 44;
 
-function spawnDrop(x, y, size) {
+function spawnDrop(x, y, size){
   if (drops.length >= MAX_DROPS) drops.shift();
-  // The splash imprints a small, FIXED irregularity on the wavefront. A few
-  // low angular modes capture it; surface tension smooths high modes quickly,
-  // so we keep only low ones. Amplitudes are in *pixels* (absolute), and in
-  // drawDrop they decay with radius so the ring circularises as it expands —
-  // exactly how a real raindrop ripple becomes rounder the wider it gets.
-  const harm = [];
-  const modes = [2, 3, 4];
-  for (const m of modes) harm.push({ m, a: (0.8 + rnd() * 2.6) * (0.6 + size), p: rnd() * TAU });
-  drops.push({ x, y, t0: performance.now() / 1000, size, harm });
-}
-
-const SEG = mobile ? 30 : 46;   // angular segments per ring
-
-function drawDrop(d, now) {
-  const age = now - d.t0;
-  const front = WAVE_SPEED * age;                 // leading wavefront radius
-  if (front - RINGS * WAVELENGTH * 2 > Math.hypot(W, H)) return false; // off-screen → dead
-  const tEnv = Math.exp(-age / DECAY_TAU);
-  if (tEnv < 0.02) return false;
-  const birth = Math.min(1, age / 0.09);          // quick fade-in
-  const baseAmp = (0.55 + 0.85 * d.size) * tEnv * birth;
-
-  // brief central splash flash right at impact (the drop striking the surface)
-  const flash = Math.max(0, 1 - age / 0.18) * baseAmp;
-  if (flash > 0.03) {
-    ctx.fillStyle = 'rgba(255,255,255,' + clamp(flash, 0, 1).toFixed(3) + ')';
-    ctx.beginPath(); ctx.arc(d.x, d.y, 1.5 + 2.5 * d.size, 0, TAU); ctx.fill();
-  }
-
-  for (let k = 0; k < RINGS; k++) {
-    // dispersive spacing: trailing crests sit progressively farther apart,
-    // so the packet stretches as it travels (gravity-capillary dispersion)
-    const r = front - WAVELENGTH * (k + DISPERSION * k * k);
-    if (r < 3) continue;
-    // a raindrop launches a short wave PACKET, not equal rings: a soft bell
-    // across the crests (leading & trailing edges fade), and amplitude falls
-    // as ~1/sqrt(r) since the energy spreads over the growing circumference
-    const win  = Math.sin(Math.PI * (k + 0.5) / RINGS);
-    const dist = Math.sqrt(36 / (r + 36));
-    const ringAmp = baseAmp * win * dist;
-    if (ringAmp < 0.012) continue;
-
-    // outline irregularity is a FIXED splash imprint, so its relative effect
-    // decays as the ring grows (~1/r) → the circle rounds out as it expands
-    const wob = WOBBLE_R / (WOBBLE_R + r);
-
-    let px = 0, py = 0, pa = 0, first = true;
-    for (let i = 0; i <= SEG; i++) {
-      const th = (i / SEG) * TAU;
-      let rr = r;
-      for (const h of d.harm) rr += h.a * wob * Math.sin(h.m * th + h.p);
-      const x = d.x + rr * Math.cos(th);
-      const y = d.y + rr * Math.sin(th);
-      // directional shading → reads as a 3-D dimple (デッサン的立体感)
-      const shade = 0.4 + 0.6 * (0.5 + 0.5 * Math.cos(th - LIGHT_ANG));
-      const a = clamp(ringAmp * shade, 0, 1);
-      if (first) { px = x; py = y; pa = a; first = false; continue; }
-      ctx.strokeStyle = 'rgba(255,255,255,' + ((a + pa) * 0.5).toFixed(3) + ')';
-      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
-      px = x; py = y; pa = a;
-    }
-  }
-  return true;
+  drops.push({ x, y, t0: performance.now() / 1000, amp: 0.6 + 1.0 * size });
 }
 
 /* ---------------------------------------------------------------- */
 /* Main loop — Poisson scheduling + render                          */
 /* ---------------------------------------------------------------- */
 let lastFrame = performance.now() / 1000;
-let nextDropIn = 0;   // seconds until next Poisson event
+let nextDropIn = 0;
 
-function frame() {
-  const nowMs = performance.now();
-  const now = nowMs / 1000;
-  let dt = now - lastFrame;
-  lastFrame = now;
-  if (dt > 0.1) dt = 0.1;  // clamp after tab-switch
+function frame(){
+  const now = performance.now() / 1000;
+  let dt = now - lastFrame; lastFrame = now;
+  if (dt > 0.1) dt = 0.1;
 
-  // --- schedule raindrop impacts as a Poisson process ---
+  // schedule impacts as a Poisson process
   const lambda = params.rate;
   nextDropIn -= dt;
   let guard = 0;
-  while (nextDropIn <= 0 && guard++ < 40) {
-    // Marshall-Palmer-ish size: exponential, mostly small, occasionally big
-    const size = clamp(1 - Math.exp(-expVar(2.4)), 0.04, 1);
+  while (nextDropIn <= 0 && guard++ < 40){
+    const size = clamp(1 - Math.exp(-expVar(2.4)), 0.04, 1);   // Marshall-Palmer-ish
     const x = rnd() * W, y = rnd() * H;
     spawnDrop(x, y, size);
     if (started) playDrop(size, (x / W) * 2 - 1);
-    nextDropIn += expVar(lambda);     // exponential inter-arrival time
+    nextDropIn += expVar(lambda);
   }
 
-  // ambient bed level follows the rate
-  if (ambGain) ambGain.gain.setTargetAtTime(0.004 + 0.012 * (lambda / 60), ac.currentTime, 0.2);
+  if (ambGain) ambGain.gain.setTargetAtTime(0.005 + 0.014 * (lambda / 60), ac.currentTime, 0.2);
 
-  // --- render ---
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, H);
-  ctx.lineWidth = 1.4;            // constant stroke width
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.globalCompositeOperation = 'lighter';   // overlapping wavefronts add up
-  for (let i = drops.length - 1; i >= 0; i--) {
-    if (!drawDrop(drops[i], now)) drops.splice(i, 1);
+  // cull dead drops and pack live ones into the uniform buffer
+  const diag = Math.hypot(W, H);
+  let cnt = 0;
+  for (let i = drops.length - 1; i >= 0; i--){
+    const d = drops[i];
+    const age = now - d.t0;
+    const front = WAVE_SPEED * age;
+    if (Math.exp(-age / DECAY_TAU) < 0.03 || front - 2 * PACKET > diag){
+      drops.splice(i, 1); continue;
+    }
+    if (cnt < MAXN){
+      const o = cnt * 4;
+      dropBuf[o] = d.x * RS; dropBuf[o + 1] = d.y * RS;   // shader works in device px
+      dropBuf[o + 2] = age;  dropBuf[o + 3] = d.amp;
+      cnt++;
+    }
   }
-  ctx.globalCompositeOperation = 'source-over';
+
+  gl.uniform2f(uRes, cv.width, cv.height);
+  gl.uniform1i(uCount, cnt);
+  gl.uniform4fv(uDrop, dropBuf);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
 
   requestAnimationFrame(frame);
 }
@@ -402,7 +427,7 @@ requestAnimationFrame(frame);
 /* Start gate (audio needs a user gesture)                          */
 /* ---------------------------------------------------------------- */
 const gate = document.getElementById('gate');
-function begin() {
+function begin(){
   if (started) return;
   started = true;
   initAudio();
