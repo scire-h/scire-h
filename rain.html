@@ -276,21 +276,26 @@ function playDrop(size, panX) {
 /* ---------------------------------------------------------------- */
 /* Ripple field (visual)                                            */
 /* ---------------------------------------------------------------- */
-const WAVE_SPEED = 92;     // px / s — how fast wavefronts travel outward
-const WAVELENGTH = 27;     // px between successive concentric crests
-const RINGS      = 5;      // visible wavefronts per impact
+const WAVE_SPEED = 92;     // px / s — how fast the wavefront travels outward
+const WAVELENGTH = 30;     // px between successive crests (at the source)
+const DISPERSION = 0.07;   // crest spacing opens up slightly with each ring
+const RINGS      = 6;      // crests in the wave packet per impact
 const DECAY_TAU  = 2.3;    // s — amplitude e-folding time
+const WOBBLE_R   = 110;    // px — radius over which the splash irregularity smooths out
 const LIGHT_ANG  = -2.2;   // virtual light direction for the "dessin" shading
 const drops = [];
 const MAX_DROPS = mobile ? 38 : 70;
 
 function spawnDrop(x, y, size) {
   if (drops.length >= MAX_DROPS) drops.shift();
-  // a few low-frequency angular harmonics give each ripple an organic,
-  // not-perfectly-circular outline while the stroke width stays constant
+  // The splash imprints a small, FIXED irregularity on the wavefront. A few
+  // low angular modes capture it; surface tension smooths high modes quickly,
+  // so we keep only low ones. Amplitudes are in *pixels* (absolute), and in
+  // drawDrop they decay with radius so the ring circularises as it expands —
+  // exactly how a real raindrop ripple becomes rounder the wider it gets.
   const harm = [];
-  const modes = [2, 3, 5];
-  for (const m of modes) harm.push({ m, a: 0.006 + rnd() * 0.022, p: rnd() * TAU });
+  const modes = [2, 3, 4];
+  for (const m of modes) harm.push({ m, a: (0.8 + rnd() * 2.6) * (0.6 + size), p: rnd() * TAU });
   drops.push({ x, y, t0: performance.now() / 1000, size, harm });
 }
 
@@ -299,26 +304,41 @@ const SEG = mobile ? 30 : 46;   // angular segments per ring
 function drawDrop(d, now) {
   const age = now - d.t0;
   const front = WAVE_SPEED * age;                 // leading wavefront radius
-  if (front - RINGS * WAVELENGTH > Math.hypot(W, H)) return false; // off-screen → dead
+  if (front - RINGS * WAVELENGTH * 2 > Math.hypot(W, H)) return false; // off-screen → dead
   const tEnv = Math.exp(-age / DECAY_TAU);
   if (tEnv < 0.02) return false;
   const birth = Math.min(1, age / 0.09);          // quick fade-in
   const baseAmp = (0.55 + 0.85 * d.size) * tEnv * birth;
 
+  // brief central splash flash right at impact (the drop striking the surface)
+  const flash = Math.max(0, 1 - age / 0.18) * baseAmp;
+  if (flash > 0.03) {
+    ctx.fillStyle = 'rgba(255,255,255,' + clamp(flash, 0, 1).toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(d.x, d.y, 1.5 + 2.5 * d.size, 0, TAU); ctx.fill();
+  }
+
   for (let k = 0; k < RINGS; k++) {
-    const r = front - k * WAVELENGTH;
+    // dispersive spacing: trailing crests sit progressively farther apart,
+    // so the packet stretches as it travels (gravity-capillary dispersion)
+    const r = front - WAVELENGTH * (k + DISPERSION * k * k);
     if (r < 3) continue;
-    // amplitude falls with distance (~1/sqrt r, energy spread over circumference)
-    const dist = Math.sqrt(40 / (r + 40));
-    const ringAmp = baseAmp * Math.exp(-k * 0.34) * dist;
+    // a raindrop launches a short wave PACKET, not equal rings: a soft bell
+    // across the crests (leading & trailing edges fade), and amplitude falls
+    // as ~1/sqrt(r) since the energy spreads over the growing circumference
+    const win  = Math.sin(Math.PI * (k + 0.5) / RINGS);
+    const dist = Math.sqrt(36 / (r + 36));
+    const ringAmp = baseAmp * win * dist;
     if (ringAmp < 0.012) continue;
+
+    // outline irregularity is a FIXED splash imprint, so its relative effect
+    // decays as the ring grows (~1/r) → the circle rounds out as it expands
+    const wob = WOBBLE_R / (WOBBLE_R + r);
 
     let px = 0, py = 0, pa = 0, first = true;
     for (let i = 0; i <= SEG; i++) {
       const th = (i / SEG) * TAU;
-      // organic radius perturbation (uniform stroke, wobbly outline)
       let rr = r;
-      for (const h of d.harm) rr += r * h.a * Math.sin(h.m * th + h.p);
+      for (const h of d.harm) rr += h.a * wob * Math.sin(h.m * th + h.p);
       const x = d.x + rr * Math.cos(th);
       const y = d.y + rr * Math.sin(th);
       // directional shading → reads as a 3-D dimple (デッサン的立体感)
