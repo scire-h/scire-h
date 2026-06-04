@@ -32,9 +32,9 @@
     padding: 12px 16px; border-radius: 14px;
     background: rgba(14,14,16,.6); backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.07);
-    transition: opacity .5s ease; max-width: calc(100vw - 24px);
+    transition: opacity .8s ease; max-width: calc(100vw - 24px);
   }
-  #panel.dim { opacity: .12; }
+  #panel.dim { opacity: 0; pointer-events: none; }
   .ctl { display: flex; flex-direction: column; gap: 4px; }
   .ctl label { font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: #8a8a8a; }
   input[type=range] { -webkit-appearance: none; appearance: none; width: 104px; height: 3px;
@@ -60,7 +60,7 @@
 <div id="panel" class="dim">
   <div class="ctl">
     <label>雨量 rate</label>
-    <input id="rate" type="range" min="1" max="60" step="1" value="18" />
+    <input id="rate" type="range" min="1" max="60" step="1" value="10" />
   </div>
   <div class="ctl">
     <label>揺らぎ jitter</label>
@@ -99,15 +99,16 @@
 <script>
 "use strict";
 /* ================================================================
-   雨の水面 — a real water HEIGHT FIELD, lit from above.
+   雨の水面 — a water HEIGHT FIELD drawn as ukiyo-e contour lines.
 
-   Instead of drawing rings as lines, the water surface is a height
-   field h(x,y,t). Every raindrop launches an expanding, decaying
-   ripple wave-packet; the height contributions of all drops are
-   SUMMED, so wavefronts genuinely interfere. A WebGL fragment shader
-   evaluates the surface (and its slope) per pixel, derives a surface
-   normal and shades it — giving a smooth, three-dimensional wet relief
-   with no hard outlines and no dots.
+   The water surface is a height field h(x,y,t): every raindrop launches
+   an expanding, decaying ripple wave-packet and the contributions of all
+   drops are SUMMED, so wavefronts genuinely interfere. A WebGL fragment
+   shader treats the waves as an analytic signal (in-phase + quadrature
+   sums) and inks one clean, continuous ring per half-wavelength — a
+   woodblock-print line rendering, no glossy specular. A pinhole camera
+   lets the view tilt from straight-down (真上) to ~45°, foreshortening
+   the rings and receding to a horizon.
 
    Rain timing is a Poisson process; drop sizes follow a
    Marshall-Palmer-like law. Each impact also fires a short water-drop
@@ -137,13 +138,14 @@ uniform float uTilt;            // camera tilt from straight-down (radians)
 uniform int   uCount;
 uniform vec4  uDrop[${MAXN}];   // x, y(world px), age(s), amp
 
-#define SPEED  150.0            // wavefront speed (px/s)
-#define LAMBDA 34.0             // crest wavelength (px)
+#define SPEED  160.0            // wavefront speed (px/s)
+#define LAMBDA 36.0             // crest wavelength (px)
 #define KK     (6.28318530718/LAMBDA)
-#define WIDTH  66.0             // wave-packet width (px) -> a few crests
-#define TAUD   2.7              // amplitude decay time (s)
-#define R0     26.0             // softens 1/sqrt(r) near the impact
-#define GAIN   9.0              // slope -> normal / edge exaggeration
+#define WIDTH  82.0             // wave-packet width (px) -> a tidy set of rings
+#define TAUD   3.1              // amplitude decay time (s) -> reach further
+#define R0     42.0             // softens 1/sqrt(r) near the impact
+#define GAIN   6.0              // slope -> surface normal (matte shading only)
+#define SPACING 0.5            // contour level spacing in normalised field units
 
 void main(){
   // ---- pinhole camera: cast a ray through this pixel onto the water plane ----
@@ -161,8 +163,12 @@ void main(){
   float sdist = -C.z / dir.z;                             // ray-plane (z=0) intersection
   vec2  p = (C + sdist * dir).xy;                         // world point on the water
 
-  float h = 0.0;     // summed surface height  (interference happens here)
-  vec2  g = vec2(0.0); // summed surface gradient (analytic)
+  // Treat each ripple as an analytic signal: accumulate the in-phase (cos) and
+  // quadrature (sin) parts. Their vector sum gives, per pixel, a combined wave
+  // amplitude and phase even where ripples interfere.
+  float hs = 0.0;     // Σ amplitude·sin(phase)   (also the real surface height)
+  float hc = 0.0;     // Σ amplitude·cos(phase)
+  vec2  g  = vec2(0.0); // summed surface gradient (analytic) for matte shading
 
   for (int i = 0; i < uCount; i++){
     vec4 d = uDrop[i];
@@ -178,37 +184,47 @@ void main(){
     float ph  = KK * s;
     float c   = cos(ph), sn = sin(ph);
 
-    h += A * sp * env * sn;
+    float w = A * sp * env;                // local amplitude of this ripple here
+    hs += w * sn;
+    hc += w * c;
 
-    // d/dr of [ A * sp * env * sin(KK*s) ], with ds/dr = 1
-    float dsp  = -0.5 * sp / (r + R0);          // d(sp)/dr
+    // d/dr of [ w·sin(KK·s) ], with ds/dr = 1   (for the matte normal)
+    float dsp  = -0.5 * sp / (r + R0);
     float denv = env * (-2.0 * s / (WIDTH*WIDTH));
     float dhdr = A * ( dsp*env*sn + sp*denv*sn + sp*env*c*KK );
-    g += dhdr * (rel / r);                       // chain rule: dr/dp = rel/r
+    g += dhdr * (rel / r);
   }
 
-  // surface normal from the slope, then light it from above-left
+  // ---- ukiyo-e woodblock look: ink contour lines, no glossy glare ----
+
+  // matte surface normal for soft tonal shading (NO specular -> no テカリ)
   vec3 N = normalize(vec3(-g.x * GAIN, -g.y * GAIN, 1.0));
-  vec3 L = normalize(vec3(0.5, 0.58, 0.45));
-  vec3 V = vec3(0.0, 0.0, 1.0);
-  vec3 Hh = normalize(L + V);
+  vec3 L = normalize(vec3(0.4, 0.5, 0.85));
+  float diff = max(dot(N, L), 0.0);
 
-  float spec  = pow(max(dot(N, Hh), 0.0), 28.0);    // glossy 3-D catchlights
-  float slope = length(g) * GAIN;
-  float edge  = slope / (1.0 + slope);               // smooth white ripple definition
+  // amplitude & normalised phase of the combined wave
+  float amp = sqrt(hs * hs + hc * hc) + 1e-5;
+  float sP  = hs / amp;                       // sin(phase): 0 at every crest & trough
+  // one clean, continuous ring per half-wavelength (constant on-screen width via
+  // fwidth) that bends with the tilted surface; faint/distant ripples fade out
+  float aa  = fwidth(sP) * 1.5 + 1e-3;
+  float ring = 1.0 - smoothstep(0.0, aa, abs(sP));
+  float vis  = smoothstep(0.02, 0.11, amp);
+  float line = ring * vis;
 
-  // near-black water; ripples are bright, with a directional sheen for depth
-  float lum = 0.014 + 1.9 * spec + 0.40 * edge + 0.05 * clamp(h * 0.7, -1.0, 1.0);
-  lum = clamp(lum, 0.0, 1.0);
+  // deep indigo water (aizuri-e), gently graded by height & matte light
+  vec3 inkA = vec3(0.025, 0.035, 0.060);
+  vec3 inkB = vec3(0.060, 0.095, 0.140);
+  vec3 paper = vec3(0.94, 0.93, 0.88);
+  float wash = clamp(0.32 + 0.4 * diff + 0.5 * clamp(hs * 2.2, -1.0, 1.0), 0.0, 1.0);
+  vec3 col = mix(inkA, inkB, wash);
+  col = mix(col, paper, line);
 
-  // the ripples live in the pond [0,W]x[0,H]; fade its edges and the receding
-  // distance softly to black so the tilted surface settles into the dark
-  float M = 150.0;
-  float fx = smoothstep(0.0, M, p.x) * smoothstep(0.0, M, uWorld.x - p.x);
-  float fy = smoothstep(0.0, M, p.y) * smoothstep(0.0, M, uWorld.y - p.y);
-  lum *= fx * fy * clamp(1.0 - sdist / (dist * 9.0), 0.0, 1.0);
+  // recede to a horizon (no rectangular pond), plus a soft round vignette
+  col *= clamp(1.0 - sdist / (dist * 9.0), 0.0, 1.0);
+  col *= 1.0 - 0.22 * dot(uv, uv);
 
-  outColor = vec4(vec3(lum), 1.0);
+  outColor = vec4(col, 1.0);
 }`;
 
 function compile(type, src){
@@ -287,9 +303,10 @@ let dimTimer = null;
 function wake(){
   panel.classList.remove('dim');
   clearTimeout(dimTimer);
-  dimTimer = setTimeout(() => panel.classList.add('dim'), 2600);
+  dimTimer = setTimeout(() => panel.classList.add('dim'), 2800);
 }
-['pointermove', 'pointerdown', 'input'].forEach(e => window.addEventListener(e, wake));
+['pointerdown', 'pointermove', 'touchstart', 'input'].forEach(e =>
+  window.addEventListener(e, wake, { passive: true }));
 
 /* ---------------------------------------------------------------- */
 /* Math helpers                                                     */
@@ -297,6 +314,31 @@ function wake(){
 const rnd = Math.random;
 function expVar(lambda){ return -Math.log(1 - rnd()) / lambda; }
 function clamp(x, a, b){ return x < a ? a : x > b ? b : x; }
+
+/* Cast a screen ray (u in [-aspect,aspect], v in [-1,1]) onto the water plane,
+   mirroring the shader's pinhole camera. Returns [worldX, worldY] or null if
+   the ray points at/above the horizon. Used so rain falls across exactly the
+   visible surface at any tilt — no rectangular pond. */
+function screenToWorld(u, v){
+  const th = Math.tan(0.35);
+  const Tx = W * 0.5, Ty = H * 0.5;
+  const dist = (H * 0.5) / th;
+  const t = params.tilt;
+  const Cx = Tx, Cy = Ty - dist * Math.sin(t), Cz = dist * Math.cos(t);
+  let fx = Tx - Cx, fy = Ty - Cy, fz = -Cz;
+  const fl = Math.hypot(fx, fy, fz); fx /= fl; fy /= fl; fz /= fl;
+  // rgt = normalize(cross(fwd, (0,1,0))) = normalize((-fz, 0, fx))
+  const rl = Math.hypot(fz, fx); const rx = -fz / rl, rz = fx / rl;
+  // up = cross(rgt, fwd)
+  const ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
+  let dx = fx + u * th * rx + v * th * ux;
+  let dy = fy + v * th * uy;
+  let dz = fz + u * th * rz + v * th * uz;
+  const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
+  if (dz > -1e-3) return null;
+  const s = -Cz / dz;
+  return [Cx + s * dx, Cy + s * dy];
+}
 
 /* ---------------------------------------------------------------- */
 /* Audio engine                                                     */
@@ -392,15 +434,15 @@ function playDrop(size, panX){
 /* ---------------------------------------------------------------- */
 /* Drops                                                            */
 /* ---------------------------------------------------------------- */
-const WAVE_SPEED = 150;   // must match SPEED in the shader (for culling)
-const PACKET     = 66;    // must match WIDTH
-const DECAY_TAU  = 2.7;   // must match TAUD
+const WAVE_SPEED = 160;   // must match SPEED in the shader (for culling)
+const PACKET     = 110;   // must match WIDTH
+const DECAY_TAU  = 3.1;   // must match TAUD
 const drops = [];
-const MAX_DROPS = mobile ? 30 : 44;
+const MAX_DROPS = mobile ? 20 : 24;
 
 function spawnDrop(x, y, size){
   if (drops.length >= MAX_DROPS) drops.shift();
-  drops.push({ x, y, t0: performance.now() / 1000, amp: 0.6 + 1.0 * size });
+  drops.push({ x, y, t0: performance.now() / 1000, amp: 0.7 + 0.9 * size });
 }
 
 /* ---------------------------------------------------------------- */
@@ -418,11 +460,21 @@ function frame(){
   const lambda = params.rate;
   nextDropIn -= dt;
   let guard = 0;
+  const aspect = W / H;
   while (nextDropIn <= 0 && guard++ < 40){
     const size = clamp(1 - Math.exp(-expVar(2.4)), 0.04, 1);   // Marshall-Palmer-ish
-    const x = rnd() * W, y = rnd() * H;
-    spawnDrop(x, y, size);
-    if (started) playDrop(size, (x / W) * 2 - 1);
+    // sample a point on screen (with margin) and project onto the water,
+    // so drops land across the whole visible surface for any tilt
+    let world = null, u = 0, tries = 0;
+    do {
+      u = (rnd() * 2 - 1) * aspect * 1.12;
+      const v = (rnd() * 2 - 1) * 1.06;
+      world = screenToWorld(u, v);
+    } while (!world && ++tries < 8);
+    if (world){
+      spawnDrop(world[0], world[1], size);
+      if (started) playDrop(size, clamp(u / aspect, -1, 1));
+    }
     nextDropIn += expVar(lambda);
   }
 
