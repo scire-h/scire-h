@@ -104,10 +104,10 @@
    The water surface is a height field h(x,y,t): every raindrop launches
    an expanding, decaying ripple wave-packet and the contributions of all
    drops are SUMMED, so wavefronts genuinely interfere. A WebGL fragment
-   shader derives the surface normal and lights it as a soft, matte relief
-   (restrained sheen, no harsh glare) so that calm water reads black and
-   only the ripple slopes catch light. A pinhole camera lets the view tilt
-   from straight-down (真上) to ~45°, foreshortening the ripples and
+   shader derives the surface normal and lights it with a specular sheen so
+   the water surface glistens (a wet, glossy look) while calm water reads
+   black and the ripple slopes catch light. A pinhole camera lets the view
+   tilt from straight-down (真上) to ~45°, foreshortening the ripples and
    receding to a horizon.
 
    Rain timing is a Poisson process; drop sizes follow a
@@ -188,17 +188,17 @@ void main(){
     g += dhdr * (rel / r);
   }
 
-  // ---- matte 3-D relief on black (no lines, restrained sheen) ----
+  // ---- glossy wet water on black: 3-D relief + specular sheen ----
   vec3 N = normalize(vec3(-g.x * GAIN, -g.y * GAIN, 1.0));
   vec3 L = normalize(vec3(0.45, 0.55, 0.72));
-
-  // relief = lit deviation from flat water, so calm water stays black and only
-  // the ripple slopes pick up light (a soft, matte three-dimensional surface)
-  float relief = dot(N, L) - L.z;
   vec3 Hh = normalize(L + vec3(0.0, 0.0, 1.0));
-  float spec = max(pow(max(dot(N, Hh), 0.0), 18.0) - pow(Hh.z, 18.0), 0.0); // 控えめ
 
-  float lum = 0.012 + 1.5 * relief + 0.45 * spec + 0.05 * clamp(h * 0.8, -1.0, 1.0);
+  // calm water stays black; ripple slopes get soft body (relief) and the
+  // water surface itself glistens with a specular highlight (テカリ)
+  float relief = dot(N, L) - L.z;
+  float spec = max(pow(max(dot(N, Hh), 0.0), 30.0) - pow(Hh.z, 30.0), 0.0);
+
+  float lum = 0.014 + 0.7 * relief + 1.8 * spec + 0.04 * clamp(h * 0.8, -1.0, 1.0);
   lum = clamp(lum, 0.0, 1.0);
   vec3 col = vec3(lum);
 
