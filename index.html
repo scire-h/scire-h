@@ -647,10 +647,33 @@ function playChannel(ch, velocity=1) {
    Syndrum, Simmons SDS, Toyo Gakki DS-4). */
 const WAVE_MAP = { sin:"sine", tri:"triangle", sqr:"square", saw:"sawtooth" };
 
+/* A "warm sine" PeriodicWave -- pure sine with a touch of 2nd and 3rd
+   harmonic injected. The reference late-70s analog drum synth tone
+   isn't a mathematically pure sin -- the components feeding the VCO
+   leave tiny H2 / H3 traces that give the carrier a wood-like body
+   instead of feeling like an oscilloscope cal tone. Levels are well
+   below audible distortion (H2 ≈ -55 dB, H3 ≈ -50 dB). */
+let WARM_SINE_WAVE = null;
+function getWarmSine() {
+  if (WARM_SINE_WAVE) return WARM_SINE_WAVE;
+  if (!actx) return null;
+  const real = new Float32Array([0, 1.000, 0.0018, 0.0032, 0.0006, 0.0004, 0, 0]);
+  const imag = new Float32Array(real.length);
+  WARM_SINE_WAVE = actx.createPeriodicWave(real, imag, { disableNormalization: false });
+  return WARM_SINE_WAVE;
+}
+
 function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
   const now = actx.currentTime;
   const osc = actx.createOscillator();
-  osc.type = WAVE_MAP[ch.waveform] || "sine";
+  if (ch.waveform === "sin") {
+    /* warm sine for the analog-style poko-poko character */
+    const w = getWarmSine();
+    if (w) osc.setPeriodicWave(w);
+    else   osc.type = "sine";
+  } else {
+    osc.type = WAVE_MAP[ch.waveform] || "sine";
+  }
 
   const hitDrift  = (Math.random() - 0.5) * 6;
   const slowDrift = chDriftCents(ch.idx);
@@ -1030,10 +1053,24 @@ const PRESETS = {
   syndrum: {
     _name: "Syndrum Classic",
     _apply() {
-      setCh(0, { vco:0.85, octave:4, attack:0, sustain:0.18, sweep:0.55, sweepDir:"down", waveform:"sin", output:0.78, lfoOn:false, multiVCO:false });
-      setCh(1, { vco:0.65, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sin", output:0.80, lfoOn:false, multiVCO:false });
-      setCh(2, { vco:0.45, octave:3, attack:0, sustain:0.28, sweep:0.55, sweepDir:"down", waveform:"sin", output:0.85, lfoOn:false, multiVCO:false });
-      setCh(3, { vco:0.25, octave:2, attack:0, sustain:0.32, sweep:0.55, sweepDir:"down", waveform:"sin", output:0.92, lfoOn:false, multiVCO:false });
+      setCh(0, { vco:0.85, octave:4, attack:0, sustain:0.18, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.78, lfoOn:false, multiVCO:false });
+      setCh(1, { vco:0.65, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.80, lfoOn:false, multiVCO:false });
+      setCh(2, { vco:0.45, octave:3, attack:0, sustain:0.28, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.85, lfoOn:false, multiVCO:false });
+      setCh(3, { vco:0.25, octave:2, attack:0, sustain:0.32, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.92, lfoOn:false, multiVCO:false });
+    },
+  },
+  pokoToms: {
+    _name: "Poko Toms",
+    /* Late-70s analog drum-synth tom character: warm-sine carrier in
+       the low-tom register, fast downward pitch sweep (~2.7 oct) at
+       a short sustain so each hit reads as 'po-ko' rather than a
+       long ringing note. Four channels are tuned a few semitones
+       apart so you can play melodic tom sequences with 1-4. */
+    _apply() {
+      setCh(0, { vco:0.42, octave:3, attack:0, sustain:0.18, sweep:0.45, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.88, lfoOn:false, multiVCO:false });
+      setCh(1, { vco:0.30, octave:3, attack:0, sustain:0.20, sweep:0.45, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.90, lfoOn:false, multiVCO:false });
+      setCh(2, { vco:0.55, octave:2, attack:0, sustain:0.22, sweep:0.45, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.92, lfoOn:false, multiVCO:false });
+      setCh(3, { vco:0.30, octave:2, attack:0, sustain:0.26, sweep:0.50, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.95, lfoOn:false, multiVCO:false });
     },
   },
   electro: {
