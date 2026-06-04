@@ -67,6 +67,14 @@
     <input id="jit" type="range" min="0" max="100" step="1" value="40" />
   </div>
   <div class="ctl">
+    <label>減衰 decay</label>
+    <input id="dec" type="range" min="0" max="100" step="1" value="30" />
+  </div>
+  <div class="ctl">
+    <label>視点 tilt</label>
+    <input id="tilt" type="range" min="0" max="45" step="1" value="0" />
+  </div>
+  <div class="ctl">
     <label>音量 vol</label>
     <input id="vol" type="range" min="0" max="100" step="1" value="78" />
   </div>
@@ -124,8 +132,10 @@ const FRAG = `#version 300 es
 precision highp float;
 out vec4 outColor;
 uniform vec2  uRes;
+uniform vec2  uWorld;           // pond size in world px (W, H)
+uniform float uTilt;            // camera tilt from straight-down (radians)
 uniform int   uCount;
-uniform vec4  uDrop[${MAXN}];   // x, y(top-down px), age(s), amp
+uniform vec4  uDrop[${MAXN}];   // x, y(world px), age(s), amp
 
 #define SPEED  150.0            // wavefront speed (px/s)
 #define LAMBDA 34.0             // crest wavelength (px)
@@ -136,8 +146,20 @@ uniform vec4  uDrop[${MAXN}];   // x, y(top-down px), age(s), amp
 #define GAIN   9.0              // slope -> normal / edge exaggeration
 
 void main(){
-  // pixel position in top-down coordinates (matches drop coords)
-  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  // ---- pinhole camera: cast a ray through this pixel onto the water plane ----
+  // Straight down at uTilt = 0 (真上); tilt up to ~45° to view the pond at an angle.
+  vec2  uv  = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;   // y-normalised screen coords
+  float th  = tan(0.35);                                  // half field-of-view (~40° fov)
+  vec3  T   = vec3(uWorld * 0.5, 0.0);                    // look at the pond centre
+  float dist = (uWorld.y * 0.5) / th;                     // frame the pond at tilt 0
+  vec3  C   = T + dist * vec3(0.0, -sin(uTilt), cos(uTilt));  // camera position
+  vec3  fwd = normalize(T - C);
+  vec3  rgt = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+  vec3  upv = cross(rgt, fwd);
+  vec3  dir = normalize(fwd + uv.x * th * rgt + uv.y * th * upv);
+  if (dir.z > -1e-3){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; } // at/above horizon
+  float sdist = -C.z / dir.z;                             // ray-plane (z=0) intersection
+  vec2  p = (C + sdist * dir).xy;                         // world point on the water
 
   float h = 0.0;     // summed surface height  (interference happens here)
   vec2  g = vec2(0.0); // summed surface gradient (analytic)
@@ -176,12 +198,15 @@ void main(){
   float edge  = slope / (1.0 + slope);               // smooth white ripple definition
 
   // near-black water; ripples are bright, with a directional sheen for depth
-  float lum = 0.012 + 1.7 * spec + 0.32 * edge + 0.05 * clamp(h * 0.7, -1.0, 1.0);
+  float lum = 0.014 + 1.9 * spec + 0.40 * edge + 0.05 * clamp(h * 0.7, -1.0, 1.0);
   lum = clamp(lum, 0.0, 1.0);
 
-  // gentle vignette so the frame settles into black
-  vec2 q = (gl_FragCoord.xy / uRes) - 0.5;
-  lum *= 1.0 - 0.45 * dot(q, q);
+  // the ripples live in the pond [0,W]x[0,H]; fade its edges and the receding
+  // distance softly to black so the tilted surface settles into the dark
+  float M = 150.0;
+  float fx = smoothstep(0.0, M, p.x) * smoothstep(0.0, M, uWorld.x - p.x);
+  float fy = smoothstep(0.0, M, p.y) * smoothstep(0.0, M, uWorld.y - p.y);
+  lum *= fx * fy * clamp(1.0 - sdist / (dist * 9.0), 0.0, 1.0);
 
   outColor = vec4(vec3(lum), 1.0);
 }`;
@@ -208,6 +233,8 @@ gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
 const uRes   = gl.getUniformLocation(prog, 'uRes');
+const uWorld = gl.getUniformLocation(prog, 'uWorld');
+const uTilt  = gl.getUniformLocation(prog, 'uTilt');
 const uCount = gl.getUniformLocation(prog, 'uCount');
 const uDrop  = gl.getUniformLocation(prog, 'uDrop');
 const dropBuf = new Float32Array(MAXN * 4);
@@ -229,6 +256,8 @@ resize();
 /* ---------------------------------------------------------------- */
 const elRate = document.getElementById('rate');
 const elJit  = document.getElementById('jit');
+const elDec  = document.getElementById('dec');
+const elTilt = document.getElementById('tilt');
 const elVol  = document.getElementById('vol');
 const elOsc  = document.getElementById('osc');
 const elSnd  = document.getElementById('sound');
@@ -237,6 +266,8 @@ const panel  = document.getElementById('panel');
 const params = {
   get rate()   { return +elRate.value; },
   get jitter() { return +elJit.value / 100; },
+  get decay()  { return +elDec.value / 100; },          // 0 = shortest, 1 = longest
+  get tilt()   { return +elTilt.value * Math.PI / 180; },// camera tilt in radians
   get vol()    { return +elVol.value / 100; },
   get osc()    { return elOsc.value; },
   soundOn: true,
@@ -315,7 +346,8 @@ function playDrop(size, panX){
   if (!ac || !params.soundOn) return;
   const t = ac.currentTime, j = params.jitter;
 
-  const dur = (0.09 + 0.28 * size) * (1 + (rnd() - 0.5) * 0.5 * j);
+  const durScale = 0.3 + 1.15 * params.decay;   // decay knob: short → long
+  const dur = (0.09 + 0.28 * size) * durScale * (1 + (rnd() - 0.5) * 0.5 * j);
   const wob = Math.pow(2, (rnd() - 0.5) * 0.9 * j);
   const f0  = (240 + 1200 * Math.pow(1 - size, 1.6)) * wob; // small ~1.4k, big ~240
   const amp = (0.22 + 0.7 * size) * (0.75 + 0.5 * rnd());
@@ -408,13 +440,15 @@ function frame(){
     }
     if (cnt < MAXN){
       const o = cnt * 4;
-      dropBuf[o] = d.x * RS; dropBuf[o + 1] = d.y * RS;   // shader works in device px
+      dropBuf[o] = d.x; dropBuf[o + 1] = d.y;   // world px (camera maps screen → world)
       dropBuf[o + 2] = age;  dropBuf[o + 3] = d.amp;
       cnt++;
     }
   }
 
   gl.uniform2f(uRes, cv.width, cv.height);
+  gl.uniform2f(uWorld, W, H);
+  gl.uniform1f(uTilt, params.tilt);
   gl.uniform1i(uCount, cnt);
   gl.uniform4fv(uDrop, dropBuf);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
