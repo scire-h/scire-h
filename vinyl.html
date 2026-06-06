@@ -141,6 +141,15 @@
       <span class="val" id="master-v">70</span>
     </div>
 
+    <div class="sep-label">素材 / material — 物性からノイズを導出</div>
+    <div class="presets" id="materials">
+      <button data-m="vinyl" class="active">ビニール</button>
+      <button data-m="shellac">SP盤</button>
+      <button data-m="mikage">御影石</button>
+      <button data-m="granite">花崗岩</button>
+    </div>
+    <div class="pulse-readout" id="matreadout" style="margin:3px 0 4px"></div>
+
     <div class="sep-label">層 / frequency layers</div>
     <div class="row">
       <label style="color:var(--low)">低音部<small>ランブル / rumble</small></label>
@@ -203,8 +212,11 @@
   <div class="footer">
     サンプル音源なし。すべて <code>AudioWorklet</code> で手続き的に生成。<br>
     定常なクラックルの底鳴りに加え、<b>回転に位相同期した周期欠陥（1.8秒ごとに必ず戻る同じパチッ）</b>、
-    偏心ワウ・反りポンプ・摩擦電気によるノイズ増殖を重ね、
-    <b>サイクロステーショナリ（周期定常）</b>なレコード雑音をモデル化しています。
+    偏心ワウ・反りポンプ・摩擦電気によるノイズ増殖を重ねた
+    <b>サイクロステーショナリ</b>モデル。さらに素材の物性（動摩擦係数 μ・粒径・硬度・密度・内部損失）
+    から音色を導出します。<br>
+    μ（動摩擦係数）: PVC≈0.30 / シェラック≈0.50 / 御影石≈0.55 / 花崗岩≈0.70
+    ── 岩石は<b>Byerlee則（μ≈0.6–0.85）</b>に準拠。
   </div>
 
 <script>
@@ -307,10 +319,54 @@ let rpm = 33.333;
 let raf = 0, pulseTimer = 0, staticTimer = 0;
 let staticLevel = 0;            // 摩擦電気による帯電 → クラックル増殖
 let defects = [];
+let currentMaterial = 'vinyl';
+let matProfile = null;          // 素材ごとの欠陥プロファイル（decay/severity）
 
 const $ = id => document.getElementById(id);
 const rotHz = () => rpm / 60;
 const period = () => 60 / rpm;
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+/* ============================================================
+   素材の物性データ（科学準拠）
+   mu   : 動摩擦係数。ポリマーは実測値、岩石はByerlee則 μ≈0.6–0.85 に準拠
+   grain: 表面の有効粒径 [µm]（PVC=分子スケール ～ 花崗岩=mmオーダー結晶）
+   mohs : モース硬度（→ 明るさ・transientの鋭さ）
+   density: 密度 [kg/m³]（→ 低域の重さ・慣性）
+   loss : 内部損失係数 η（高分子は大きく減衰／石は小さく鳴り続ける＝リング）
+   ============================================================ */
+const MATERIALS = {
+  vinyl:   { label: 'ビニール (PVC)',       mu: 0.30, grain: 0.5,  mohs: 2.5, density: 1350, loss: 0.150 },
+  shellac: { label: 'SP盤 (シェラック)',    mu: 0.50, grain: 8,    mohs: 3.5, density: 1800, loss: 0.080 },
+  mikage:  { label: '御影石 (研磨花崗岩)',  mu: 0.55, grain: 300,  mohs: 6.5, density: 2750, loss: 0.012 },
+  granite: { label: '花崗岩 (粗粒)',        mu: 0.70, grain: 2000, mohs: 6.5, density: 2700, loss: 0.010 },
+};
+
+/* 物性 → 合成パラメータの写像（すべて物理量に対して単調） */
+function deriveMaterial(m) {
+  const logg  = Math.log10(m.grain);          // 粒径の対数 (-0.3 … 3.3)
+  const R     = m.mu * m.mohs;                 // 粗さ指数 = グリップ×硬度
+  const decay = clamp(0.42 + (logg + 0.3) / 3.6 * 0.5, 0.40, 0.96); // 粒が大きいほど長いクリック
+  return {
+    label: m.label, mu: m.mu,
+    surfGain:  0.20 + (m.mu - 0.3) * 1.1,       // 摩擦フロア ∝ μ
+    surfFreq:  500 + m.mohs * 220,              // 粗さの中心周波数
+    hissGain:  0.09 + R * 0.05,
+    hissFreq:  2800 + m.mohs * 450,
+    crkGain:   0.45 + R * 0.10,
+    crkFreq:   1500 + (m.mohs - 2) * 500,       // 硬いほど明るい（リングが帯域内に収まる範囲で）
+    resFreq:   700 + (m.mohs - 2) * 750,        // 素材リングの周波数
+    resQ:      clamp(0.6 + 0.045 / m.loss, 0.6, 6),     // 低損失ほど鳴る
+    resGainDb: clamp((m.mohs - 2) * 3 - m.loss * 30, 0, 14), // 石＝金属的リング / PVC＝平坦
+    crkDecay:  decay,
+    crkBig:    clamp(0.008 + (m.mohs - 2) * 0.018, 0.005, 0.12), // 脆性＝重い裾
+    popDecay:  clamp(decay + 0.02, 0.40, 0.97),
+    rumbleGain: 0.6 + (m.density / 2700) * 0.55,
+    rotQ:      clamp(0.7 + 0.05 / m.loss, 0.7, 7),
+    decayBig:  clamp(decay, 0.40, 0.97),
+    decaySmall: clamp(decay - 0.45, 0.30, 0.70),
+  };
+}
 
 /* ---------- noise buffer generators ---------- */
 function whiteBuffer(seconds) {
@@ -360,18 +416,19 @@ function loopSource(buf) {
   const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; return s;
 }
 
-/* ---------- 盤一枚ぶんの「指紋」: 周期欠陥を生成 ---------- */
-function makeDefects(count) {
+/* ---------- 盤一枚ぶんの「指紋」: 周期欠陥を生成（素材プロファイル準拠） ---------- */
+function makeDefects(count, prof) {
+  prof = prof || { decayBig: 0.94, decaySmall: 0.5, big: 0.04 };
   const arr = [];
   for (let i = 0; i < count; i++) {
     let a = Math.random(); a = a * a;            // 小さい欠陥に偏らせる
-    const big = Math.random() < 0.25;            // 1/4 は目立つ傷
+    const big = Math.random() < (0.2 + prof.big * 2);  // 脆い素材ほど目立つ傷が増える
     if (big) a = 0.55 + 0.45 * Math.random();
     arr.push({
       p: Math.random(),                          // 回転位相 [0,1)
       a: 0.2 + 0.8 * a,
       sign: Math.random() < 0.5 ? -1 : 1,
-      decay: big ? (0.93 + Math.random()*0.04) : (0.4 + Math.random()*0.2), // 傷=長いパチッ / 埃=短いチッ
+      decay: big ? prof.decayBig : prof.decaySmall,   // 素材の粒径/減衰に従う
       prob: big ? 0.97 : (0.6 + Math.random()*0.35),  // 毎周必ず出るとは限らない
     });
   }
@@ -499,14 +556,16 @@ async function build() {
   N.hissSrc.connect(N.hissHP); N.hissHP.connect(N.hissGain); N.hissGain.connect(N.highBus);
   N.hissSrc.start();
   N.crkHP = ctx.createBiquadFilter(); N.crkHP.type='highpass'; N.crkHP.frequency.value=3000; N.crkHP.Q.value=0.4;
+  // 素材リング: peaking で共振の山を作る（石=金属的リング / PVC=平坦）
+  N.matRes = ctx.createBiquadFilter(); N.matRes.type='peaking'; N.matRes.frequency.value=2000; N.matRes.Q.value=0.7; N.matRes.gain.value=0;
   N.crkGain = ctx.createGain(); N.crkGain.gain.value = 0.7;
   N.crkSrc = useWorklet
     ? new AudioWorkletNode(ctx, 'crackle-processor', { parameterData:{ density:700, decay:0.5, amp:0.6, bigProb:0.01 } })
     : makeCrackleFallback(700, 0.5, 0.6, 0.01);
-  N.crkSrc.connect(N.crkHP); N.crkHP.connect(N.crkGain); N.crkGain.connect(N.highBus);
+  N.crkSrc.connect(N.crkHP); N.crkHP.connect(N.matRes); N.matRes.connect(N.crkGain); N.crkGain.connect(N.highBus);
 
   /* ===== ROTATION : 回転位相に同期した周期欠陥（盤の指紋） ===== */
-  if (!defects.length) defects = makeDefects(6);   // プリセットで既に生成済みなら尊重
+  if (!defects.length) defects = makeDefects(6, matProfile);   // プリセットで既に生成済みなら尊重
   N.rotor = useWorklet
     ? new AudioWorkletNode(ctx, 'rotor-processor', { parameterData:{ rotHz: rotHz(), amp: 0.85 } })
     : makeRotorFallback(rotHz(), 0.85);
@@ -598,8 +657,8 @@ function wipeStatic() {
     setParam(nodes.crkSrc, 'density', 700);
     setParam(nodes.popSrc, 'density', 9);
   }
-  // 新しい盤＝新しい指紋
-  defects = makeDefects(6);
+  // 新しい盤＝新しい指紋（素材は維持）
+  defects = makeDefects(defects.length || 6, matProfile);
   if (ctx && nodes.rotor) setDefects(nodes.rotor, defects);
   const b = $('wipeBtn'); b.classList.add('on'); setTimeout(() => b.classList.remove('on'), 250);
 }
@@ -616,11 +675,41 @@ function applyPreset(name) {
   ['low','mid','high','rot','wow','warp','warmth','space'].forEach(k => {
     $(k).value = p[k]; $(k+'-v').textContent = p[k];
   });
-  defects = makeDefects(p.defects);
+  defects = makeDefects(p.defects, matProfile);
   if (ctx && nodes.rotor) setDefects(nodes.rotor, defects);
   applyUI();
   document.querySelectorAll('#presets button[data-p]').forEach(b =>
     b.classList.toggle('active', b.dataset.p === name));
+}
+
+/* ---------- 素材を適用：物性 → 合成パラメータ ---------- */
+function applyMaterial(key) {
+  if (!MATERIALS[key]) return;
+  currentMaterial = key;
+  const d = deriveMaterial(MATERIALS[key]);
+  matProfile = { decayBig: d.decayBig, decaySmall: d.decaySmall, big: d.crkBig };
+  document.querySelectorAll('#materials button[data-m]').forEach(b =>
+    b.classList.toggle('active', b.dataset.m === key));
+  $('matreadout').innerHTML = '素材: ' + d.label + ' &middot; 動摩擦係数 μ≈' + d.mu.toFixed(2);
+  if (!ctx) return;
+  const N = nodes, t = ctx.currentTime, T = 0.12;
+  N.surfGain.gain.setTargetAtTime(d.surfGain, t, T);
+  N.surfBP.frequency.setTargetAtTime(d.surfFreq, t, T);
+  N.hissGain.gain.setTargetAtTime(d.hissGain, t, T);
+  N.hissHP.frequency.setTargetAtTime(d.hissFreq, t, T);
+  N.crkGain.gain.setTargetAtTime(d.crkGain, t, T);
+  N.crkHP.frequency.setTargetAtTime(d.crkFreq, t, T);
+  N.matRes.frequency.setTargetAtTime(d.resFreq, t, T);
+  N.matRes.Q.setTargetAtTime(d.resQ, t, T);
+  N.matRes.gain.setTargetAtTime(d.resGainDb, t, T);
+  N.rumbleGain.gain.setTargetAtTime(d.rumbleGain, t, T);
+  N.rotBody.Q.setTargetAtTime(d.rotQ, t, T);
+  setParam(N.crkSrc, 'decay', d.crkDecay);
+  setParam(N.crkSrc, 'bigProb', d.crkBig);
+  setParam(N.popSrc, 'decay', d.popDecay);
+  // 素材に応じて指紋を作り直す
+  defects = makeDefects(defects.length || 6, matProfile);
+  setDefects(N.rotor, defects);
 }
 
 /* ---------- 1周ごとの心拍フラッシュ ---------- */
@@ -658,7 +747,7 @@ function draw() {
    start / stop
    ============================================================ */
 async function start() {
-  if (!started) { await build(); applyUI(); started = true; }
+  if (!started) { await build(); applyUI(); applyMaterial(currentMaterial); started = true; }
   await ctx.resume();
   nodes.master.gain.setTargetAtTime((+$('master').value/100) * 0.9, ctx.currentTime, 0.6);
   $('disc').classList.add('spinning');
@@ -691,6 +780,8 @@ $('power').addEventListener('click', () => {
 });
 document.querySelectorAll('#presets button[data-p]').forEach(b =>
   b.addEventListener('click', () => applyPreset(b.dataset.p)));
+document.querySelectorAll('#materials button[data-m]').forEach(b =>
+  b.addEventListener('click', () => applyMaterial(b.dataset.m)));
 $('rpmToggle').addEventListener('click', () => setRpm(rpm === 33.333 ? 45 : 33.333));
 $('humToggle').addEventListener('click', () => {
   humFreq = humFreq === 50 ? 60 : 50;
@@ -703,8 +794,9 @@ $('humToggle').addEventListener('click', () => {
 });
 $('wipeBtn').addEventListener('click', wipeStatic);
 
-// 初期プリセット
+// 初期プリセット + 素材
 applyPreset('dusty');
+applyMaterial('vinyl');
 </script>
 </body>
 </html>

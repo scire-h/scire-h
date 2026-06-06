@@ -135,8 +135,33 @@ jitter-free and endless, without any recorded audio. The **RPM toggle**
 (33⅓ / 45) retunes wow, warp and the defect period together; the disc
 visual spins at the true period and flashes once per revolution so you
 can *see* the 1.8 s pulse. Warmth, a generated convolution reverb, four
-presets (クリーン / 埃っぽい / 年代物 / 深いアンビエント) and a high-band
-spark visual round it out.
+wear presets (クリーン / 埃っぽい / 年代物 / 深いアンビエント) and a
+high-band spark visual round it out.
+
+### Material model (物性 → ノイズ)
+
+Orthogonal to the wear presets, a **material selector** derives the
+timbre from real physical properties rather than arbitrary settings.
+Each substrate carries a coefficient of (kinetic) friction μ, an
+effective surface grain size, Mohs hardness, density and an internal
+loss factor; these map monotonically onto the synthesis parameters
+(friction-floor level ∝ μ, click length ∝ grain, brightness ∝ hardness,
+ring Q ∝ 1/loss, low-end weight ∝ density, heavy-tail pops ∝
+brittleness):
+
+| Material | μ (kinetic) | character |
+|---|---|---|
+| **ビニール / PVC** | ≈ 0.30 | soft, smooth, damped — the quiet reference |
+| **SP盤 / shellac** | ≈ 0.50 | abrasive mineral filler → "frying" surface noise |
+| **御影石 / polished granite** | ≈ 0.55 | hard, dense, low-loss → metallic ring |
+| **花崗岩 / coarse granite** | ≈ 0.70 | coarse crystals → loud, gritty, ringing |
+
+Friction coefficients are kept physically plausible — the rock values
+follow **Byerlee's law** (μ ≈ 0.6–0.85 for most rocks); μ is shown live
+in the readout. Picking a material recomputes the surface friction
+floor, crackle grain/decay/brightness, a resonant "material ring", the
+hiss spectral tilt, low-end weight, and presses a fresh per-disc defect
+fingerprint with that material's character.
 
 ```
 xdg-open  vinyl.html   # Linux
