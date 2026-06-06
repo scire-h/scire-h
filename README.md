@@ -95,6 +95,38 @@ cd ds4-native/tests
 ./run_all.sh
 ```
 
+## 3. Vinyl crackle generator (`vinyl.html`)
+
+A single self-contained `vinyl.html` (no external dependencies, no
+sample files) that procedurally generates the surface noise of an
+analog record — the *プチプチ / パチパチ* crackle — and loops it
+forever for an ambient listening experience. Drop it onto any browser.
+
+The noise is modelled as three frequency layers, the way the sound
+actually decomposes:
+
+* **低音部 / rumble** — brown noise → 95 Hz low-pass (turntable /
+  bearing/floor vibration).
+* **中音域 / surface + hum + pop** — band-passed pink noise, a
+  50/60 Hz mains hum (+2nd harmonic), and mid-band *パチッ* pops.
+* **高音 / hiss + crackle** — high-passed white noise plus dense fine
+  *チリチリ* crackle.
+
+The crackle and pops are produced by an `AudioWorklet` that fires
+random impulses every sample in the audio thread (with a
+`ScriptProcessor` fallback) — sample-accurate, jitter-free and
+endless, without any recorded audio. A slow LFO breathes the crackle
+density so it never feels static; wow/flutter, warmth and a generated
+convolution reverb add the ambient space. Four presets
+(クリーン / 埃っぽい / 年代物 / 深いアンビエント) and a spinning-disc
+visual round it out.
+
+```
+xdg-open  vinyl.html   # Linux
+open      vinyl.html   # macOS
+start     vinyl.html   # Windows
+```
+
 ## License
 
 MIT. ULT-SOUND, Toyo Gakki and DS-4M are trademarks of their

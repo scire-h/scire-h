@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a0a" />
+<title>VINYL — procedural crackle / ambient noise</title>
+<style>
+  :root {
+    --bg:       #0b0b0d;
+    --panel:    #141417;
+    --panel-2:  #1c1c20;
+    --border:   #2a2a30;
+    --text:     #e9e9ec;
+    --text-dim: #888;
+    --low:      #d98a3a;  /* 低音 = warm amber */
+    --mid:      #6cc06c;  /* 中音 = green   */
+    --high:     #5db6d6;  /* 高音 = cyan    */
+    --accent:   #d98a3a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%;
+    background: radial-gradient(120% 90% at 50% -10%, #16161a 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { display: flex; flex-direction: column; align-items: center; min-height: 100%; padding: 24px 16px 40px; }
+
+  h1 { font-size: 15px; letter-spacing: .35em; font-weight: 600; margin: 4px 0 2px; text-transform: uppercase; }
+  .sub { font-size: 11px; color: var(--text-dim); letter-spacing: .12em; margin-bottom: 22px; }
+
+  /* ---- turntable visual ---- */
+  .deck { position: relative; width: 280px; height: 280px; margin-bottom: 26px; }
+  .disc {
+    position: absolute; inset: 0; border-radius: 50%;
+    background:
+      repeating-radial-gradient(circle at 50% 50%, #0c0c0e 0px, #161618 1px, #0c0c0e 2px, #131315 3px),
+      radial-gradient(circle at 50% 50%, #1a1a1d 0 30%, #0a0a0b 31% 100%);
+    box-shadow: 0 18px 50px rgba(0,0,0,.7), inset 0 0 40px rgba(0,0,0,.8);
+    animation: spin 1.8s linear infinite;
+    animation-play-state: paused;
+  }
+  .disc.spinning { animation-play-state: running; }
+  .label {
+    position: absolute; left: 50%; top: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px;
+    border-radius: 50%; background: radial-gradient(circle at 50% 40%, var(--accent), #8a4f17);
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    box-shadow: inset 0 0 14px rgba(0,0,0,.4); transition: background .4s;
+  }
+  .label b { font-size: 11px; letter-spacing: .25em; color: #1a1208; }
+  .label span { font-size: 8px; letter-spacing: .15em; color: #3a2a14; margin-top: 3px; }
+  .spindle { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #ddd; box-shadow: 0 0 6px rgba(0,0,0,.8); }
+  .tonearm {
+    position: absolute; right: -6px; top: 24px; width: 130px; height: 14px;
+    transform-origin: right 7px; transform: rotate(28deg); transition: transform .9s cubic-bezier(.4,0,.2,1);
+  }
+  .tonearm.down { transform: rotate(13deg); }
+  .tonearm .arm { position: absolute; right: 6px; top: 5px; width: 120px; height: 4px; background: linear-gradient(#9a9a9e, #5a5a5e); border-radius: 3px; }
+  .tonearm .pivot { position: absolute; right: 0; top: 0; width: 16px; height: 16px; border-radius: 50%; background: #6a6a6e; }
+  .tonearm .head { position: absolute; left: 0; top: 1px; width: 14px; height: 12px; background: #2a2a2e; border-radius: 2px; }
+  canvas#spark { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+
+  /* ---- power button ---- */
+  .power {
+    appearance: none; border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    font: inherit; font-size: 13px; letter-spacing: .15em; padding: 12px 30px; border-radius: 30px;
+    cursor: pointer; margin-bottom: 26px; transition: .2s; min-width: 180px;
+  }
+  .power:hover { border-color: var(--accent); }
+  .power.on { background: var(--accent); color: #120c04; border-color: var(--accent); font-weight: 600; }
+
+  /* ---- controls ---- */
+  .controls { width: 100%; max-width: 460px; }
+  .row { display: flex; align-items: center; gap: 12px; margin: 13px 0; }
+  .row label { width: 96px; font-size: 12px; flex-shrink: 0; }
+  .row label small { display: block; color: var(--text-dim); font-size: 10px; letter-spacing: .04em; }
+  .row .val { width: 30px; text-align: right; font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 4px; border-radius: 4px; background: #2a2a30; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--text); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: none; border-radius: 50%; background: var(--text); cursor: pointer; }
+  .r-low::-webkit-slider-thumb { background: var(--low); }   .r-low::-moz-range-thumb { background: var(--low); }
+  .r-mid::-webkit-slider-thumb { background: var(--mid); }   .r-mid::-moz-range-thumb { background: var(--mid); }
+  .r-high::-webkit-slider-thumb{ background: var(--high); }  .r-high::-moz-range-thumb{ background: var(--high); }
+
+  .sep { height: 1px; background: var(--border); margin: 18px 0 6px; }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 8px; }
+  .presets button, .toggle {
+    appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text-dim);
+    font: inherit; font-size: 11px; padding: 7px 13px; border-radius: 8px; cursor: pointer; transition: .15s;
+  }
+  .presets button:hover, .toggle:hover { color: var(--text); border-color: #444; }
+  .presets button.active { color: var(--accent); border-color: var(--accent); }
+  .toggle.on { color: var(--accent); border-color: var(--accent); }
+  .footer { font-size: 10px; color: #555; margin-top: 22px; text-align: center; line-height: 1.7; max-width: 460px; }
+  .footer code { color: #777; }
+</style>
+</head>
+<body>
+  <h1>V I N Y L</h1>
+  <div class="sub">procedural crackle &middot; 3層アンビエントノイズ生成器</div>
+
+  <div class="deck">
+    <div class="disc" id="disc">
+      <div class="label" id="label"><b>SCIRE</b><span>33⅓ RPM</span></div>
+    </div>
+    <div class="spindle"></div>
+    <canvas id="spark" width="280" height="280"></canvas>
+    <div class="tonearm" id="arm">
+      <div class="pivot"></div><div class="arm"></div><div class="head"></div>
+    </div>
+  </div>
+
+  <button class="power" id="power">▷ NEEDLE DROP</button>
+
+  <div class="controls">
+    <div class="row">
+      <label>マスター<small>master</small></label>
+      <input type="range" id="master" min="0" max="100" value="70">
+      <span class="val" id="master-v">70</span>
+    </div>
+    <div class="sep"></div>
+
+    <div class="row">
+      <label style="color:var(--low)">低音部<small>ランブル / rumble</small></label>
+      <input type="range" class="r-low" id="low" min="0" max="100" value="55">
+      <span class="val" id="low-v">55</span>
+    </div>
+    <div class="row">
+      <label style="color:var(--mid)">中音域<small>ハム・サーフェス・パチパチ</small></label>
+      <input type="range" class="r-mid" id="mid" min="0" max="100" value="50">
+      <span class="val" id="mid-v">50</span>
+    </div>
+    <div class="row">
+      <label style="color:var(--high)">高音<small>ヒス・クラックル / チリチリ</small></label>
+      <input type="range" class="r-high" id="high" min="0" max="100" value="60">
+      <span class="val" id="high-v">60</span>
+    </div>
+
+    <div class="sep"></div>
+    <div class="row">
+      <label>あたたかみ<small>warmth / tone</small></label>
+      <input type="range" id="warmth" min="0" max="100" value="55">
+      <span class="val" id="warmth-v">55</span>
+    </div>
+    <div class="row">
+      <label>空間<small>space / reverb</small></label>
+      <input type="range" id="space" min="0" max="100" value="35">
+      <span class="val" id="space-v">35</span>
+    </div>
+    <div class="row">
+      <label>ゆらぎ<small>wow &amp; flutter</small></label>
+      <input type="range" id="wow" min="0" max="100" value="40">
+      <span class="val" id="wow-v">40</span>
+    </div>
+
+    <div class="presets" id="presets">
+      <button data-p="clean">クリーン</button>
+      <button data-p="dusty" class="active">埃っぽい</button>
+      <button data-p="worn">年代物</button>
+      <button data-p="ambient">深いアンビエント</button>
+      <button class="toggle" id="humToggle">HUM 50Hz</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    サンプル音源は一切使用していません。すべて <code>AudioWorklet</code> と
+    フィルタで手続き的に生成・無限ループしています。<br>
+    低音=ブラウンノイズ→LPF / 中音=ピンクノイズ＋ハム＋ポップ / 高音=ホワイトノイズ→HPF＋クラックル。
+  </div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   AudioWorklet processor (procedural impulse generator)
+   毎サンプル確率的にインパルス（クリック/ポップ）を生成し続ける。
+   サンプル音源なしで永続的にクラックルを供給するコア。
+   ============================================================ */
+const workletCode = `
+class CrackleProcessor extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [
+      { name: 'density', defaultValue: 400, minValue: 0, maxValue: 40000, automationRate: 'k-rate' },
+      { name: 'decay',   defaultValue: 0.55, minValue: 0.0, maxValue: 0.9995, automationRate: 'k-rate' },
+      { name: 'amp',     defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'bigProb', defaultValue: 0.015, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+    ];
+  }
+  constructor() { super(); this.y = 0; this.d = 0.55; }
+  process(inputs, outputs, params) {
+    const out = outputs[0][0];
+    if (!out) return true;
+    const sr = sampleRate;
+    const density = params.density[0];
+    const baseDecay = params.decay[0];
+    const amp = params.amp[0];
+    const bigProb = params.bigProb[0];
+    const p = density / sr;            // 1サンプルあたりの発火確率
+    for (let i = 0; i < out.length; i++) {
+      if (Math.random() < p) {
+        let a = Math.random(); a = a * a;          // 小さいクリックに偏らせる
+        if (Math.random() < bigProb) a = 0.6 + 0.4 * Math.random();  // たまに大きなパチッ
+        this.y = (Math.random() < 0.5 ? -1 : 1) * a;
+        // クリックごとに減衰を少し散らして単調さを消す
+        this.d = baseDecay + (Math.random() - 0.5) * 0.05 * (1 - baseDecay);
+      }
+      out[i] = this.y * amp;
+      this.y *= this.d;
+      if (this.y < 1e-6 && this.y > -1e-6) this.y = 0;
+    }
+    return true;
+  }
+}
+registerProcessor('crackle-processor', CrackleProcessor);
+`;
+
+/* ============================================================
+   State
+   ============================================================ */
+let ctx = null, started = false, useWorklet = true;
+let nodes = {};            // long-lived graph references
+let humFreq = 50;
+let raf = 0;
+
+const $ = id => document.getElementById(id);
+const clamp01 = x => Math.max(0, Math.min(1, x));
+
+/* ---------- noise buffer generators ---------- */
+function whiteBuffer(seconds) {
+  const len = (ctx.sampleRate * seconds) | 0;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+function pinkBuffer(seconds) {
+  const len = (ctx.sampleRate * seconds) | 0;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;     // Paul Kellet pink filter
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    b0 = 0.99886*b0 + w*0.0555179; b1 = 0.99332*b1 + w*0.0750759;
+    b2 = 0.96900*b2 + w*0.1538520; b3 = 0.86650*b3 + w*0.3104856;
+    b4 = 0.55000*b4 + w*0.5329522; b5 = -0.7616*b5 - w*0.0168980;
+    d[i] = (b0+b1+b2+b3+b4+b5+b6+w*0.5362) * 0.11;
+    b6 = w * 0.115926;
+  }
+  return buf;
+}
+function brownBuffer(seconds) {
+  const len = (ctx.sampleRate * seconds) | 0;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    last = (last + 0.02 * w) / 1.02;
+    d[i] = last * 3.5;
+  }
+  return buf;
+}
+function reverbIR(seconds, decay) {
+  const len = (ctx.sampleRate * seconds) | 0;
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decay);
+  }
+  return ir;
+}
+function loopSource(buf) {
+  const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; return s;
+}
+
+/* ---------- ScriptProcessor fallback (same algorithm) ---------- */
+function makeCrackleFallback(density, decay, amp, bigProb) {
+  const node = ctx.createScriptProcessor(1024, 0, 1);
+  let y = 0, d = decay;
+  const sr = ctx.sampleRate;
+  node._params = { density, decay, amp, bigProb };
+  node.onaudioprocess = e => {
+    const out = e.outputBuffer.getChannelData(0);
+    const pr = node._params;
+    const p = pr.density / sr;
+    for (let i = 0; i < out.length; i++) {
+      if (Math.random() < p) {
+        let a = Math.random(); a *= a;
+        if (Math.random() < pr.bigProb) a = 0.6 + 0.4 * Math.random();
+        y = (Math.random() < 0.5 ? -1 : 1) * a;
+        d = pr.decay + (Math.random() - 0.5) * 0.05 * (1 - pr.decay);
+      }
+      out[i] = y * pr.amp;
+      y *= d;
+    }
+  };
+  // 統一API: .set(name, value)
+  node.set = (name, value) => { node._params[name] = value; };
+  return node;
+}
+
+/* ---------- build the full graph ---------- */
+async function build() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  try {
+    const url = URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }));
+    await ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    useWorklet = true;
+  } catch (err) {
+    useWorklet = false;
+    console.warn('AudioWorklet unavailable, falling back to ScriptProcessor', err);
+  }
+
+  const N = nodes;
+
+  /* ---- master / output chain ---- */
+  N.master   = ctx.createGain();    N.master.gain.value = 0.0;       // faded in on start
+  N.warmth   = ctx.createBiquadFilter(); N.warmth.type = 'lowpass';  N.warmth.frequency.value = 6500; N.warmth.Q.value = 0.4;
+  N.dry      = ctx.createGain();    N.dry.gain.value = 1.0;
+  N.wet      = ctx.createGain();    N.wet.gain.value = 0.35;
+  N.reverb   = ctx.createConvolver(); N.reverb.buffer = reverbIR(2.6, 2.5);
+  N.pre      = ctx.createGain();    N.pre.gain.value = 1.0;
+
+  N.pre.connect(N.warmth);
+  N.warmth.connect(N.dry);
+  N.warmth.connect(N.reverb); N.reverb.connect(N.wet);
+  N.dry.connect(N.master);
+  N.wet.connect(N.master);
+
+  N.analyser = ctx.createAnalyser(); N.analyser.fftSize = 1024;
+  N.master.connect(N.analyser);
+  N.analyser.connect(ctx.destination);
+
+  /* ---- three layer buses ---- */
+  N.lowBus  = ctx.createGain();
+  N.midBus  = ctx.createGain();
+  N.highBus = ctx.createGain();
+  N.lowBus.connect(N.pre); N.midBus.connect(N.pre); N.highBus.connect(N.pre);
+
+  /* ===== LOW : ランブル ===== */
+  N.rumbleSrc = loopSource(brownBuffer(6));
+  N.rumbleLP  = ctx.createBiquadFilter(); N.rumbleLP.type='lowpass'; N.rumbleLP.frequency.value=95; N.rumbleLP.Q.value=0.7;
+  N.rumbleGain= ctx.createGain(); N.rumbleGain.gain.value=1.0;
+  N.rumbleSrc.connect(N.rumbleLP); N.rumbleLP.connect(N.rumbleGain); N.rumbleGain.connect(N.lowBus);
+  N.rumbleSrc.start();
+
+  /* ===== MID : surface + hum + pop ===== */
+  // surface bed
+  N.surfSrc = loopSource(pinkBuffer(6));
+  N.surfBP  = ctx.createBiquadFilter(); N.surfBP.type='bandpass'; N.surfBP.frequency.value=900; N.surfBP.Q.value=0.5;
+  N.surfGain= ctx.createGain(); N.surfGain.gain.value=0.5;
+  N.surfSrc.connect(N.surfBP); N.surfBP.connect(N.surfGain); N.surfGain.connect(N.midBus);
+  N.surfSrc.start();
+  // hum (50/60Hz + 2nd harmonic)
+  N.hum1 = ctx.createOscillator(); N.hum1.frequency.value = humFreq;
+  N.hum2 = ctx.createOscillator(); N.hum2.frequency.value = humFreq*2;
+  N.humG = ctx.createGain(); N.humG.gain.value = 0.04;
+  N.hum1.connect(N.humG); N.hum2.connect(N.humG); N.humG.connect(N.midBus);
+  N.hum1.start(); N.hum2.start();
+  // pops (mid-frequency clicks)
+  N.popBP = ctx.createBiquadFilter(); N.popBP.type='bandpass'; N.popBP.frequency.value=750; N.popBP.Q.value=1.1;
+  N.popGain = ctx.createGain(); N.popGain.gain.value = 0.9;
+  N.popSrc = useWorklet
+    ? new AudioWorkletNode(ctx, 'crackle-processor', { parameterData:{ density:9, decay:0.93, amp:0.9, bigProb:0.5 } })
+    : makeCrackleFallback(9, 0.93, 0.9, 0.5);
+  N.popSrc.connect(N.popBP); N.popBP.connect(N.popGain); N.popGain.connect(N.midBus);
+
+  /* ===== HIGH : hiss + crackle ===== */
+  N.hissSrc = loopSource(whiteBuffer(6));
+  N.hissHP  = ctx.createBiquadFilter(); N.hissHP.type='highpass'; N.hissHP.frequency.value=4500; N.hissHP.Q.value=0.5;
+  N.hissGain= ctx.createGain(); N.hissGain.gain.value=0.18;
+  N.hissSrc.connect(N.hissHP); N.hissHP.connect(N.hissGain); N.hissGain.connect(N.highBus);
+  N.hissSrc.start();
+  // crackle (dense fine high-frequency ticks)
+  N.crkHP = ctx.createBiquadFilter(); N.crkHP.type='highpass'; N.crkHP.frequency.value=3000; N.crkHP.Q.value=0.4;
+  N.crkGain = ctx.createGain(); N.crkGain.gain.value = 0.7;
+  N.crkSrc = useWorklet
+    ? new AudioWorkletNode(ctx, 'crackle-processor', { parameterData:{ density:700, decay:0.5, amp:0.6, bigProb:0.01 } })
+    : makeCrackleFallback(700, 0.5, 0.6, 0.01);
+  N.crkSrc.connect(N.crkHP); N.crkHP.connect(N.crkGain); N.crkGain.connect(N.highBus);
+
+  /* ===== modulation : wow/flutter + slow breathing ===== */
+  // wow → playbackRate of beds + hum detune
+  N.wowLFO = ctx.createOscillator(); N.wowLFO.frequency.value = 0.6;       // ~0.6Hz wobble
+  N.wowDepth = ctx.createGain(); N.wowDepth.gain.value = 0.0;
+  N.wowLFO.connect(N.wowDepth);
+  N.wowDepth.connect(N.rumbleSrc.playbackRate);
+  N.wowDepth.connect(N.surfSrc.playbackRate);
+  N.wowLFO.start();
+  // slow breathing → crackle density (evolves over time so it never feels static)
+  N.breatheLFO = ctx.createOscillator(); N.breatheLFO.frequency.value = 0.035;
+  N.breatheDepth = ctx.createGain(); N.breatheDepth.gain.value = 280;
+  N.breatheLFO.connect(N.breatheDepth);
+  if (useWorklet) N.breatheDepth.connect(N.crkSrc.parameters.get('density'));
+  N.breatheLFO.start();
+}
+
+/* ---------- helpers to update params live ---------- */
+function setDensity(node, v) {                 // unify worklet / fallback
+  if (useWorklet) node.parameters.get('density').value = v;
+  else node.set('density', v);
+}
+
+/* ---------- apply UI values ---------- */
+function applyUI() {
+  if (!ctx) return;
+  const N = nodes, t = ctx.currentTime;
+  const v = id => +$(id).value / 100;
+  N.master.gain.setTargetAtTime(v('master') * 0.9, t, 0.05);
+  N.lowBus.gain.setTargetAtTime(v('low') * 1.1, t, 0.08);
+  N.midBus.gain.setTargetAtTime(v('mid') * 1.0, t, 0.08);
+  N.highBus.gain.setTargetAtTime(v('high') * 0.9, t, 0.08);
+  // warmth: 0 → dark 1.8kHz, 100 → bright 14kHz (log)
+  const warm = v('warmth');
+  N.warmth.frequency.setTargetAtTime(1800 * Math.pow(14000/1800, warm), t, 0.1);
+  N.wet.gain.setTargetAtTime(v('space') * 0.6, t, 0.1);
+  // wow depth scales playbackRate deviation
+  N.wowDepth.gain.setTargetAtTime(v('wow') * 0.012, t, 0.1);
+  N.wowLFO.frequency.setTargetAtTime(0.4 + v('wow') * 0.8, t, 0.1);
+}
+
+/* ---------- presets ---------- */
+const PRESETS = {
+  clean:   { low:25, mid:30, high:35, warmth:70, space:20, wow:15 },
+  dusty:   { low:55, mid:50, high:60, warmth:55, space:35, wow:40 },
+  worn:    { low:70, mid:65, high:75, warmth:38, space:45, wow:65 },
+  ambient: { low:60, mid:40, high:45, warmth:48, space:80, wow:55 },
+};
+function applyPreset(name) {
+  const p = PRESETS[name]; if (!p) return;
+  for (const k in p) { $(k).value = p[k]; $(k+'-v').textContent = p[k]; }
+  applyUI();
+  document.querySelectorAll('#presets button[data-p]').forEach(b =>
+    b.classList.toggle('active', b.dataset.p === name));
+}
+
+/* ---------- visual : crackle sparks reacting to high-band energy ---------- */
+const cv = $('spark'), cx = cv.getContext('2d');
+function draw() {
+  raf = requestAnimationFrame(draw);
+  cx.clearRect(0, 0, 280, 280);
+  if (!ctx || !nodes.analyser) return;
+  const a = nodes.analyser, bins = a.frequencyBinCount;
+  const data = new Uint8Array(bins);
+  a.getByteFrequencyData(data);
+  // high-band average → spark intensity
+  let hi = 0; for (let i = (bins*0.5)|0; i < bins; i++) hi += data[i];
+  hi /= (bins*0.5);
+  const n = (hi / 12) | 0;
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const r = 50 + Math.random() * 88;
+    const x = 140 + Math.cos(ang) * r, y = 140 + Math.sin(ang) * r;
+    const s = Math.random() * 1.6 + 0.3;
+    cx.fillStyle = `rgba(${180+Math.random()*60|0},${200+Math.random()*40|0},255,${Math.random()*0.5+0.2})`;
+    cx.fillRect(x, y, s, s);
+  }
+}
+
+/* ============================================================
+   start / stop
+   ============================================================ */
+async function start() {
+  if (!started) {
+    await build();
+    applyUI();
+    started = true;
+  }
+  await ctx.resume();
+  nodes.master.gain.setTargetAtTime((+$('master').value/100) * 0.9, ctx.currentTime, 0.6);
+  $('disc').classList.add('spinning');
+  $('arm').classList.add('down');
+  $('label').style.background = 'radial-gradient(circle at 50% 40%, var(--accent), #8a4f17)';
+  const btn = $('power'); btn.classList.add('on'); btn.textContent = '■ STOP';
+  if (!raf) draw();
+}
+async function stop() {
+  if (!ctx) return;
+  nodes.master.gain.setTargetAtTime(0, ctx.currentTime, 0.25);
+  setTimeout(() => ctx.suspend(), 500);
+  $('disc').classList.remove('spinning');
+  $('arm').classList.remove('down');
+  const btn = $('power'); btn.classList.remove('on'); btn.textContent = '▷ NEEDLE DROP';
+}
+
+/* ============================================================
+   wiring
+   ============================================================ */
+$('power').addEventListener('click', () => {
+  if (started && ctx && ctx.state === 'running') stop(); else start();
+});
+
+['master','low','mid','high','warmth','space','wow'].forEach(id => {
+  const el = $(id);
+  el.addEventListener('input', () => { $(id+'-v').textContent = el.value; applyUI(); });
+});
+
+document.querySelectorAll('#presets button[data-p]').forEach(b =>
+  b.addEventListener('click', () => applyPreset(b.dataset.p)));
+
+$('humToggle').addEventListener('click', () => {
+  humFreq = humFreq === 50 ? 60 : 50;
+  $('humToggle').textContent = 'HUM ' + humFreq + 'Hz';
+  $('humToggle').classList.toggle('on', humFreq === 60);
+  if (nodes.hum1) {
+    nodes.hum1.frequency.setTargetAtTime(humFreq, ctx.currentTime, 0.05);
+    nodes.hum2.frequency.setTargetAtTime(humFreq*2, ctx.currentTime, 0.05);
+  }
+});
+
+// reflect initial preset selection
+applyPreset('dusty');
+</script>
+</body>
+</html>
