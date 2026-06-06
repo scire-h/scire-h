@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a0a0a" />
-<title>VINYL — procedural crackle / ambient noise</title>
+<title>VINYL — 回転体ノイズ / cyclostationary record noise</title>
 <style>
   :root {
     --bg:       #0b0b0d;
@@ -17,6 +17,7 @@
     --low:      #d98a3a;  /* 低音 = warm amber */
     --mid:      #6cc06c;  /* 中音 = green   */
     --high:     #5db6d6;  /* 高音 = cyan    */
+    --rot:      #c66cc0;  /* 回転 = magenta */
     --accent:   #d98a3a;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -30,10 +31,11 @@
   body { display: flex; flex-direction: column; align-items: center; min-height: 100%; padding: 24px 16px 40px; }
 
   h1 { font-size: 15px; letter-spacing: .35em; font-weight: 600; margin: 4px 0 2px; text-transform: uppercase; }
-  .sub { font-size: 11px; color: var(--text-dim); letter-spacing: .12em; margin-bottom: 22px; }
+  .sub { font-size: 11px; color: var(--text-dim); letter-spacing: .1em; margin-bottom: 6px; }
+  .pulse-readout { font-size: 10px; color: var(--rot); letter-spacing: .12em; margin-bottom: 18px; height: 12px; }
 
   /* ---- turntable visual ---- */
-  .deck { position: relative; width: 280px; height: 280px; margin-bottom: 26px; }
+  .deck { position: relative; width: 280px; height: 280px; margin-bottom: 22px; }
   .disc {
     position: absolute; inset: 0; border-radius: 50%;
     background:
@@ -43,7 +45,10 @@
     animation: spin 1.8s linear infinite;
     animation-play-state: paused;
   }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .disc.spinning { animation-play-state: running; }
+  /* 偏心マーカー: ディスク上の固定点。1周ごとに「欠陥」が来る位置の目印 */
+  .defect-mark { position: absolute; top: 14px; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--rot); box-shadow: 0 0 6px var(--rot); }
   .label {
     position: absolute; left: 50%; top: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px;
     border-radius: 50%; background: radial-gradient(circle at 50% 40%, var(--accent), #8a4f17);
@@ -52,31 +57,38 @@
   }
   .label b { font-size: 11px; letter-spacing: .25em; color: #1a1208; }
   .label span { font-size: 8px; letter-spacing: .15em; color: #3a2a14; margin-top: 3px; }
-  .spindle { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #ddd; box-shadow: 0 0 6px rgba(0,0,0,.8); }
+  .spindle { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #ddd; box-shadow: 0 0 6px rgba(0,0,0,.8); z-index: 3; }
+  /* 1周ごとの心拍フラッシュ（1.8秒） */
+  .heartbeat {
+    position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--rot);
+    opacity: 0; pointer-events: none;
+  }
+  .heartbeat.beat { animation: hb .5s ease-out; }
+  @keyframes hb { 0% { opacity: .8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.08); } }
   .tonearm {
     position: absolute; right: -6px; top: 24px; width: 130px; height: 14px;
-    transform-origin: right 7px; transform: rotate(28deg); transition: transform .9s cubic-bezier(.4,0,.2,1);
+    transform-origin: right 7px; transform: rotate(28deg); transition: transform .9s cubic-bezier(.4,0,.2,1); z-index: 4;
   }
   .tonearm.down { transform: rotate(13deg); }
   .tonearm .arm { position: absolute; right: 6px; top: 5px; width: 120px; height: 4px; background: linear-gradient(#9a9a9e, #5a5a5e); border-radius: 3px; }
   .tonearm .pivot { position: absolute; right: 0; top: 0; width: 16px; height: 16px; border-radius: 50%; background: #6a6a6e; }
   .tonearm .head { position: absolute; left: 0; top: 1px; width: 14px; height: 12px; background: #2a2a2e; border-radius: 2px; }
-  canvas#spark { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+  canvas#spark { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 2; }
 
   /* ---- power button ---- */
   .power {
     appearance: none; border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
     font: inherit; font-size: 13px; letter-spacing: .15em; padding: 12px 30px; border-radius: 30px;
-    cursor: pointer; margin-bottom: 26px; transition: .2s; min-width: 180px;
+    cursor: pointer; margin-bottom: 24px; transition: .2s; min-width: 180px;
   }
   .power:hover { border-color: var(--accent); }
   .power.on { background: var(--accent); color: #120c04; border-color: var(--accent); font-weight: 600; }
 
   /* ---- controls ---- */
   .controls { width: 100%; max-width: 460px; }
-  .row { display: flex; align-items: center; gap: 12px; margin: 13px 0; }
-  .row label { width: 96px; font-size: 12px; flex-shrink: 0; }
-  .row label small { display: block; color: var(--text-dim); font-size: 10px; letter-spacing: .04em; }
+  .row { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+  .row label { width: 104px; font-size: 12px; flex-shrink: 0; }
+  .row label small { display: block; color: var(--text-dim); font-size: 10px; letter-spacing: .03em; }
   .row .val { width: 30px; text-align: right; font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
   input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 4px; border-radius: 4px; background: #2a2a30; outline: none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--text); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
@@ -84,29 +96,35 @@
   .r-low::-webkit-slider-thumb { background: var(--low); }   .r-low::-moz-range-thumb { background: var(--low); }
   .r-mid::-webkit-slider-thumb { background: var(--mid); }   .r-mid::-moz-range-thumb { background: var(--mid); }
   .r-high::-webkit-slider-thumb{ background: var(--high); }  .r-high::-moz-range-thumb{ background: var(--high); }
+  .r-rot::-webkit-slider-thumb { background: var(--rot); }   .r-rot::-moz-range-thumb { background: var(--rot); }
 
-  .sep { height: 1px; background: var(--border); margin: 18px 0 6px; }
+  .sep { height: 1px; background: var(--border); margin: 16px 0 4px; }
+  .sep-label { font-size: 9px; color: #555; letter-spacing: .2em; text-transform: uppercase; margin: 14px 0 2px; }
 
-  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 8px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 8px; }
   .presets button, .toggle {
     appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text-dim);
     font: inherit; font-size: 11px; padding: 7px 13px; border-radius: 8px; cursor: pointer; transition: .15s;
   }
   .presets button:hover, .toggle:hover { color: var(--text); border-color: #444; }
   .presets button.active { color: var(--accent); border-color: var(--accent); }
-  .toggle.on { color: var(--accent); border-color: var(--accent); }
+  .toggle.on { color: var(--rot); border-color: var(--rot); }
   .footer { font-size: 10px; color: #555; margin-top: 22px; text-align: center; line-height: 1.7; max-width: 460px; }
   .footer code { color: #777; }
+  .footer b { color: var(--rot); font-weight: 600; }
 </style>
 </head>
 <body>
   <h1>V I N Y L</h1>
-  <div class="sub">procedural crackle &middot; 3層アンビエントノイズ生成器</div>
+  <div class="sub">回転体ノイズ &middot; cyclostationary record-noise synthesiser</div>
+  <div class="pulse-readout" id="readout">33⅓ rpm &middot; 周期 1.80 s &middot; f<sub>rot</sub> 0.556 Hz</div>
 
   <div class="deck">
     <div class="disc" id="disc">
+      <div class="defect-mark"></div>
       <div class="label" id="label"><b>SCIRE</b><span>33⅓ RPM</span></div>
     </div>
+    <div class="heartbeat" id="heartbeat"></div>
     <div class="spindle"></div>
     <canvas id="spark" width="280" height="280"></canvas>
     <div class="tonearm" id="arm">
@@ -122,8 +140,8 @@
       <input type="range" id="master" min="0" max="100" value="70">
       <span class="val" id="master-v">70</span>
     </div>
-    <div class="sep"></div>
 
+    <div class="sep-label">層 / frequency layers</div>
     <div class="row">
       <label style="color:var(--low)">低音部<small>ランブル / rumble</small></label>
       <input type="range" class="r-low" id="low" min="0" max="100" value="55">
@@ -140,7 +158,24 @@
       <span class="val" id="high-v">60</span>
     </div>
 
-    <div class="sep"></div>
+    <div class="sep-label">回転 / rotation — 周期定常成分</div>
+    <div class="row">
+      <label style="color:var(--rot)">周回ノイズ<small>1.8秒ごとの周期欠陥</small></label>
+      <input type="range" class="r-rot" id="rot" min="0" max="100" value="60">
+      <span class="val" id="rot-v">60</span>
+    </div>
+    <div class="row">
+      <label style="color:var(--rot)">偏心ワウ<small>eccentricity wow</small></label>
+      <input type="range" class="r-rot" id="wow" min="0" max="100" value="40">
+      <span class="val" id="wow-v">40</span>
+    </div>
+    <div class="row">
+      <label style="color:var(--rot)">反り<small>warp / woofer pump</small></label>
+      <input type="range" class="r-rot" id="warp" min="0" max="100" value="30">
+      <span class="val" id="warp-v">30</span>
+    </div>
+
+    <div class="sep-label">音色 / tone &amp; space</div>
     <div class="row">
       <label>あたたかみ<small>warmth / tone</small></label>
       <input type="range" id="warmth" min="0" max="100" value="55">
@@ -151,34 +186,35 @@
       <input type="range" id="space" min="0" max="100" value="35">
       <span class="val" id="space-v">35</span>
     </div>
-    <div class="row">
-      <label>ゆらぎ<small>wow &amp; flutter</small></label>
-      <input type="range" id="wow" min="0" max="100" value="40">
-      <span class="val" id="wow-v">40</span>
-    </div>
 
     <div class="presets" id="presets">
       <button data-p="clean">クリーン</button>
       <button data-p="dusty" class="active">埃っぽい</button>
       <button data-p="worn">年代物</button>
       <button data-p="ambient">深いアンビエント</button>
+    </div>
+    <div class="presets">
+      <button class="toggle on" id="rpmToggle">33⅓ RPM</button>
       <button class="toggle" id="humToggle">HUM 50Hz</button>
+      <button class="toggle" id="wipeBtn">静電気を拭く</button>
     </div>
   </div>
 
   <div class="footer">
-    サンプル音源は一切使用していません。すべて <code>AudioWorklet</code> と
-    フィルタで手続き的に生成・無限ループしています。<br>
-    低音=ブラウンノイズ→LPF / 中音=ピンクノイズ＋ハム＋ポップ / 高音=ホワイトノイズ→HPF＋クラックル。
+    サンプル音源なし。すべて <code>AudioWorklet</code> で手続き的に生成。<br>
+    定常なクラックルの底鳴りに加え、<b>回転に位相同期した周期欠陥（1.8秒ごとに必ず戻る同じパチッ）</b>、
+    偏心ワウ・反りポンプ・摩擦電気によるノイズ増殖を重ね、
+    <b>サイクロステーショナリ（周期定常）</b>なレコード雑音をモデル化しています。
   </div>
 
 <script>
 "use strict";
 
 /* ============================================================
-   AudioWorklet processor (procedural impulse generator)
-   毎サンプル確率的にインパルス（クリック/ポップ）を生成し続ける。
-   サンプル音源なしで永続的にクラックルを供給するコア。
+   AudioWorklet processors
+   ・crackle-processor : 定常な確率的クリック（底鳴り）
+   ・rotor-processor   : 回転位相に同期した周期欠陥（盤の指紋）
+   どちらもサンプル音源なし・オーディオスレッドで生成し続ける。
    ============================================================ */
 const workletCode = `
 class CrackleProcessor extends AudioWorkletProcessor {
@@ -199,13 +235,12 @@ class CrackleProcessor extends AudioWorkletProcessor {
     const baseDecay = params.decay[0];
     const amp = params.amp[0];
     const bigProb = params.bigProb[0];
-    const p = density / sr;            // 1サンプルあたりの発火確率
+    const p = density / sr;
     for (let i = 0; i < out.length; i++) {
       if (Math.random() < p) {
-        let a = Math.random(); a = a * a;          // 小さいクリックに偏らせる
-        if (Math.random() < bigProb) a = 0.6 + 0.4 * Math.random();  // たまに大きなパチッ
+        let a = Math.random(); a = a * a;
+        if (Math.random() < bigProb) a = 0.6 + 0.4 * Math.random();
         this.y = (Math.random() < 0.5 ? -1 : 1) * a;
-        // クリックごとに減衰を少し散らして単調さを消す
         this.d = baseDecay + (Math.random() - 0.5) * 0.05 * (1 - baseDecay);
       }
       out[i] = this.y * amp;
@@ -216,18 +251,66 @@ class CrackleProcessor extends AudioWorkletProcessor {
   }
 }
 registerProcessor('crackle-processor', CrackleProcessor);
+
+// 回転位相に同期した周期欠陥。盤一枚ごとの「指紋」を毎周くり返す。
+class RotorProcessor extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [
+      { name: 'rotHz', defaultValue: 0.5556, minValue: 0.01, maxValue: 5, automationRate: 'k-rate' },
+      { name: 'amp',   defaultValue: 0.8, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+    ];
+  }
+  constructor() {
+    super();
+    this.phase = 0; this.defects = []; this.y = 0; this.d = 0.9;
+    this.port.onmessage = (e) => { if (e.data && e.data.defects) this.defects = e.data.defects; };
+  }
+  process(inputs, outputs, params) {
+    const out = outputs[0][0];
+    if (!out) return true;
+    const sr = sampleRate;
+    const inc = params.rotHz[0] / sr;     // 1サンプルあたりの回転位相増分
+    const amp = params.amp[0];
+    const defs = this.defects;
+    for (let i = 0; i < out.length; i++) {
+      const prev = this.phase;
+      let ph = prev + inc; if (ph >= 1) ph -= 1;
+      this.phase = ph;
+      // この1サンプルで横切った欠陥位相を発火（1周に1回）
+      for (let k = 0; k < defs.length; k++) {
+        let dd = defs[k].p - prev; if (dd < 0) dd += 1;
+        if (dd < inc) {
+          const f = defs[k];
+          if (Math.random() < f.prob) {                  // たまに欠落させて機械的反復感を消す
+            this.y = f.sign * f.a * (0.7 + 0.6 * Math.random());
+            this.d = f.decay;
+          }
+        }
+      }
+      out[i] = this.y * amp;
+      this.y *= this.d;
+      if (this.y < 1e-6 && this.y > -1e-6) this.y = 0;
+    }
+    return true;
+  }
+}
+registerProcessor('rotor-processor', RotorProcessor);
 `;
 
 /* ============================================================
    State
    ============================================================ */
 let ctx = null, started = false, useWorklet = true;
-let nodes = {};            // long-lived graph references
+let nodes = {};
 let humFreq = 50;
-let raf = 0;
+let rpm = 33.333;
+let raf = 0, pulseTimer = 0, staticTimer = 0;
+let staticLevel = 0;            // 摩擦電気による帯電 → クラックル増殖
+let defects = [];
 
 const $ = id => document.getElementById(id);
-const clamp01 = x => Math.max(0, Math.min(1, x));
+const rotHz = () => rpm / 60;
+const period = () => 60 / rpm;
 
 /* ---------- noise buffer generators ---------- */
 function whiteBuffer(seconds) {
@@ -241,7 +324,7 @@ function pinkBuffer(seconds) {
   const len = (ctx.sampleRate * seconds) | 0;
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
   const d = buf.getChannelData(0);
-  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;     // Paul Kellet pink filter
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
   for (let i = 0; i < len; i++) {
     const w = Math.random() * 2 - 1;
     b0 = 0.99886*b0 + w*0.0555179; b1 = 0.99332*b1 + w*0.0750759;
@@ -277,16 +360,33 @@ function loopSource(buf) {
   const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; return s;
 }
 
-/* ---------- ScriptProcessor fallback (same algorithm) ---------- */
+/* ---------- 盤一枚ぶんの「指紋」: 周期欠陥を生成 ---------- */
+function makeDefects(count) {
+  const arr = [];
+  for (let i = 0; i < count; i++) {
+    let a = Math.random(); a = a * a;            // 小さい欠陥に偏らせる
+    const big = Math.random() < 0.25;            // 1/4 は目立つ傷
+    if (big) a = 0.55 + 0.45 * Math.random();
+    arr.push({
+      p: Math.random(),                          // 回転位相 [0,1)
+      a: 0.2 + 0.8 * a,
+      sign: Math.random() < 0.5 ? -1 : 1,
+      decay: big ? (0.93 + Math.random()*0.04) : (0.4 + Math.random()*0.2), // 傷=長いパチッ / 埃=短いチッ
+      prob: big ? 0.97 : (0.6 + Math.random()*0.35),  // 毎周必ず出るとは限らない
+    });
+  }
+  return arr;
+}
+
+/* ---------- ScriptProcessor fallbacks ---------- */
 function makeCrackleFallback(density, decay, amp, bigProb) {
   const node = ctx.createScriptProcessor(1024, 0, 1);
   let y = 0, d = decay;
   const sr = ctx.sampleRate;
-  node._params = { density, decay, amp, bigProb };
+  node._p = { density, decay, amp, bigProb };
   node.onaudioprocess = e => {
     const out = e.outputBuffer.getChannelData(0);
-    const pr = node._params;
-    const p = pr.density / sr;
+    const pr = node._p, p = pr.density / sr;
     for (let i = 0; i < out.length; i++) {
       if (Math.random() < p) {
         let a = Math.random(); a *= a;
@@ -294,19 +394,48 @@ function makeCrackleFallback(density, decay, amp, bigProb) {
         y = (Math.random() < 0.5 ? -1 : 1) * a;
         d = pr.decay + (Math.random() - 0.5) * 0.05 * (1 - pr.decay);
       }
-      out[i] = y * pr.amp;
-      y *= d;
+      out[i] = y * pr.amp; y *= d;
     }
   };
-  // 統一API: .set(name, value)
-  node.set = (name, value) => { node._params[name] = value; };
+  node.set = (k, v) => { node._p[k] = v; };
+  node.setDefects = () => {};
   return node;
+}
+function makeRotorFallback(rHz, amp) {
+  const node = ctx.createScriptProcessor(1024, 0, 1);
+  let phase = 0, y = 0, d = 0.9;
+  const sr = ctx.sampleRate;
+  node._p = { rotHz: rHz, amp }; node._defects = [];
+  node.onaudioprocess = e => {
+    const out = e.outputBuffer.getChannelData(0);
+    const inc = node._p.rotHz / sr, defs = node._defects, amp2 = node._p.amp;
+    for (let i = 0; i < out.length; i++) {
+      const prev = phase; phase += inc; if (phase >= 1) phase -= 1;
+      for (let k = 0; k < defs.length; k++) {
+        let dd = defs[k].p - prev; if (dd < 0) dd += 1;
+        if (dd < inc && Math.random() < defs[k].prob) {
+          y = defs[k].sign * defs[k].a * (0.7 + 0.6 * Math.random()); d = defs[k].decay;
+        }
+      }
+      out[i] = y * amp2; y *= d;
+    }
+  };
+  node.set = (k, v) => { node._p[k] = v; };
+  node.setDefects = (arr) => { node._defects = arr; };
+  return node;
+}
+
+/* ---------- unified param setters (worklet | fallback) ---------- */
+function setParam(node, name, v) {
+  if (node.parameters) node.parameters.get(name).value = v; else node.set(name, v);
+}
+function setDefects(node, arr) {
+  if (node.port) node.port.postMessage({ defects: arr }); else node.setDefects(arr);
 }
 
 /* ---------- build the full graph ---------- */
 async function build() {
   ctx = new (window.AudioContext || window.webkitAudioContext)();
-
   try {
     const url = URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }));
     await ctx.audioWorklet.addModule(url);
@@ -314,28 +443,23 @@ async function build() {
     useWorklet = true;
   } catch (err) {
     useWorklet = false;
-    console.warn('AudioWorklet unavailable, falling back to ScriptProcessor', err);
+    console.warn('AudioWorklet unavailable → ScriptProcessor fallback', err);
   }
 
   const N = nodes;
 
   /* ---- master / output chain ---- */
-  N.master   = ctx.createGain();    N.master.gain.value = 0.0;       // faded in on start
-  N.warmth   = ctx.createBiquadFilter(); N.warmth.type = 'lowpass';  N.warmth.frequency.value = 6500; N.warmth.Q.value = 0.4;
-  N.dry      = ctx.createGain();    N.dry.gain.value = 1.0;
-  N.wet      = ctx.createGain();    N.wet.gain.value = 0.35;
-  N.reverb   = ctx.createConvolver(); N.reverb.buffer = reverbIR(2.6, 2.5);
-  N.pre      = ctx.createGain();    N.pre.gain.value = 1.0;
-
+  N.master = ctx.createGain();   N.master.gain.value = 0.0;
+  N.warmth = ctx.createBiquadFilter(); N.warmth.type='lowpass'; N.warmth.frequency.value=6500; N.warmth.Q.value=0.4;
+  N.dry    = ctx.createGain();   N.dry.gain.value = 1.0;
+  N.wet    = ctx.createGain();   N.wet.gain.value = 0.35;
+  N.reverb = ctx.createConvolver(); N.reverb.buffer = reverbIR(2.6, 2.5);
+  N.pre    = ctx.createGain();   N.pre.gain.value = 1.0;
   N.pre.connect(N.warmth);
-  N.warmth.connect(N.dry);
-  N.warmth.connect(N.reverb); N.reverb.connect(N.wet);
-  N.dry.connect(N.master);
-  N.wet.connect(N.master);
-
+  N.warmth.connect(N.dry); N.warmth.connect(N.reverb); N.reverb.connect(N.wet);
+  N.dry.connect(N.master); N.wet.connect(N.master);
   N.analyser = ctx.createAnalyser(); N.analyser.fftSize = 1024;
-  N.master.connect(N.analyser);
-  N.analyser.connect(ctx.destination);
+  N.master.connect(N.analyser); N.analyser.connect(ctx.destination);
 
   /* ---- three layer buses ---- */
   N.lowBus  = ctx.createGain();
@@ -350,20 +474,17 @@ async function build() {
   N.rumbleSrc.connect(N.rumbleLP); N.rumbleLP.connect(N.rumbleGain); N.rumbleGain.connect(N.lowBus);
   N.rumbleSrc.start();
 
-  /* ===== MID : surface + hum + pop ===== */
-  // surface bed
+  /* ===== MID : surface + hum + 確率ポップ ===== */
   N.surfSrc = loopSource(pinkBuffer(6));
   N.surfBP  = ctx.createBiquadFilter(); N.surfBP.type='bandpass'; N.surfBP.frequency.value=900; N.surfBP.Q.value=0.5;
   N.surfGain= ctx.createGain(); N.surfGain.gain.value=0.5;
   N.surfSrc.connect(N.surfBP); N.surfBP.connect(N.surfGain); N.surfGain.connect(N.midBus);
   N.surfSrc.start();
-  // hum (50/60Hz + 2nd harmonic)
   N.hum1 = ctx.createOscillator(); N.hum1.frequency.value = humFreq;
   N.hum2 = ctx.createOscillator(); N.hum2.frequency.value = humFreq*2;
   N.humG = ctx.createGain(); N.humG.gain.value = 0.04;
   N.hum1.connect(N.humG); N.hum2.connect(N.humG); N.humG.connect(N.midBus);
   N.hum1.start(); N.hum2.start();
-  // pops (mid-frequency clicks)
   N.popBP = ctx.createBiquadFilter(); N.popBP.type='bandpass'; N.popBP.frequency.value=750; N.popBP.Q.value=1.1;
   N.popGain = ctx.createGain(); N.popGain.gain.value = 0.9;
   N.popSrc = useWorklet
@@ -371,13 +492,12 @@ async function build() {
     : makeCrackleFallback(9, 0.93, 0.9, 0.5);
   N.popSrc.connect(N.popBP); N.popBP.connect(N.popGain); N.popGain.connect(N.midBus);
 
-  /* ===== HIGH : hiss + crackle ===== */
+  /* ===== HIGH : hiss + 定常クラックル ===== */
   N.hissSrc = loopSource(whiteBuffer(6));
   N.hissHP  = ctx.createBiquadFilter(); N.hissHP.type='highpass'; N.hissHP.frequency.value=4500; N.hissHP.Q.value=0.5;
   N.hissGain= ctx.createGain(); N.hissGain.gain.value=0.18;
   N.hissSrc.connect(N.hissHP); N.hissHP.connect(N.hissGain); N.hissGain.connect(N.highBus);
   N.hissSrc.start();
-  // crackle (dense fine high-frequency ticks)
   N.crkHP = ctx.createBiquadFilter(); N.crkHP.type='highpass'; N.crkHP.frequency.value=3000; N.crkHP.Q.value=0.4;
   N.crkGain = ctx.createGain(); N.crkGain.gain.value = 0.7;
   N.crkSrc = useWorklet
@@ -385,26 +505,61 @@ async function build() {
     : makeCrackleFallback(700, 0.5, 0.6, 0.01);
   N.crkSrc.connect(N.crkHP); N.crkHP.connect(N.crkGain); N.crkGain.connect(N.highBus);
 
-  /* ===== modulation : wow/flutter + slow breathing ===== */
-  // wow → playbackRate of beds + hum detune
-  N.wowLFO = ctx.createOscillator(); N.wowLFO.frequency.value = 0.6;       // ~0.6Hz wobble
+  /* ===== ROTATION : 回転位相に同期した周期欠陥（盤の指紋） ===== */
+  if (!defects.length) defects = makeDefects(6);   // プリセットで既に生成済みなら尊重
+  N.rotor = useWorklet
+    ? new AudioWorkletNode(ctx, 'rotor-processor', { parameterData:{ rotHz: rotHz(), amp: 0.85 } })
+    : makeRotorFallback(rotHz(), 0.85);
+  setDefects(N.rotor, defects);
+  // 欠陥クリックを「本体（中域パチッ）」と「先端（高域チッ）」に分配
+  N.rotBody = ctx.createBiquadFilter(); N.rotBody.type='bandpass'; N.rotBody.frequency.value=520; N.rotBody.Q.value=0.9;
+  N.rotTick = ctx.createBiquadFilter(); N.rotTick.type='highpass'; N.rotTick.frequency.value=2500; N.rotTick.Q.value=0.4;
+  N.rotBodyGain = ctx.createGain(); N.rotBodyGain.gain.value = 1.0;
+  N.rotTickGain = ctx.createGain(); N.rotTickGain.gain.value = 0.5;
+  N.rotor.connect(N.rotBody); N.rotBody.connect(N.rotBodyGain); N.rotBodyGain.connect(N.midBus);
+  N.rotor.connect(N.rotTick); N.rotTick.connect(N.rotTickGain); N.rotTickGain.connect(N.highBus);
+
+  /* ===== 偏心ワウ（回転数に同期したピッチ揺れ）+ フラッター ===== */
+  N.wowLFO = ctx.createOscillator(); N.wowLFO.frequency.value = rotHz();   // 0.555Hz = 偏心
   N.wowDepth = ctx.createGain(); N.wowDepth.gain.value = 0.0;
   N.wowLFO.connect(N.wowDepth);
   N.wowDepth.connect(N.rumbleSrc.playbackRate);
   N.wowDepth.connect(N.surfSrc.playbackRate);
   N.wowLFO.start();
-  // slow breathing → crackle density (evolves over time so it never feels static)
+  N.flutLFO = ctx.createOscillator(); N.flutLFO.frequency.value = 7.3;     // フラッター
+  N.flutDepth = ctx.createGain(); N.flutDepth.gain.value = 0.0;
+  N.flutLFO.connect(N.flutDepth); N.flutDepth.connect(N.surfSrc.playbackRate);
+  N.flutLFO.start();
+
+  /* ===== 反り（回転数に同期したウーファーポンプ + 超低域うねり） ===== */
+  N.warpLFO = ctx.createOscillator(); N.warpLFO.frequency.value = rotHz(); // 0.555Hz = 反り
+  N.warpDepth = ctx.createGain(); N.warpDepth.gain.value = 0.0;            // → 低域バスをAM変調
+  N.warpLFO.connect(N.warpDepth); N.warpDepth.connect(N.lowBus.gain);
+  N.warpLFO.start();
+
+  /* ===== slow breathing → 定常クラックル密度を呼吸させる ===== */
   N.breatheLFO = ctx.createOscillator(); N.breatheLFO.frequency.value = 0.035;
-  N.breatheDepth = ctx.createGain(); N.breatheDepth.gain.value = 280;
+  N.breatheDepth = ctx.createGain(); N.breatheDepth.gain.value = 220;
   N.breatheLFO.connect(N.breatheDepth);
   if (useWorklet) N.breatheDepth.connect(N.crkSrc.parameters.get('density'));
   N.breatheLFO.start();
 }
 
-/* ---------- helpers to update params live ---------- */
-function setDensity(node, v) {                 // unify worklet / fallback
-  if (useWorklet) node.parameters.get('density').value = v;
-  else node.set('density', v);
+/* ---------- 回転数の変更：ワウ・反り・周期欠陥すべてが追従する ---------- */
+function setRpm(v) {
+  rpm = v;
+  const f = rotHz(), t = ctx ? ctx.currentTime : 0;
+  if (ctx && nodes.rotor) {
+    setParam(nodes.rotor, 'rotHz', f);
+    nodes.wowLFO.frequency.setTargetAtTime(f, t, 0.05);
+    nodes.warpLFO.frequency.setTargetAtTime(f, t, 0.05);
+  }
+  $('disc').style.animationDuration = period() + 's';
+  const lab = rpm === 45 ? '45 RPM' : '33⅓ RPM';
+  $('rpmToggle').textContent = lab;
+  $('label').querySelector('span').textContent = lab;
+  $('readout').innerHTML = lab + ' &middot; 周期 ' + period().toFixed(2) + ' s &middot; f<sub>rot</sub> ' + f.toFixed(3) + ' Hz';
+  restartPulse();
 }
 
 /* ---------- apply UI values ---------- */
@@ -416,31 +571,68 @@ function applyUI() {
   N.lowBus.gain.setTargetAtTime(v('low') * 1.1, t, 0.08);
   N.midBus.gain.setTargetAtTime(v('mid') * 1.0, t, 0.08);
   N.highBus.gain.setTargetAtTime(v('high') * 0.9, t, 0.08);
-  // warmth: 0 → dark 1.8kHz, 100 → bright 14kHz (log)
+  // 回転成分
+  setParam(N.rotor, 'amp', v('rot') * 0.95);
+  const warp = v('warp');
+  N.warpDepth.gain.setTargetAtTime(warp * v('low') * 0.9, t, 0.1);   // 低域に比例してポンプ
+  const wow = v('wow');
+  N.wowDepth.gain.setTargetAtTime(wow * 0.010, t, 0.1);
+  N.flutDepth.gain.setTargetAtTime(wow * 0.004, t, 0.1);
+  // 音色
   const warm = v('warmth');
   N.warmth.frequency.setTargetAtTime(1800 * Math.pow(14000/1800, warm), t, 0.1);
   N.wet.gain.setTargetAtTime(v('space') * 0.6, t, 0.1);
-  // wow depth scales playbackRate deviation
-  N.wowDepth.gain.setTargetAtTime(v('wow') * 0.012, t, 0.1);
-  N.wowLFO.frequency.setTargetAtTime(0.4 + v('wow') * 0.8, t, 0.1);
+}
+
+/* ---------- 摩擦電気：再生し続けると帯電し、クラックルが増える ---------- */
+function tickStatic() {
+  if (!ctx || !nodes.crkSrc) return;
+  staticLevel = Math.min(1, staticLevel + 0.06);          // ゆっくり帯電
+  const base = 700 + staticLevel * 2600;                  // 密度を押し上げる
+  setParam(nodes.crkSrc, 'density', base);
+  setParam(nodes.popSrc, 'density', 9 + staticLevel * 14);
+}
+function wipeStatic() {
+  staticLevel = 0;
+  if (ctx && nodes.crkSrc) {
+    setParam(nodes.crkSrc, 'density', 700);
+    setParam(nodes.popSrc, 'density', 9);
+  }
+  // 新しい盤＝新しい指紋
+  defects = makeDefects(6);
+  if (ctx && nodes.rotor) setDefects(nodes.rotor, defects);
+  const b = $('wipeBtn'); b.classList.add('on'); setTimeout(() => b.classList.remove('on'), 250);
 }
 
 /* ---------- presets ---------- */
 const PRESETS = {
-  clean:   { low:25, mid:30, high:35, warmth:70, space:20, wow:15 },
-  dusty:   { low:55, mid:50, high:60, warmth:55, space:35, wow:40 },
-  worn:    { low:70, mid:65, high:75, warmth:38, space:45, wow:65 },
-  ambient: { low:60, mid:40, high:45, warmth:48, space:80, wow:55 },
+  clean:   { low:25, mid:30, high:35, rot:30, wow:12, warp:8,  warmth:70, space:20, defects:3 },
+  dusty:   { low:55, mid:50, high:60, rot:60, wow:40, warp:30, warmth:55, space:35, defects:6 },
+  worn:    { low:70, mid:65, high:75, rot:85, wow:65, warp:60, warmth:38, space:45, defects:11 },
+  ambient: { low:60, mid:40, high:45, rot:45, wow:55, warp:50, warmth:48, space:80, defects:5 },
 };
 function applyPreset(name) {
   const p = PRESETS[name]; if (!p) return;
-  for (const k in p) { $(k).value = p[k]; $(k+'-v').textContent = p[k]; }
+  ['low','mid','high','rot','wow','warp','warmth','space'].forEach(k => {
+    $(k).value = p[k]; $(k+'-v').textContent = p[k];
+  });
+  defects = makeDefects(p.defects);
+  if (ctx && nodes.rotor) setDefects(nodes.rotor, defects);
   applyUI();
   document.querySelectorAll('#presets button[data-p]').forEach(b =>
     b.classList.toggle('active', b.dataset.p === name));
 }
 
-/* ---------- visual : crackle sparks reacting to high-band energy ---------- */
+/* ---------- 1周ごとの心拍フラッシュ ---------- */
+function restartPulse() {
+  clearInterval(pulseTimer);
+  if (!started || !ctx || ctx.state !== 'running') return;
+  pulseTimer = setInterval(() => {
+    const h = $('heartbeat'); h.classList.remove('beat'); void h.offsetWidth; h.classList.add('beat');
+  }, period() * 1000);
+}
+
+/* ---------- visual : 高域エネルギーに反応する火花 ---------- */
 const cv = $('spark'), cx = cv.getContext('2d');
 function draw() {
   raf = requestAnimationFrame(draw);
@@ -449,7 +641,6 @@ function draw() {
   const a = nodes.analyser, bins = a.frequencyBinCount;
   const data = new Uint8Array(bins);
   a.getByteFrequencyData(data);
-  // high-band average → spark intensity
   let hi = 0; for (let i = (bins*0.5)|0; i < bins; i++) hi += data[i];
   hi /= (bins*0.5);
   const n = (hi / 12) | 0;
@@ -467,18 +658,16 @@ function draw() {
    start / stop
    ============================================================ */
 async function start() {
-  if (!started) {
-    await build();
-    applyUI();
-    started = true;
-  }
+  if (!started) { await build(); applyUI(); started = true; }
   await ctx.resume();
   nodes.master.gain.setTargetAtTime((+$('master').value/100) * 0.9, ctx.currentTime, 0.6);
   $('disc').classList.add('spinning');
+  $('disc').style.animationDuration = period() + 's';
   $('arm').classList.add('down');
-  $('label').style.background = 'radial-gradient(circle at 50% 40%, var(--accent), #8a4f17)';
   const btn = $('power'); btn.classList.add('on'); btn.textContent = '■ STOP';
   if (!raf) draw();
+  restartPulse();
+  clearInterval(staticTimer); staticTimer = setInterval(tickStatic, 3500);
 }
 async function stop() {
   if (!ctx) return;
@@ -486,6 +675,7 @@ async function stop() {
   setTimeout(() => ctx.suspend(), 500);
   $('disc').classList.remove('spinning');
   $('arm').classList.remove('down');
+  clearInterval(pulseTimer); clearInterval(staticTimer);
   const btn = $('power'); btn.classList.remove('on'); btn.textContent = '▷ NEEDLE DROP';
 }
 
@@ -495,15 +685,13 @@ async function stop() {
 $('power').addEventListener('click', () => {
   if (started && ctx && ctx.state === 'running') stop(); else start();
 });
-
-['master','low','mid','high','warmth','space','wow'].forEach(id => {
+['master','low','mid','high','rot','wow','warp','warmth','space'].forEach(id => {
   const el = $(id);
   el.addEventListener('input', () => { $(id+'-v').textContent = el.value; applyUI(); });
 });
-
 document.querySelectorAll('#presets button[data-p]').forEach(b =>
   b.addEventListener('click', () => applyPreset(b.dataset.p)));
-
+$('rpmToggle').addEventListener('click', () => setRpm(rpm === 33.333 ? 45 : 33.333));
 $('humToggle').addEventListener('click', () => {
   humFreq = humFreq === 50 ? 60 : 50;
   $('humToggle').textContent = 'HUM ' + humFreq + 'Hz';
@@ -513,8 +701,9 @@ $('humToggle').addEventListener('click', () => {
     nodes.hum2.frequency.setTargetAtTime(humFreq*2, ctx.currentTime, 0.05);
   }
 });
+$('wipeBtn').addEventListener('click', wipeStatic);
 
-// reflect initial preset selection
+// 初期プリセット
 applyPreset('dusty');
 </script>
 </body>
