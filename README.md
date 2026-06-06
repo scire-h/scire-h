@@ -163,6 +163,22 @@ floor, crackle grain/decay/brightness, a resonant "material ring", the
 hiss spectral tilt, low-end weight, and presses a fresh per-disc defect
 fingerprint with that material's character.
 
+### Dust & background playback
+
+A **ホコリ / dust** fader controls a sparse population of random
+mid-band pops — the irregular *パチ … パチ* of dust on the surface —
+by scaling the stochastic pop density, level and big-pop probability
+together (static buildup still rides on top of it over time).
+
+For **background playback**, the engine routes its output through a
+`MediaStreamAudioDestinationNode` into a hidden `<audio>` element rather
+than straight to the context destination, so the browser treats it as
+media playback and keeps it alive when the tab is hidden or the screen
+locks. The **Media Session API** exposes play/pause on the OS lock
+screen / notification, and a `visibilitychange` handler resumes the
+context on return. (`.play()` is retried on the next tap if the first
+call is blocked by autoplay policy.)
+
 ```
 xdg-open  vinyl.html   # Linux
 open      vinyl.html   # macOS

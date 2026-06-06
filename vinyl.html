@@ -132,6 +132,7 @@
     </div>
   </div>
 
+  <audio id="sink" playsinline style="display:none"></audio>
   <button class="power" id="power">▷ NEEDLE DROP</button>
 
   <div class="controls">
@@ -182,6 +183,13 @@
       <label style="color:var(--rot)">反り<small>warp / woofer pump</small></label>
       <input type="range" class="r-rot" id="warp" min="0" max="100" value="30">
       <span class="val" id="warp-v">30</span>
+    </div>
+
+    <div class="sep-label">粒子 / particles</div>
+    <div class="row">
+      <label style="color:var(--high)">ホコリ<small>dust — ランダムなパチパチ</small></label>
+      <input type="range" class="r-high" id="dust" min="0" max="100" value="45">
+      <span class="val" id="dust-v">45</span>
     </div>
 
     <div class="sep-label">音色 / tone &amp; space</div>
@@ -319,6 +327,8 @@ let rpm = 33.333;
 let raf = 0, pulseTimer = 0, staticTimer = 0;
 let staticLevel = 0;            // 摩擦電気による帯電 → クラックル増殖
 let defects = [];
+let popBaseDensity = 9;         // ホコリ(dust)フェーダーが決めるポップ基本密度
+let intendPlaying = false;      // バックグラウンド復帰判定用
 let currentMaterial = 'vinyl';
 let matProfile = null;          // 素材ごとの欠陥プロファイル（decay/severity）
 
@@ -516,7 +526,13 @@ async function build() {
   N.warmth.connect(N.dry); N.warmth.connect(N.reverb); N.reverb.connect(N.wet);
   N.dry.connect(N.master); N.wet.connect(N.master);
   N.analyser = ctx.createAnalyser(); N.analyser.fftSize = 1024;
-  N.master.connect(N.analyser); N.analyser.connect(ctx.destination);
+  N.master.connect(N.analyser);
+  // バックグラウンド再生: WebAudio出力をMediaStream→<audio>に流し「メディア再生」扱いにする
+  // （画面OFF/タブ移動でもブラウザが止めない。Media Sessionでロック画面操作も可）
+  N.stream = ctx.createMediaStreamDestination();
+  N.analyser.connect(N.stream);
+  const sink = $('sink');
+  sink.srcObject = N.stream.stream;
 
   /* ---- three layer buses ---- */
   N.lowBus  = ctx.createGain();
@@ -637,6 +653,12 @@ function applyUI() {
   const wow = v('wow');
   N.wowDepth.gain.setTargetAtTime(wow * 0.010, t, 0.1);
   N.flutDepth.gain.setTargetAtTime(wow * 0.004, t, 0.1);
+  // ホコリ: まばらなランダムポップ（パチ…パチ）。密度・音量・大粒確率を連動
+  const dust = v('dust');
+  popBaseDensity = 2 + dust * 34;                          // 〜36 ev/s
+  setParam(N.popSrc, 'density', popBaseDensity + staticLevel * 14);
+  N.popGain.gain.setTargetAtTime(0.5 + dust * 0.9, t, 0.1);
+  setParam(N.popSrc, 'bigProb', 0.25 + dust * 0.45);       // 多いほど時々大きなパチッ
   // 音色
   const warm = v('warmth');
   N.warmth.frequency.setTargetAtTime(1800 * Math.pow(14000/1800, warm), t, 0.1);
@@ -647,15 +669,14 @@ function applyUI() {
 function tickStatic() {
   if (!ctx || !nodes.crkSrc) return;
   staticLevel = Math.min(1, staticLevel + 0.06);          // ゆっくり帯電
-  const base = 700 + staticLevel * 2600;                  // 密度を押し上げる
-  setParam(nodes.crkSrc, 'density', base);
-  setParam(nodes.popSrc, 'density', 9 + staticLevel * 14);
+  setParam(nodes.crkSrc, 'density', 700 + staticLevel * 2600);
+  setParam(nodes.popSrc, 'density', popBaseDensity + staticLevel * 14);
 }
 function wipeStatic() {
   staticLevel = 0;
   if (ctx && nodes.crkSrc) {
     setParam(nodes.crkSrc, 'density', 700);
-    setParam(nodes.popSrc, 'density', 9);
+    setParam(nodes.popSrc, 'density', popBaseDensity);
   }
   // 新しい盤＝新しい指紋（素材は維持）
   defects = makeDefects(defects.length || 6, matProfile);
@@ -665,14 +686,14 @@ function wipeStatic() {
 
 /* ---------- presets ---------- */
 const PRESETS = {
-  clean:   { low:25, mid:30, high:35, rot:30, wow:12, warp:8,  warmth:70, space:20, defects:3 },
-  dusty:   { low:55, mid:50, high:60, rot:60, wow:40, warp:30, warmth:55, space:35, defects:6 },
-  worn:    { low:70, mid:65, high:75, rot:85, wow:65, warp:60, warmth:38, space:45, defects:11 },
-  ambient: { low:60, mid:40, high:45, rot:45, wow:55, warp:50, warmth:48, space:80, defects:5 },
+  clean:   { low:25, mid:30, high:35, rot:30, wow:12, warp:8,  dust:18, warmth:70, space:20, defects:3 },
+  dusty:   { low:55, mid:50, high:60, rot:60, wow:40, warp:30, dust:55, warmth:55, space:35, defects:6 },
+  worn:    { low:70, mid:65, high:75, rot:85, wow:65, warp:60, dust:75, warmth:38, space:45, defects:11 },
+  ambient: { low:60, mid:40, high:45, rot:45, wow:55, warp:50, dust:35, warmth:48, space:80, defects:5 },
 };
 function applyPreset(name) {
   const p = PRESETS[name]; if (!p) return;
-  ['low','mid','high','rot','wow','warp','warmth','space'].forEach(k => {
+  ['low','mid','high','rot','wow','warp','dust','warmth','space'].forEach(k => {
     $(k).value = p[k]; $(k+'-v').textContent = p[k];
   });
   defects = makeDefects(p.defects, matProfile);
@@ -748,7 +769,10 @@ function draw() {
    ============================================================ */
 async function start() {
   if (!started) { await build(); applyUI(); applyMaterial(currentMaterial); started = true; }
+  intendPlaying = true;
   await ctx.resume();
+  ensureSinkPlaying();                              // バックグラウンド再生用メディア要素
+  setupMediaSession();
   nodes.master.gain.setTargetAtTime((+$('master').value/100) * 0.9, ctx.currentTime, 0.6);
   $('disc').classList.add('spinning');
   $('disc').style.animationDuration = period() + 's';
@@ -760,13 +784,50 @@ async function start() {
 }
 async function stop() {
   if (!ctx) return;
+  intendPlaying = false;
   nodes.master.gain.setTargetAtTime(0, ctx.currentTime, 0.25);
-  setTimeout(() => ctx.suspend(), 500);
+  setTimeout(() => { if (!intendPlaying) { ctx.suspend(); $('sink').pause(); } }, 500);
   $('disc').classList.remove('spinning');
   $('arm').classList.remove('down');
   clearInterval(pulseTimer); clearInterval(staticTimer);
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
   const btn = $('power'); btn.classList.remove('on'); btn.textContent = '▷ NEEDLE DROP';
 }
+
+/* ---------- メディア要素の再生を確実に開始（gesture切れ対策の再試行付き） ---------- */
+function ensureSinkPlaying() {
+  const sink = $('sink');
+  const p = sink.play();
+  if (p && p.catch) p.catch(() => {
+    const retry = () => {
+      sink.play().catch(() => {});
+      if (ctx) ctx.resume().catch(() => {});
+      document.removeEventListener('pointerdown', retry);
+    };
+    document.addEventListener('pointerdown', retry, { once: true });   // 次のタップで再生開始
+  });
+}
+
+/* ---------- Media Session（ロック画面/通知の再生・停止 + バックグラウンド許可） ---------- */
+function setupMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'VINYL — record noise', artist: 'scire-h', album: (MATERIALS[currentMaterial] || {}).label || '',
+    });
+    navigator.mediaSession.setActionHandler('play',  () => start());
+    navigator.mediaSession.setActionHandler('pause', () => stop());
+    navigator.mediaSession.setActionHandler('stop',  () => stop());
+    navigator.mediaSession.playbackState = 'playing';
+  } catch (e) {}
+}
+// 復帰時にコンテキストが眠っていたら起こす
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && intendPlaying && ctx) {
+    ctx.resume().catch(() => {});
+    $('sink').play().catch(() => {});
+  }
+});
 
 /* ============================================================
    wiring
@@ -774,7 +835,7 @@ async function stop() {
 $('power').addEventListener('click', () => {
   if (started && ctx && ctx.state === 'running') stop(); else start();
 });
-['master','low','mid','high','rot','wow','warp','warmth','space'].forEach(id => {
+['master','low','mid','high','rot','wow','warp','dust','warmth','space'].forEach(id => {
   const el = $(id);
   el.addEventListener('input', () => { $(id+'-v').textContent = el.value; applyUI(); });
 });
