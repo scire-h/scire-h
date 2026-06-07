@@ -86,13 +86,27 @@
     <div id="drop">
       <canvas id="wave" width="1800" height="240"></canvas>
       <div id="playhead"></div>
-      <div id="dropHint">WAV / AIFF をここにドロップ、またはクリックして選択 — ハイレゾ(24/32bit・96k+)対応</div>
+      <div id="dropHint">WAV / AIFF をドロップ、またはクリックで選択 — ハイレゾ(24/32bit・96k+)対応<br>読み込み後は波形をドラッグで範囲選択(その区間をループ)</div>
     </div>
     <div class="fileinfo" id="fileinfo"></div>
+    <div class="row" id="selRow" style="margin-top:8px;align-items:center;gap:8px">
+      <span class="smallcap" style="margin:0">選択長 ⟵ BPM</span>
+      <div class="seg" id="selDiv">
+        <button data-beats="4">1 bar</button><button data-beats="2">1/2</button>
+        <button data-beats="1">1/4</button><button data-beats="0.5">1/8</button><button data-beats="0.25">1/16</button>
+      </div>
+      <span class="smallcap" style="margin:0 0 0 6px">BPM ⟵ 選択(強制拍)</span>
+      <div class="seg" id="selBpm">
+        <button data-beats="4">= 1 bar</button><button data-beats="1">= 1 拍</button>
+      </div>
+      <button id="selClear" class="sm">選択解除</button>
+      <span class="fileinfo" id="selInfo" style="margin:0"></span>
+    </div>
     <div class="row" style="margin-top:10px">
       <button id="play" class="tbtn">▶ PLAY</button>
       <button id="loopBtn" class="on sm">LOOP</button>
       <button id="demoBtn" class="sm">内蔵ドラムループ</button>
+      <button id="pickBtn" class="sm">📂 ファイル</button>
       <input id="fileinput" type="file" accept=".wav,.aif,.aiff,.aifc,audio/*" hidden />
       <div class="knobs" style="margin-left:auto">
         <div class="knob"><div class="dial" data-k="inGain"></div><div class="klab">Input</div><div class="kval" data-v="inGain"></div></div>
@@ -193,15 +207,15 @@ const P = {
   delayLvl: {min:0, max:1.5,def:0.6, unit:'',   fmt:v=>v.toFixed(2)},
   reverbLvl:{min:0, max:1.5,def:0.5, unit:'',   fmt:v=>v.toFixed(2)},
   // shatter delay
-  dTime:    {min:0.02,max:1.2,def:0.25,unit:'s',fmt:v=>(v*1000|0)+'ms'},
+  dTime:    {min:0.02,max:1.2,def:0.25,unit:'s',fmt:v=>(v*1000|0)+'ms', log:true},
   dFb:      {min:0, max:0.95,def:0.45,unit:'',  fmt:v=>(v*100|0)+'%'},
   dShatter: {min:0, max:1,   def:0.25,unit:'',  fmt:v=>(v*100|0)+'%'},
-  dTone:    {min:300,max:14000,def:5000,unit:'Hz',fmt:v=>v>=1000?(v/1000).toFixed(1)+'k':v|0},
+  dTone:    {min:300,max:14000,def:5000,unit:'Hz',fmt:v=>v>=1000?(v/1000).toFixed(1)+'k':v|0, log:true},
   // reverb
-  rSize:    {min:0.3,max:6,  def:2.2, unit:'s', fmt:v=>v.toFixed(1)+'s'},
+  rSize:    {min:0.3,max:6,  def:2.2, unit:'s', fmt:v=>v.toFixed(1)+'s', log:true},
   rDecay:   {min:0.5,max:6,  def:2.5, unit:'',  fmt:v=>v.toFixed(1)},
   rPre:     {min:0, max:0.2, def:0.02,unit:'s', fmt:v=>(v*1000|0)+'ms'},
-  rDamp:    {min:800,max:16000,def:6500,unit:'Hz',fmt:v=>v>=1000?(v/1000).toFixed(1)+'k':v|0},
+  rDamp:    {min:800,max:16000,def:6500,unit:'Hz',fmt:v=>v>=1000?(v/1000).toFixed(1)+'k':v|0, log:true},
   // choke / tempo
   bpm:      {min:40,max:200, def:120, unit:'',  fmt:v=>(v|0)+' bpm'},
   // master
@@ -218,7 +232,7 @@ const P = {
   P['rate'+s]  = {min:0.25,max:4,def:s==='A'?0.25:0.5,unit:'',fmt:v=>v|0}; // overwritten by sync seg
   P['nudge'+s] = {min:-0.5,max:0.5,def:0,unit:'',fmt:v=>(v*100|0)+'%'};
   P['depth'+s] = {min:0,max:1,def:0.85,unit:'',fmt:v=>(v*100|0)+'%'};
-  P['freeHz'+s]= {min:0.3,max:16,def:4,unit:'Hz',fmt:v=>v.toFixed(1)+'Hz'};
+  P['freeHz'+s]= {min:0.3,max:16,def:4,unit:'Hz',fmt:v=>v.toFixed(1)+'Hz', log:true};
 });
 const val = {};
 for(const k in P) val[k] = P[k].def;
@@ -503,9 +517,11 @@ function startSource(restart){
   if(srcNode){ try{srcNode.stop();}catch(e){} srcNode.disconnect(); srcNode=null; }
   srcNode=ctx.createBufferSource();
   srcNode.buffer=audioBuffer; srcNode.loop=loop;
+  let offset=0;
+  if(sel){ srcNode.loopStart=sel.start; srcNode.loopEnd=sel.end; offset=sel.start; }
   srcNode.connect(inputGain);
-  srcNode.start();
-  startCtxTime=ctx.currentTime; isPlaying=true;
+  srcNode.start(0, offset);
+  startCtxTime=ctx.currentTime; startOffset=offset; isPlaying=true;
   document.getElementById('play').textContent='⏸ STOP';
   document.getElementById('play').classList.add('on');
   document.getElementById('playhead').style.opacity=1;
@@ -521,10 +537,11 @@ function stopSource(){
 
 /* ---------- waveform drawing ---------- */
 const waveCv=document.getElementById('wave'), wctx=waveCv.getContext('2d');
-let peaks=null;
+let peaks=null, waveDur=0, sel=null, gridOffset=0, startOffset=0;
 function drawWave(buf){
   document.getElementById('dropHint').style.display='none';
-  const W=waveCv.width, H=waveCv.height, mid=H/2;
+  waveDur=buf.duration; sel=null; gridOffset=0;
+  const W=waveCv.width;
   const ch0=buf.getChannelData(0);
   const ch1=buf.numberOfChannels>1?buf.getChannelData(1):null;
   const block=Math.max(1,Math.floor(ch0.length/W));
@@ -534,22 +551,85 @@ function drawWave(buf){
     for(let i=s;i<e;i++){ let v=ch0[i]; if(ch1) v=(v+ch1[i])*0.5; if(v<mn)mn=v; if(v>mx)mx=v; }
     peaks[x*2]=mn; peaks[x*2+1]=mx;
   }
+  renderWave(); updateSelInfo();
+}
+function renderWave(){
+  if(!peaks)return;
+  const W=waveCv.width, H=waveCv.height, mid=H/2;
   wctx.clearRect(0,0,W,H);
   wctx.fillStyle='#0a0c07'; wctx.fillRect(0,0,W,H);
-  wctx.strokeStyle='#33381f'; wctx.beginPath(); wctx.moveTo(0,mid); wctx.lineTo(W,mid); wctx.stroke();
+  // beat grid (bar lines brighter every 4 beats), anchored at gridOffset
+  if(waveDur>0){
+    const beat=60/val.bpm; let n=0;
+    for(let t=gridOffset; t<waveDur+1e-6; t+=beat, n++){
+      if(t<0) continue; const x=(t/waveDur)*W; const bar=(n%4===0);
+      wctx.strokeStyle=bar?'rgba(174,184,106,.32)':'rgba(127,138,78,.14)';
+      wctx.lineWidth=bar?2:1; wctx.beginPath(); wctx.moveTo(x,0); wctx.lineTo(x,H); wctx.stroke();
+    }
+  }
+  // center line
+  wctx.strokeStyle='#33381f'; wctx.lineWidth=1; wctx.beginPath(); wctx.moveTo(0,mid); wctx.lineTo(W,mid); wctx.stroke();
+  // waveform
   wctx.fillStyle='#7f8a4e';
   for(let x=0;x<W;x++){
     const y1=mid-peaks[x*2+1]*mid*0.95, y2=mid-peaks[x*2]*mid*0.95;
     wctx.fillRect(x, y1, 1, Math.max(1,y2-y1));
   }
+  // selection overlay
+  if(sel && waveDur>0){
+    const xs=(sel.start/waveDur)*W, xe=(sel.end/waveDur)*W;
+    wctx.fillStyle='rgba(0,0,0,.55)'; wctx.fillRect(0,0,xs,H); wctx.fillRect(xe,0,W-xe,H);
+    wctx.fillStyle='rgba(217,164,65,.12)'; wctx.fillRect(xs,0,xe-xs,H);
+    wctx.strokeStyle='#d9a441'; wctx.lineWidth=2; wctx.beginPath();
+    wctx.moveTo(xs,0); wctx.lineTo(xs,H); wctx.moveTo(xe,0); wctx.lineTo(xe,H); wctx.stroke();
+  }
 }
+function updateSelInfo(){
+  const el=document.getElementById('selInfo'); if(!el)return;
+  if(!sel){ el.textContent=audioBuffer?'全体をループ':''; return; }
+  const len=sel.end-sel.start, beats=len/(60/val.bpm);
+  el.textContent='選択 '+len.toFixed(3)+'s ≈ '+beats.toFixed(2)+'拍';
+}
+// selection helpers
+function setSelLen(beats){
+  if(!audioBuffer) return;
+  const len=beats*(60/val.bpm);
+  const start=sel?sel.start:0;
+  sel={start, end:Math.min(waveDur, start+len)};
+  gridOffset=start; renderWave(); updateSelInfo(); if(isPlaying) startSource(true);
+}
+function bpmFromSel(beats){
+  if(!sel) return; const len=sel.end-sel.start; if(len<=0) return;
+  setParam('bpm', beats*60/len); gridOffset=sel.start; renderWave(); updateSelInfo();
+}
+// canvas drag = select region
+let selDragging=false, selT0=0;
+function xToTime(clientX){ const r=waveCv.getBoundingClientRect();
+  return Math.max(0,Math.min(1,(clientX-r.left)/r.width))*waveDur; }
+waveCv.addEventListener('pointerdown',e=>{
+  if(!audioBuffer){ document.getElementById('fileinput').click(); return; }
+  resume(); selDragging=true; selT0=xToTime(e.clientX); sel={start:selT0,end:selT0};
+  waveCv.setPointerCapture(e.pointerId); renderWave(); e.preventDefault();
+});
+waveCv.addEventListener('pointermove',e=>{ if(!selDragging)return;
+  const t=xToTime(e.clientX); sel={start:Math.min(selT0,t),end:Math.max(selT0,t)}; renderWave(); });
+waveCv.addEventListener('pointerup',()=>{ if(!selDragging)return; selDragging=false;
+  if(sel && sel.end-sel.start<0.02) sel=null;   // tiny drag = clear -> loop full
+  renderWave(); updateSelInfo(); if(isPlaying) startSource(true); });
 
 /* ---------- UI: knobs ---------- */
+// normalized <-> value (log skew for frequency/time params)
+function pToNorm(k,v){ const p=P[k];
+  if(p.log) return Math.log(v/p.min)/Math.log(p.max/p.min);
+  return (v-p.min)/(p.max-p.min); }
+function pFromNorm(k,t){ const p=P[k]; t=Math.max(0,Math.min(1,t));
+  let v=p.log ? p.min*Math.pow(p.max/p.min,t) : p.min+t*(p.max-p.min);
+  if(p.int) v=Math.round(v); return Math.max(p.min,Math.min(p.max,v)); }
 function setParam(k,v){
   const p=P[k]; v=Math.max(p.min,Math.min(p.max,v)); if(p.int)v=Math.round(v);
   val[k]=v; applyParam(k);
   const dial=document.querySelector('.dial[data-k="'+k+'"]');
-  if(dial){ const t=(v-p.min)/(p.max-p.min); dial.style.setProperty('--a',(-135+t*270)+'deg'); }
+  if(dial){ const t=pToNorm(k,v); dial.style.setProperty('--a',(-135+t*270)+'deg'); }
   const lab=document.querySelector('.kval[data-v="'+k+'"]'); if(lab) lab.textContent=p.fmt(v);
 }
 function applyParam(k){
@@ -563,7 +643,7 @@ function applyParam(k){
     case 'rSize': case 'rDecay': refreshIR(); break;
     case 'rPre': rPre.delayTime.setTargetAtTime(val.rPre,ctx.currentTime,0.02); break;
     case 'rDamp': rDamp.frequency.value=val.rDamp; break;
-    case 'bpm': syncDelayTime(); break;
+    case 'bpm': syncDelayTime(); renderWave(); updateSelInfo(); break;
     case 'maximize': maxDrive.gain.value=1+val.maximize*8; maxShape.curve=makeDriveCurve(1+val.maximize*5);
                      limiter.threshold.value=-3-val.maximize*9; break;
     case 'eqLow': eqLow.gain.value=val.eqLow; break;
@@ -587,22 +667,23 @@ function applyBuses(){
   }
 }
 
+const DRAG_PX=200;   // vertical pixels for a full-range sweep (standard feel)
 function attachKnob(dial){
   const k=dial.dataset.k, p=P[k];
-  let startY,startV,active=false,fine=false;
+  let startY,startNorm,active=false,fine=false;
   const onMove=e=>{
     if(!active)return; const y=(e.touches?e.touches[0].clientY:e.clientY);
-    const dy=startY-y; const range=p.max-p.min;
-    const sens=(fine?0.0008:0.005)*range;
-    setParam(k,startV+dy*sens); e.preventDefault();
+    const dNorm=((startY-y)/DRAG_PX)*(fine?0.18:1);
+    setParam(k,pFromNorm(k,startNorm+dNorm)); e.preventDefault();
   };
   const up=()=>{active=false;window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',up);};
   dial.addEventListener('pointerdown',e=>{
-    active=true; fine=e.shiftKey; startY=e.clientY; startV=val[k]; resume();
+    active=true; fine=e.shiftKey; startY=e.clientY; startNorm=pToNorm(k,val[k]); resume();
     window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',up); e.preventDefault();
   });
   dial.addEventListener('dblclick',()=>setParam(k,p.def));
-  dial.addEventListener('wheel',e=>{ setParam(k,val[k]-Math.sign(e.deltaY)*(p.max-p.min)*(e.shiftKey?0.005:0.03)); e.preventDefault(); },{passive:false});
+  dial.addEventListener('wheel',e=>{ const step=(e.shiftKey?0.02:0.05);
+    setParam(k,pFromNorm(k,pToNorm(k,val[k])-Math.sign(e.deltaY)*step)); e.preventDefault(); },{passive:false});
 }
 
 /* ---------- build choke UI ---------- */
@@ -707,8 +788,12 @@ document.getElementById('demoBtn').addEventListener('click',async function(){
 
 // file input + drag/drop
 const drop=document.getElementById('drop'), fi=document.getElementById('fileinput');
-drop.addEventListener('click',()=>fi.click());
+document.getElementById('pickBtn').addEventListener('click',()=>fi.click());
 fi.addEventListener('change',e=>{ const f=e.target.files[0]; if(f) readFile(f); });
+// selection toolbar
+document.getElementById('selDiv').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setSelLen(parseFloat(b.dataset.beats)); });
+document.getElementById('selBpm').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) bpmFromSel(parseFloat(b.dataset.beats)); });
+document.getElementById('selClear').addEventListener('click',()=>{ sel=null; renderWave(); updateSelInfo(); if(isPlaying) startSource(true); });
 ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('hot');}));
 ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hot');}));
 drop.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) readFile(f); });
@@ -720,10 +805,12 @@ function setInfo(t){ document.getElementById('fileinfo').textContent=t; }
 const ph=document.getElementById('playhead');
 function rafLoop(){
   if(isPlaying && audioBuffer){
-    let pos=(ctx.currentTime-startCtxTime);
-    if(loop) pos=pos%audioBuffer.duration;
-    const t=Math.min(1,pos/audioBuffer.duration);
-    ph.style.left=(t*drop.clientWidth)+'px';
+    const dur=audioBuffer.duration, elapsed=ctx.currentTime-startCtxTime;
+    let pos;
+    if(sel){ const L=Math.max(1e-3,sel.end-sel.start);
+      pos= loop ? sel.start+(elapsed%L) : Math.min(dur, sel.start+elapsed); }
+    else   { pos= loop ? (startOffset+elapsed)%dur : Math.min(dur, startOffset+elapsed); }
+    ph.style.left=((pos/dur)*waveCv.clientWidth)+'px';
   }
   drawScope(); tickEuclidUI();
   requestAnimationFrame(rafLoop);
