@@ -128,15 +128,30 @@ angular velocity, so every physical imperfection on the disc is read out
      crackle density *rises the longer it plays*; **静電気を拭く** (wipe)
      resets it and presses a fresh disc (new fingerprint).
 
-Both the stochastic crackle and the rotation-locked defects are produced
-by `AudioWorklet` processors that generate impulses sample-by-sample in
-the audio thread (with `ScriptProcessor` fallbacks) — sample-accurate,
-jitter-free and endless, without any recorded audio. The **RPM toggle**
-(33⅓ / 45) retunes wow, warp and the defect period together; the disc
-visual spins at the true period and flashes once per revolution so you
-can *see* the 1.8 s pulse. Warmth, a generated convolution reverb, four
-wear presets (クリーン / 埃っぽい / 年代物 / 深いアンビエント) and a
-high-band spark visual round it out.
+All impulsive components — fine crackle, dust pops and the
+rotation-locked defects — are produced by a **single unified
+`AudioWorkletNode` (`vinyl-engine`, three mono outputs)** that treats
+the rotational phase θ∈[0,1) as the one master clock and fires impulses
+sample-by-sample in the audio thread (a 3-channel `ScriptProcessor`
+fallback runs the same algorithm) — sample-accurate, jitter-free and
+endless, without any recorded audio. The engine posts a message on
+every phase wrap, so the heartbeat flash and the REV counter are locked
+to the *audio* rotation, not a UI timer. The **RPM toggle** (33⅓ / 45)
+retunes wow, warp and the defect period together. Warmth, a generated
+convolution reverb, four wear presets (クリーン / 埃っぽい / 年代物 /
+深いアンビエント) and a high-band spark visual round it out.
+
+### Radius drift & run-out groove (半径ドリフト)
+
+Because the platter turns at constant *angular* velocity, the linear
+velocity under the stylus falls as it tracks inward — so a record
+changes voice as a side plays. The needle position advances 0→1 over a
+(compressed) five-minute side: a dedicated low-pass closes from 18 kHz
+to 7 kHz, crackle grit rises, and the tonearm visual tracks inward.
+When the side runs out, only the **lead-out groove** remains — a single
+soft thump per revolution — and after four revolutions the arm lifts,
+returns to the outer edge and drops again. The loop is closed; it plays
+forever.
 
 ### Material model (物性 → ノイズ)
 
