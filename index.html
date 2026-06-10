@@ -4,794 +4,371 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="mobile-web-app-capable" content="yes" />
-<meta name="theme-color" content="#0a0a0a" />
-<title>ULT-SOUND DS-4M</title>
+<meta name="theme-color" content="#0b0b0d" />
+<title>POKO — analog drum synth</title>
 <style>
   :root {
-    --bg:        #0a0a0a;
-    --panel:    #161616;
-    --panel-2:  #1f1f1f;
-    --border:   #2a2a2a;
-    --text:     #eaeaea;
-    --text-dim: #888;
-    --cyan:     #5dc6c8;
-    --yellow:   #c4c248;
-    --red:      #d92020;
-    --pad:      #1f4ad6;
-    --pad-dark: #0d2a8a;
-    --accent:   #5dc6c8;
+    --bg:      #0b0b0d;
+    --panel:   #17171a;
+    --panel2:  #202024;
+    --line:    #2c2c31;
+    --text:    #e8e8ea;
+    --dim:     #8b8b92;
+    --acc:     #ffb84d;   /* warm amber, 70s panel lamp */
+    --acc2:    #5dc6c8;
+    --hit:     #ff5d45;
+    --pad:     #28406e;
   }
-  * {
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-    touch-action: manipulation;
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; touch-action:manipulation; }
+  html,body { margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Hiragino Sans",sans-serif; }
+  .app { max-width:560px; margin:0 auto; padding-bottom:140px; }
+
+  /* ---------- header / transport ---------- */
+  .top {
+    display:flex; align-items:center; gap:8px;
+    padding:10px 12px; background:#08080a; border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:50;
   }
-  html, body {
-    margin: 0; padding: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", "Yu Gothic UI", sans-serif;
-    font-size: 16px;
-    overscroll-behavior: none;
-    -webkit-font-smoothing: antialiased;
+  .top .logo { font-weight:800; letter-spacing:.12em; color:var(--acc); font-size:14px; }
+  .top .spacer { flex:1; }
+  .bpm-box { display:flex; align-items:center; gap:4px; }
+  .bpm-box button {
+    width:38px; height:38px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-size:18px; font-weight:700;
   }
-  body {
-    min-height: 100vh;
-    min-height: 100dvh;
+  .bpm-box .bpm { min-width:54px; text-align:center; font-variant-numeric:tabular-nums;
+    font-size:15px; font-weight:700; color:var(--acc); }
+  .playBtn {
+    width:64px; height:38px; border-radius:8px; border:none;
+    background:var(--acc); color:#000; font-size:15px; font-weight:800;
+  }
+  .playBtn.playing { background:var(--hit); color:#fff; }
+
+  /* ---------- pads ---------- */
+  .pads { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:12px; }
+  .padBtn {
+    aspect-ratio:1/1; border-radius:50%;
+    background:radial-gradient(circle at 36% 30%, #45639b, var(--pad) 55%, #14223d 100%);
+    border:4px solid #b9b9bd;
+    box-shadow:inset 0 -7px 14px rgba(0,0,0,.55), 0 3px 8px rgba(0,0,0,.5);
+    color:#dfe6f5; font-size:22px; font-weight:900;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform 50ms;
+  }
+  .padBtn:active, .padBtn.hit { transform:scale(.93); box-shadow:inset 0 0 22px rgba(255,93,69,.65); }
+
+  /* ---------- sequencer ---------- */
+  .seqWrap { padding:0 12px 12px; }
+  .seqRow { display:grid; grid-template-columns:34px repeat(16,1fr); gap:3px; margin-bottom:4px; }
+  .seqRow .chLbl {
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:800; color:var(--dim);
+    background:var(--panel); border:1px solid var(--line); border-radius:5px;
+  }
+  .cell {
+    aspect-ratio:1/1.35; border-radius:4px; border:1px solid var(--line);
+    background:var(--panel);
+  }
+  .cell:nth-child(4n+2) { background:#1b1b20; }   /* beat guide */
+  .cell.on   { background:var(--acc); border-color:var(--acc); }
+  .cell.now  { outline:2px solid var(--acc2); outline-offset:-2px; }
+  .cell.on.now { background:#fff; }
+
+  .seqTools { display:flex; gap:8px; padding:0 12px 8px; }
+  .seqTools button {
+    flex:1; padding:10px 0; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--dim); font-size:12px; font-weight:700; letter-spacing:.06em;
   }
 
-  /* ------- top-level layout ------- */
-  .app {
-    display: flex; flex-direction: column;
-    min-height: 100vh; min-height: 100dvh;
-    max-width: 600px;
-    margin: 0 auto;
+  /* ---------- channel tabs ---------- */
+  .tabs { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:0 12px 8px; }
+  .tabs button {
+    padding:11px 0; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel); color:var(--dim); font-weight:800; font-size:13px;
   }
-  .header {
-    flex: 0 0 auto;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 14px;
-    background: #050505;
-    border-bottom: 1px solid var(--border);
-  }
-  .header .brand {
-    font-size: 14px; letter-spacing: 0.14em; color: var(--cyan); font-weight: 800;
-  }
-  .header .led {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #3a0a0a; transition: background 90ms, box-shadow 90ms;
-  }
-  .header .led.on { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .tabs button.act { background:var(--acc2); color:#000; border-color:var(--acc2); }
 
-  /* ------- pads ------- */
-  .pads {
-    flex: 0 0 auto;
-    padding: 12px;
-    background: linear-gradient(180deg, #050505, var(--bg));
+  /* ---------- params ---------- */
+  .params { padding:0 12px; }
+  .sec { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; margin-bottom:10px; }
+  .sec h3 { margin:0 0 10px; font-size:11px; letter-spacing:.16em; color:var(--dim); font-weight:800; }
+  .prow { display:grid; grid-template-columns:78px 1fr 70px; gap:8px; align-items:center; margin-bottom:4px; }
+  .prow .lb { font-size:13px; color:#ccc; }
+  .prow .vl { text-align:right; font-size:13px; color:var(--acc); font-weight:700; font-variant-numeric:tabular-nums; }
+  .prow input[type=range] { -webkit-appearance:none; height:38px; background:transparent; width:100%; margin:0; }
+  .prow input[type=range]::-webkit-slider-runnable-track { height:5px; border-radius:3px;
+    background:linear-gradient(90deg, var(--acc) var(--p,50%), #2c2c31 var(--p,50%)); }
+  .prow input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:26px; height:26px;
+    border-radius:50%; background:#fff; border:2px solid #000; margin-top:-10.5px; }
+  .prow input[type=range]::-moz-range-track { height:5px; background:#2c2c31; border-radius:3px; }
+  .prow input[type=range]::-moz-range-thumb { width:24px; height:24px; border-radius:50%;
+    background:#fff; border:2px solid #000; }
+  .segBtns { display:grid; grid-template-columns:repeat(var(--n,4),1fr); gap:6px; margin-bottom:6px; }
+  .segBtns button { padding:12px 0; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--dim); font-weight:800; font-size:13px; }
+  .segBtns button.act { background:var(--acc); color:#000; border-color:var(--acc); }
+
+  /* ---------- footer ---------- */
+  .foot {
+    position:fixed; left:0; right:0; bottom:0; z-index:60;
+    background:rgba(8,8,10,.96); backdrop-filter:blur(8px);
+    border-top:1px solid var(--line); padding:10px 12px;
   }
-  .pad-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-  }
-  .pad {
-    position: relative;
-    aspect-ratio: 1 / 1;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #5a78ea 0%, var(--pad) 35%, var(--pad-dark) 70%, #050d3f 100%);
-    border: 5px solid #c2c2c2;
-    box-shadow:
-      inset 0 -8px 18px rgba(0,0,0,0.6),
-      inset 0 4px 12px rgba(255,255,255,0.08),
-      0 4px 10px rgba(0,0,0,0.55);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    color: #fff;
-    cursor: pointer;
-    transition: transform 60ms cubic-bezier(.2,1,.4,1), box-shadow 60ms;
-  }
-  .pad .num {
-    font-size: 28px; font-weight: 900;
-    color: rgba(0,0,0,0.7);
-    text-shadow: 0 1px 0 rgba(255,255,255,0.15);
-    line-height: 1;
-  }
-  .pad .role {
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    font-weight: 700;
-    margin-top: 2px;
-    color: rgba(0,0,0,0.55);
-  }
-  .pad:active,
-  .pad.hit {
-    transform: scale(0.94);
-    box-shadow:
-      inset 0 0 24px rgba(255,80,80,0.6),
-      0 1px 3px rgba(0,0,0,0.5);
+  .footIn { max-width:560px; margin:0 auto; display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; }
+  .mvol { display:flex; align-items:center; gap:8px; }
+  .mvol .t { font-size:10px; letter-spacing:.1em; color:var(--dim); font-weight:700; }
+  .mvol input[type=range] { -webkit-appearance:none; height:30px; flex:1; background:transparent; }
+  .mvol input[type=range]::-webkit-slider-runnable-track { height:4px; border-radius:2px; background:#2c2c31; }
+  .mvol input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px;
+    border-radius:50%; background:var(--acc); border:2px solid #000; margin-top:-9px; }
+  .foot select {
+    padding:11px 26px 11px 12px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;
+    -webkit-appearance:none; appearance:none;
   }
 
-  /* ------- tab row (channel selector) ------- */
-  .tabs {
-    flex: 0 0 auto;
-    padding: 0 12px 8px;
-  }
-  .tab-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-  }
-  .tab {
-    padding: 12px 4px;
-    background: var(--panel);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-weight: 700;
-    font-size: 13px;
-    letter-spacing: 0.05em;
-    cursor: pointer;
-    text-align: center;
-  }
-  .tab .role {
-    display: block;
-    font-size: 9px;
-    margin-top: 2px;
-    opacity: 0.7;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-  }
-  .tab.active {
-    background: var(--cyan);
-    color: #000;
-    border-color: var(--cyan);
-  }
-
-  /* ------- params (scrollable) ------- */
-  .params {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: 0 12px 96px;
-  }
-  .section {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 14px;
-    margin-bottom: 10px;
-  }
-  .section h3 {
-    margin: 0 0 10px;
-    font-size: 11px;
-    color: var(--text-dim);
-    letter-spacing: 0.18em;
-    font-weight: 700;
-  }
-  .section h3 .right {
-    float: right;
-    font-size: 10px;
-    color: var(--accent);
-    letter-spacing: 0.02em;
-  }
-
-  /* slider row: label | range | value */
-  .row {
-    display: grid;
-    grid-template-columns: 86px 1fr 74px;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-  .row:last-child { margin-bottom: 0; }
-  .row .lbl { font-size: 13px; color: #ccc; }
-  .row .val {
-    text-align: right;
-    font-size: 13px;
-    color: var(--accent);
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-  }
-  .row input[type=range] {
-    -webkit-appearance: none;
-    appearance: none;
-    height: 36px;
-    background: transparent;
-    width: 100%;
-    margin: 0;
-  }
-  .row input[type=range]::-webkit-slider-runnable-track {
-    height: 6px;
-    background: linear-gradient(90deg, var(--cyan) 0%, var(--cyan) var(--p,50%), #2a2a2a var(--p,50%));
-    border-radius: 3px;
-  }
-  .row input[type=range]::-moz-range-track {
-    height: 6px;
-    background: #2a2a2a;
-    border-radius: 3px;
-  }
-  .row input[type=range]::-moz-range-progress {
-    height: 6px;
-    background: var(--cyan);
-    border-radius: 3px;
-  }
-  .row input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    background: #fff;
-    border: 2px solid #000;
-    margin-top: -11px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
-    cursor: pointer;
-  }
-  .row input[type=range]::-moz-range-thumb {
-    width: 24px; height: 24px;
-    border-radius: 50%;
-    background: #fff;
-    border: 2px solid #000;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
-    cursor: pointer;
-  }
-
-  /* radio button row (3-way / 3-way) */
-  .seg {
-    display: grid;
-    grid-template-columns: repeat(var(--cols, 3), 1fr);
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-  .seg button {
-    padding: 14px 6px;
-    background: var(--panel-2);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-weight: 700;
-    font-size: 13px;
-    letter-spacing: 0.08em;
-    cursor: pointer;
-  }
-  .seg button.on {
-    background: var(--yellow);
-    color: #000;
-    border-color: var(--yellow);
-  }
-  .seg.cyan button.on {
-    background: var(--cyan);
-    color: #000;
-    border-color: var(--cyan);
-  }
-
-  /* toggle button (LFO ON, MULTI VCO) */
-  .toggle {
-    display: inline-block;
-    padding: 12px 18px;
-    background: var(--panel-2);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-weight: 700;
-    font-size: 13px;
-    letter-spacing: 0.08em;
-    cursor: pointer;
-    margin-right: 6px;
-  }
-  .toggle.on {
-    background: var(--cyan);
-    color: #000;
-    border-color: var(--cyan);
-  }
-
-  /* stepper for OCTAVE 1..5 */
-  .stepper {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 4px;
-  }
-  .stepper button {
-    padding: 14px 0;
-    background: var(--panel-2);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-weight: 700;
-    font-size: 16px;
-    cursor: pointer;
-  }
-  .stepper button.on {
-    background: var(--cyan);
-    color: #000;
-    border-color: var(--cyan);
-  }
-
-  /* footer (sticky bottom) */
-  .footer {
-    position: fixed;
-    left: 0; right: 0; bottom: 0;
-    padding: 8px 12px;
-    background: rgba(5,5,5,0.95);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-top: 1px solid var(--border);
-    z-index: 100;
-  }
-  .footer-row {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: 8px;
-    align-items: center;
-    max-width: 600px;
-    margin: 0 auto;
-  }
-  .footer select,
-  .footer button {
-    padding: 12px 14px;
-    background: var(--panel);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-  }
-  .footer select {
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: linear-gradient(45deg, transparent 50%, #888 50%), linear-gradient(135deg, #888 50%, transparent 50%);
-    background-position: calc(100% - 16px) 50%, calc(100% - 12px) 50%;
-    background-size: 4px 4px;
-    background-repeat: no-repeat;
-    padding-right: 28px;
-  }
-  .footer button.demo { background: var(--cyan); color: #000; border-color: var(--cyan); font-weight: 700; }
-  .footer button.stop { background: var(--panel); }
-
-  /* master volume row */
-  .master-row {
-    display: grid;
-    grid-template-columns: 56px 1fr 50px;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-  .master-row .lbl { font-size: 11px; color: var(--text-dim); letter-spacing: 0.1em; }
-  .master-row .val { text-align: right; font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; }
-  .master-row input[type=range] {
-    -webkit-appearance: none; appearance: none;
-    height: 28px; width: 100%; background: transparent; margin: 0;
-  }
-  .master-row input[type=range]::-webkit-slider-runnable-track {
-    height: 4px; background: #2a2a2a; border-radius: 2px;
-  }
-  .master-row input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none; appearance: none;
-    width: 22px; height: 22px; border-radius: 50%;
-    background: var(--accent); border: 2px solid #000;
-    margin-top: -9px;
-  }
-
-  /* simple text "info" caption under sections */
-  .info {
-    font-size: 11px;
-    color: var(--text-dim);
-    padding: 4px 0 0;
-    line-height: 1.5;
-  }
-
-  /* "unlock audio" splash */
-  .splash {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.93);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    z-index: 9999;
-    color: #fff; text-align: center;
-    padding: 24px;
-  }
-  .splash h1 {
-    font-size: 28px; letter-spacing: 0.1em;
-    color: var(--cyan);
-    margin: 0 0 12px;
-  }
-  .splash p { font-size: 15px; line-height: 1.6; max-width: 320px; color: #ccc; }
-  .splash button {
-    margin-top: 24px;
-    padding: 16px 32px;
-    background: var(--cyan); color: #000;
-    border: none; border-radius: 10px;
-    font-size: 17px; font-weight: 700; letter-spacing: 0.05em;
-    cursor: pointer;
-  }
+  /* ---------- splash ---------- */
+  .splash { position:fixed; inset:0; background:#0b0b0d; z-index:999;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:24px; text-align:center; }
+  .splash h1 { color:var(--acc); letter-spacing:.14em; font-size:26px; margin:0; }
+  .splash p { color:var(--dim); font-size:14px; line-height:1.7; margin:0; }
+  .splash button { margin-top:10px; padding:16px 40px; border:none; border-radius:10px;
+    background:var(--acc); color:#000; font-size:17px; font-weight:800; }
 </style>
 </head>
 <body>
 
 <div class="splash" id="splash">
-  <h1>ULT&middot;SOUND DS-4M</h1>
-  <p>分析的アナログドラムシンセ<br/>Mobile UI &mdash; タップで開始</p>
-  <button id="splashBtn">START</button>
+  <h1>POKO</h1>
+  <p>アナログ・シンセドラム &amp; シーケンサー<br>1978 年式「ポコポコ」サウンド</p>
+  <button id="startBtn">START</button>
 </div>
 
 <div class="app" id="app" hidden>
-  <div class="header">
-    <span class="brand">ULT&middot;SOUND DS-4M</span>
-    <span class="led" id="masterLed"></span>
-  </div>
-
-  <div class="pads">
-    <div class="pad-row" id="pads"></div>
-  </div>
-
-  <div class="tabs">
-    <div class="tab-row" id="tabs"></div>
-  </div>
-
-  <div class="params" id="params"></div>
-
-  <div class="footer">
-    <div class="footer-row">
-      <div class="master-row" style="grid-column:1/2;">
-        <span class="lbl">MASTER</span>
-        <input type="range" id="masterVol" min="0" max="1" step="0.001" value="0.55"/>
-        <span class="val" id="masterVolVal">55%</span>
-      </div>
-      <select id="preset" aria-label="Preset">
-        <option value="">— Preset —</option>
-      </select>
-      <button class="demo" id="demoBtn">▶ DEMO</button>
+  <div class="top">
+    <span class="logo">POKO</span>
+    <span class="spacer"></span>
+    <div class="bpm-box">
+      <button id="bpmDn">−</button>
+      <span class="bpm" id="bpmVal">120</span>
+      <button id="bpmUp">＋</button>
     </div>
+    <button class="playBtn" id="playBtn">▶</button>
+  </div>
+
+  <div class="pads" id="pads"></div>
+
+  <div class="seqWrap" id="seq"></div>
+  <div class="seqTools">
+    <button id="clearBtn">CLEAR</button>
+    <button id="randBtn">RANDOM</button>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="params" id="params"></div>
+</div>
+
+<div class="foot" id="foot" hidden>
+  <div class="footIn">
+    <div class="mvol">
+      <span class="t">VOL</span>
+      <input type="range" id="mvol" min="0" max="1" step="0.001" value="0.7" />
+    </div>
+    <select id="preset"><option value="">Preset…</option></select>
   </div>
 </div>
 
 <script>
-/* ===================================================================
-   ULT-SOUND DS-4M — Mobile UI
-   Same audio engine as the panel-style index-panel.html, but with a
-   touch-first interface: native range sliders, big segmented buttons,
-   a 4-tab channel selector, and a sticky bottom bar with master /
-   preset / demo.
-   =================================================================== */
+"use strict";
+/* =====================================================================
+   POKO — rebuilt from scratch.
 
-const AudioCtx = window.AudioContext || window.webkitAudioContext;
-let actx = null, master = null, masterComp = null, analyser = null;
+   Heart of the sound: real RC curves via setTargetAtTime.
 
-function ensureAudio() {
+   Analog drum synths shape both pitch and amplitude with capacitor
+   discharge:   v(t) = target + (v0 - target) · e^(-t/τ)
+   Web Audio's setTargetAtTime() is exactly this curve. The previous
+   builds used linearRamp / exponentialRamp, which produce audibly
+   different trajectories — that mismatch was the core of the
+   "音色が違う" feedback. Pitch settles asymptotically into the base
+   frequency (fast drop, soft landing = "poko"), and the amplitude
+   tail is a true RC discharge.
+   ===================================================================== */
+
+const AC = window.AudioContext || window.webkitAudioContext;
+let actx = null, master = null, comp = null;
+
+function audioInit() {
   if (actx) return;
-  actx = new AudioCtx();
-  masterComp = actx.createDynamicsCompressor();
-  masterComp.threshold.value = -10;
-  masterComp.knee.value      = 18;
-  masterComp.ratio.value     = 6;
-  masterComp.attack.value    = 0.003;
-  masterComp.release.value   = 0.15;
+  actx = new AC();
+  comp = actx.createDynamicsCompressor();
+  comp.threshold.value = -12; comp.knee.value = 20;
+  comp.ratio.value = 5; comp.attack.value = .002; comp.release.value = .12;
   master = actx.createGain();
-  master.gain.value = state.masterVolume;
-  analyser = actx.createAnalyser();
-  analyser.fftSize = 1024;
-  master.connect(masterComp).connect(analyser).connect(actx.destination);
+  master.gain.value = state.vol;
+  master.connect(comp).connect(actx.destination);
 }
 
 let noiseBuf = null;
-function getNoiseBuf() {
+function getNoise() {
   if (noiseBuf) return noiseBuf;
-  const len = 2 * actx.sampleRate;
-  noiseBuf = actx.createBuffer(1, len, actx.sampleRate);
+  const n = actx.sampleRate * 1.5 | 0;
+  noiseBuf = actx.createBuffer(1, n, actx.sampleRate);
   const d = noiseBuf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
   return noiseBuf;
 }
 
-/* one-time analog-VCA saturation curve */
-let SAT_CURVE = null;
-function getSatCurve() {
-  if (SAT_CURVE) return SAT_CURVE;
-  const n = 2048;
-  SAT_CURVE = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n-1)) * 2 - 1;
-    SAT_CURVE[i] = Math.tanh(x * 1.5) / Math.tanh(1.5);
-  }
-  return SAT_CURVE;
-}
-
-/* per-channel slow drift state */
-const driftState = {};
-function chDriftCents(chIdx) {
-  let s = driftState[chIdx];
-  if (!s) s = driftState[chIdx] = { v: 0 };
-  s.v += (Math.random() - 0.5) * 0.6;
-  if (s.v >  3) s.v =  3;
-  if (s.v < -3) s.v = -3;
-  return s.v;
-}
-
-/* TUNING knob picks a note within an octave (C..B); OCTAVE selector
-   picks which octave. Direct FFT measurement of the SDS-2002 reference
-   (TUNING near A on the silk-screen, OCTAVE = 3, SWEEP OFF, LFO OFF)
-   gives a fundamental of 441 Hz = A4. That puts OCTAVE 3's C-position
-   at MIDI 60 = C4, not C3 -- so the base is 60, an octave higher
-   than the JUCE port was using before. BEAT TUNE is 0..5 OCT additive
-   upward detune (matches the panel's silk-screen). */
-function vcoFreq(tuning01, octave, beatTune01) {
-  const noteSemis = Math.max(0, Math.min(12, tuning01 * 12));
-  const octShift  = (octave - 3) * 12;
-  const beatSemis = beatTune01 * 60;
-  const midi = 60 + noteSemis + octShift + beatSemis;
-  return 440 * Math.pow(2, (midi - 69) / 12);
-}
-
-/* =========================================================
-   STATE
-   ========================================================= */
-function makeChannel(idx, label) {
+/* ---------------------------------------------------------------
+   STATE — params are stored in real musical units.
+   --------------------------------------------------------------- */
+function mkCh(name) {
   return {
-    idx, label,
-    senseLevel: 0.75,
-    multiVCO:   false,
-    vco:        0.5,    // TUNING 0..1 -> C..B within one octave
-    beatTune:   0.0,    // 0..1 -> 0..5 OCT (panel scale)
-    octave:     3,      // 1..5
-    attack:     0.0,    // 0..1 -> 1 ms .. 350 ms
-    sustain:    0.4,    // 0..1 -> 30 ms .. 3.5 s
-    waveform:   "sin",  // VCO shape: "sin" | "tri" | "sqr" | "saw"
-    noiseOn:    false,  // mix the channel-specific noise voice on top of the VCO
-    lfoRate:    0.3,
-    lfoDepth:   0.5,
-    lfoOn:      false,
-    sweep:      0.5,    // 0..1 -> 0..6 OCT WIDTH
-    sweepDir:   "down", // "up" | "off" | "down"
-    output:     0.8,
+    name,
+    wave:     "sine",   // sine | triangle | square
+    tune:     100,      // settle frequency Hz (30..500, log)
+    decay:    140,      // amp RC tau in ms (30..800, log)
+    sweepOct: 1.6,      // pitch starts sweepOct octaves above tune (0..4)
+    sweepMs:  28,       // pitch RC tau in ms (5..200, log)
+    noise:    0,        // 0..1 noise mix
+    click:    0.5,      // 0..1 attack click amount
+    level:    0.9,      // 0..1
   };
 }
-
 const state = {
-  masterVolume: 0.55,
-  power:        true,
-  beatSense:    false,
-  activeCh:     0,
-  channels: [
-    makeChannel(0, "CYMBAL"),
-    makeChannel(1, "CYMBAL"),
-    makeChannel(2, "SNARE"),
-    makeChannel(3, "NOISE"),
+  vol: 0.7,
+  bpm: 120,
+  playing: false,
+  step: 0,
+  activeCh: 0,
+  channels: [ mkCh("HI"), mkCh("MID"), mkCh("LOW"), mkCh("KICK") ],
+  pattern: [
+    new Array(16).fill(0), new Array(16).fill(0),
+    new Array(16).fill(0), new Array(16).fill(0),
   ],
 };
-/* sensible default voicings, one per channel */
-Object.assign(state.channels[0], { vco:0.85, octave:4, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:true,  sustain:0.18 }); // cymbal: sine + cymbal-noise mix
-Object.assign(state.channels[1], { vco:0.65, octave:4, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:true,  sustain:0.22 }); // cymbal: sine + cymbal-noise mix
-Object.assign(state.channels[2], { vco:0.45, octave:3, sweep:0.30, sweepDir:"down", waveform:"sqr", noiseOn:true,  sustain:0.18 }); // snare: square + snare-noise mix
-Object.assign(state.channels[3], { vco:0.25, octave:2, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, sustain:0.32 }); // kick: pure sine
 
-/* =========================================================
-   VOICE (same engine as the panel-style HTML; not the UI)
-   ========================================================= */
-function playChannel(ch, velocity=1) {
-  if (!state.power) return;
-  ensureAudio();
+/* ---------------------------------------------------------------
+   VOICE — one trigger. All curves are setTargetAtTime RC shapes.
+   --------------------------------------------------------------- */
+function trigger(ch, vel = 1, when = null) {
+  audioInit();
   if (actx.state === "suspended") actx.resume();
+  const t = when ?? actx.currentTime;
 
-  const now    = actx.currentTime;
-  const base   = vcoFreq(ch.vco, ch.octave, ch.beatTune);
-  const atk    = 0.001 + Math.pow(ch.attack, 1.4) * 0.35;
-  /* Reference measurement: at SUSTAIN ≈ centre, the envelope shows
-     -6 dB at 452 ms (tau ≈ 650 ms). Web Audio's
-     exponentialRampToValueAtTime hits -6 dB at roughly 10.7 % of
-     its (peak -> end) span, so to get -6 dB at 450 ms with end=0.0008
-     and peak~0.5 we need a span around 4.2 s. Multiplier of 11 gives
-     0.379 * 11 ≈ 4.2 s at sustain=0.5. */
-  const decay  = 0.03  + Math.pow(ch.sustain, 1.4) * 11.0;
-  const sense  = state.beatSense ? Math.max(0.15, velocity) : 1.0;
-  const peak   = (0.10 + ch.output * 0.90) *
-                 (0.40 + ch.senseLevel * 0.60) * sense;
-  const sweepT = 0.045;
+  const peak = ch.level * vel;
+  if (peak <= 0.001) return;
+
+  const f1 = ch.tune;                                  // settle pitch
+  const f0 = f1 * Math.pow(2, ch.sweepOct);            // strike pitch
+  const tauP = ch.sweepMs / 1000;                      // pitch RC
+  const tauA = ch.decay  / 1000;                       // amp RC
+
+  /* ----- tone ----- */
+  const osc = actx.createOscillator();
+  osc.type = ch.wave;
+  /* per-hit analog drift: ±4 cents */
+  osc.detune.value = (Math.random() - 0.5) * 8;
+  osc.frequency.setValueAtTime(f0, t);
+  osc.frequency.setTargetAtTime(f1, t, tauP);          // RC pitch settle
 
   const vca = actx.createGain();
-  vca.gain.setValueAtTime(0, now);
-  vca.gain.linearRampToValueAtTime(peak, now + atk);
-  vca.gain.exponentialRampToValueAtTime(0.0008, now + atk + decay);
+  vca.gain.setValueAtTime(0, t);
+  vca.gain.linearRampToValueAtTime(peak, t + 0.0006);  // 0.6 ms strike
+  vca.gain.setTargetAtTime(0, t + 0.0006, tauA);       // RC amp discharge
 
-  /* No master saturation: the SDS-2002 reference is mathematically
-     clean (SIN has H2 at -118 dB and H3..H10 below -95 dB). The
-     tanh waveshaper we used before added a -38 dB 3rd harmonic to
-     every voice, which made even the pure-sine mode sound coloured.
-     Going straight to the master keeps SIN spectrally pure. */
-  vca.connect(master);
+  osc.connect(vca).connect(master);
+  const stopAt = t + tauA * 8 + 0.15;
+  osc.start(t);
+  osc.stop(stopAt);
 
-  /* Stick-attack transient (mostly for snare-like sounds where ATTACK
-     is at MIN). Skipped on pure SIN since the reference shows a clean
-     rise. Routed through VCA so OUTPUT / SENSE / DECAY shape it. */
-  if (ch.waveform !== "sin" && ch.attack < 0.05) {
-    const click = actx.createBufferSource();
-    const len   = Math.floor(actx.sampleRate * 0.012);
-    const cb    = actx.createBuffer(1, len, actx.sampleRate);
-    const d     = cb.getChannelData(0);
-    for (let i = 0; i < len; i++) {
-      d[i] = (Math.random()*2-1) * Math.exp(-i / (actx.sampleRate * 0.0015));
-    }
-    click.buffer = cb;
-    const cg  = actx.createGain();
-    cg.gain.value = 0.25 * (1 - ch.attack / 0.05);
-    const chp = actx.createBiquadFilter();
-    chp.type = "highpass";
-    chp.frequency.value = 1800;
-    click.connect(chp).connect(cg).connect(vca);
-    click.start(now);
-    click.stop(now + 0.02);
-  }
-
-  /* VCO with the selected waveform (always plays). */
-  spawnVCO(base, sweepT, ch, vca, decay, 0);
-  if (ch.multiVCO) {
-    spawnVCO(base, sweepT, ch, vca, decay, +7);
-    spawnVCO(base, sweepT, ch, vca, decay, -7);
-    const neighbor = state.channels[(ch.idx + 2) % 4];
-    const nf = vcoFreq(neighbor.vco, neighbor.octave, neighbor.beatTune);
-    spawnVCO(nf, sweepT, ch, vca, decay, 0);
-  }
-
-  /* Optional noise mix on top of the VCO. The channel's role label
-     (CYMBAL / SNARE / NOISE) picks the noise voice's filter character. */
-  if (ch.noiseOn) {
-    spawnNoise(base, sweepT, ch, vca, decay);
-  }
-}
-
-/* Map the panel's waveform name to the Web Audio OscillatorNode type.
-   These four are the standard analog drum-synth shapes (Pollard
-   Syndrum, Simmons SDS, Toyo Gakki DS-4). */
-const WAVE_MAP = { sin:"sine", tri:"triangle", sqr:"square", saw:"sawtooth" };
-
-/* A "warm sine" PeriodicWave -- pure sine with a touch of 2nd and 3rd
-   harmonic injected. The reference late-70s analog drum synth tone
-   isn't a mathematically pure sin -- the components feeding the VCO
-   leave tiny H2 / H3 traces that give the carrier a wood-like body
-   instead of feeling like an oscilloscope cal tone. Levels are well
-   below audible distortion (H2 ≈ -55 dB, H3 ≈ -50 dB). */
-let WARM_SINE_WAVE = null;
-function getWarmSine() {
-  if (WARM_SINE_WAVE) return WARM_SINE_WAVE;
-  if (!actx) return null;
-  const real = new Float32Array([0, 1.000, 0.0018, 0.0032, 0.0006, 0.0004, 0, 0]);
-  const imag = new Float32Array(real.length);
-  WARM_SINE_WAVE = actx.createPeriodicWave(real, imag, { disableNormalization: false });
-  return WARM_SINE_WAVE;
-}
-
-function spawnVCO(base, sweepTime, ch, dest, decay, extraCents) {
-  const now = actx.currentTime;
-  const osc = actx.createOscillator();
-  if (ch.waveform === "sin") {
-    /* warm sine for the analog-style poko-poko character */
-    const w = getWarmSine();
-    if (w) osc.setPeriodicWave(w);
-    else   osc.type = "sine";
-  } else {
-    osc.type = WAVE_MAP[ch.waveform] || "sine";
-  }
-
-  const hitDrift  = (Math.random() - 0.5) * 6;
-  const slowDrift = chDriftCents(ch.idx);
-  osc.detune.value = hitDrift + slowDrift + (extraCents || 0);
-
-  const w = 6 * ch.sweep;
-  let f0 = base, f1 = base;
-  if (ch.sweepDir === "down")    { f0 = base * Math.pow(2, w); f1 = base; }
-  else if (ch.sweepDir === "up") { f0 = base; f1 = base * Math.pow(2, w); }
-  osc.frequency.setValueAtTime(Math.max(20, f0), now);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), now + sweepTime);
-
-  const wobble  = actx.createOscillator();
-  wobble.type = "sine";
-  wobble.frequency.value = 0.15 + Math.random() * 0.25;
-  const wobbleG = actx.createGain();
-  wobbleG.gain.value = 1.5;
-  wobble.connect(wobbleG).connect(osc.detune);
-  wobble.start(now);
-  wobble.stop(now + decay + 0.2);
-
-  if (ch.lfoOn) {
-    const lfo = actx.createOscillator();
-    lfo.type = "sine";
-    lfo.frequency.value = 0.8 + ch.lfoRate * 22;
-    const lfoG = actx.createGain();
-    lfoG.gain.value = 20 + ch.lfoDepth * 180;
-    lfo.connect(lfoG).connect(osc.detune);
-    lfo.start(now);
-    lfo.stop(now + decay + 0.2);
-  }
-
-  /* Per-waveform attenuation so the harmonic-rich shapes don't tower
-     over sine. tri / sqr / saw have progressively more harmonic energy. */
-  const lev = actx.createGain();
-  lev.gain.value = (ch.waveform === "sqr") ? 0.45
-                : (ch.waveform === "saw") ? 0.55
-                : (ch.waveform === "tri") ? 0.85
-                                          : 1.00;
-  osc.connect(lev).connect(dest);
-  osc.start(now);
-  osc.stop(now + decay + 0.1);
-}
-
-/* Per-character noise voicings, derived from FFT measurement of the
-   SDS-2002 reference recordings. CYMBAL's spectrum is flat 100 Hz -
-   ~7 kHz then drops sharply (-24 dB at 12 kHz). A single 2-pole LP
-   at 6 kHz with Q ≈ 1.2 fits the shape better than the wide-open
-   10 kHz we had before. */
-const NOISE_VOICE = {
-  CYMBAL: { mode:"lowpass",  cutLo: 4500, cutHi: 7500, q:1.2, bodyGain:0.0,  bodyFollow:0.0 },
-  SNARE:  { mode:"bandpass", cutLo:  600, cutHi: 4200, q:2.4, bodyGain:0.35, bodyFollow:1.0 },
-  NOISE:  { mode:"lowpass",  cutLo: 2000, cutHi: 7000, q:0.7, bodyGain:0.12, bodyFollow:0.0 },
-};
-
-function spawnNoise(base, sweepTime, ch, dest, decay) {
-  const v = NOISE_VOICE[ch.label] || NOISE_VOICE.NOISE;
-  const now = actx.currentTime;
-  const tail = (decay ?? 0.4) + 0.1;
-  const n = actx.createBufferSource();
-  n.buffer = getNoiseBuf();
-  n.loop = true;
-
-  const filter = actx.createBiquadFilter();
-  filter.type = v.mode;
-  filter.Q.value = v.q;
-
-  const w = Math.pow(2, 6 * ch.sweep * 0.5);
-  const center = v.cutLo + (v.cutHi - v.cutLo) * ch.vco;
-  let c0 = center, c1 = center;
-  if (ch.sweepDir === "down") { c0 = center * w; c1 = center; }
-  else if (ch.sweepDir === "up") { c0 = center; c1 = center * w; }
-  filter.frequency.setValueAtTime(Math.max(60, c0), now);
-  filter.frequency.exponentialRampToValueAtTime(Math.max(60, c1), now + sweepTime);
-
-  if (v.bodyGain > 0.0) {
-    const osc = actx.createOscillator();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(base * (1 + v.bodyFollow * 0.6), now);
-    osc.frequency.exponentialRampToValueAtTime(base, now + sweepTime);
+  /* ----- noise layer (snare wires / hat sizzle) ----- */
+  if (ch.noise > 0.003) {
+    const nz = actx.createBufferSource();
+    nz.buffer = getNoise(); nz.loop = true;
+    const flt = actx.createBiquadFilter();
+    flt.type = "bandpass";
+    flt.frequency.setValueAtTime(Math.min(12000, f1 * 18), t);
+    flt.frequency.setTargetAtTime(Math.min(9000, f1 * 9), t, tauP * 2);
+    flt.Q.value = 0.9;
     const ng = actx.createGain();
-    ng.gain.value = v.bodyGain;
-    osc.connect(ng).connect(dest);
-    osc.start(now);
-    osc.stop(now + tail);
+    ng.gain.setValueAtTime(0, t);
+    ng.gain.linearRampToValueAtTime(peak * ch.noise * 0.8, t + 0.0006);
+    ng.gain.setTargetAtTime(0, t + 0.0006, tauA * 0.7);
+    nz.connect(flt).connect(ng).connect(master);
+    nz.start(t); nz.stop(stopAt);
   }
 
-  n.connect(filter).connect(dest);
-  n.start(now);
-  n.stop(now + tail);
+  /* ----- attack click (stick impact) ----- */
+  if (ch.click > 0.003) {
+    const len = actx.sampleRate * 0.004 | 0;
+    const cb = actx.createBuffer(1, len, actx.sampleRate);
+    const cd = cb.getChannelData(0);
+    for (let i = 0; i < len; i++)
+      cd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (actx.sampleRate * 0.0008));
+    const ck = actx.createBufferSource(); ck.buffer = cb;
+    const cg = actx.createGain();
+    cg.gain.value = peak * ch.click * 0.55;
+    ck.connect(cg).connect(master);
+    ck.start(t);
+  }
 }
 
-/* =========================================================
-   VALUE FORMATTERS (for the val readouts beside each slider)
-   ========================================================= */
-const NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-const fmt = {
-  note      : v => NOTES[Math.min(11, Math.max(0, Math.round(v * 11)))],
-  beatTune  : v => (v * 5).toFixed(2) + " OCT",
-  attack    : v => {
-    const ms = 1 + Math.pow(v, 1.4) * 349;
-    return ms < 10 ? ms.toFixed(2) + " ms" : (ms < 100 ? ms.toFixed(1) + " ms" : Math.round(ms) + " ms");
-  },
-  sustain   : v => {
-    const sec = 0.03 + Math.pow(v, 1.4) * 3.47;
-    return sec < 1 ? Math.round(sec * 1000) + " ms" : sec.toFixed(2) + " s";
-  },
-  lfoRate   : v => {
-    const hz = 0.8 * Math.pow(22 / 0.8, v);
-    return hz < 1 ? hz.toFixed(2) + " Hz" : (hz < 10 ? hz.toFixed(1) + " Hz" : Math.round(hz) + " Hz");
-  },
-  sweep     : v => (v * 6).toFixed(1) + " OCT",
-  pct       : v => Math.round(v * 100) + "%",
-};
+/* ---------------------------------------------------------------
+   SEQUENCER — lookahead scheduler on the audio clock.
+   --------------------------------------------------------------- */
+let schedTimer = null, nextNoteTime = 0;
+const LOOKAHEAD_MS = 25, AHEAD_S = 0.12;
 
-/* =========================================================
-   UI BUILDING
-   ========================================================= */
+function stepDur() { return 60 / state.bpm / 4; }   // 16ths
+
+function schedulerTick() {
+  while (nextNoteTime < actx.currentTime + AHEAD_S) {
+    const s = state.step;
+    for (let c = 0; c < 4; c++) {
+      if (state.pattern[c][s]) {
+        trigger(state.channels[c], 0.95, nextNoteTime);
+        blinkPad(c);
+      }
+    }
+    markStep(s, nextNoteTime);
+    state.step = (s + 1) % 16;
+    nextNoteTime += stepDur();
+  }
+}
+function play() {
+  audioInit();
+  if (actx.state === "suspended") actx.resume();
+  state.playing = true; state.step = 0;
+  nextNoteTime = actx.currentTime + 0.06;
+  schedTimer = setInterval(schedulerTick, LOOKAHEAD_MS);
+  els.playBtn.textContent = "■";
+  els.playBtn.classList.add("playing");
+}
+function stop() {
+  state.playing = false;
+  clearInterval(schedTimer); schedTimer = null;
+  els.playBtn.textContent = "▶";
+  els.playBtn.classList.remove("playing");
+  document.querySelectorAll(".cell.now").forEach(c => c.classList.remove("now"));
+}
+
+/* visual step cursor, scheduled to land with the audio */
+function markStep(s, when) {
+  const delay = Math.max(0, (when - actx.currentTime) * 1000);
+  setTimeout(() => {
+    if (!state.playing) return;
+    document.querySelectorAll(".cell.now").forEach(c => c.classList.remove("now"));
+    document.querySelectorAll(`.cell[data-s="${s}"]`).forEach(c => c.classList.add("now"));
+  }, delay);
+}
+
+/* ---------------------------------------------------------------
+   UI
+   --------------------------------------------------------------- */
+const els = {};
 function el(tag, cls, html) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -799,383 +376,263 @@ function el(tag, cls, html) {
   return e;
 }
 
-/* ----- pads ----- */
 function buildPads() {
-  const wrap = document.getElementById("pads");
-  wrap.innerHTML = "";
+  els.pads.innerHTML = "";
   state.channels.forEach((ch, i) => {
-    const p = el("div", "pad");
-    p.innerHTML = `<span class="num">${i+1}</span><span class="role">${ch.label}</span>`;
-    ch._pad = p;
-    p.addEventListener("pointerdown", e => {
+    const b = el("button", "padBtn", String(i + 1));
+    b.addEventListener("pointerdown", e => {
       e.preventDefault();
-      ensureAudio();
-      if (actx && actx.state === "suspended") actx.resume();
-      /* velocity from distance-to-center */
-      const r = p.getBoundingClientRect();
-      const dx = (e.clientX - (r.left + r.width/2)) / (r.width/2);
-      const dy = (e.clientY - (r.top + r.height/2)) / (r.height/2);
-      const d = Math.min(1, Math.hypot(dx, dy));
-      const vel = 0.4 + (1 - d) * 0.6;
-      playChannel(ch, vel);
-      flashPad(ch);
+      trigger(ch, 1);
+      b.classList.add("hit");
+      setTimeout(() => b.classList.remove("hit"), 90);
     });
-    wrap.appendChild(p);
+    ch._pad = b;
+    els.pads.appendChild(b);
   });
 }
-function flashPad(ch) {
-  if (!ch._pad) return;
-  ch._pad.classList.add("hit");
-  document.getElementById("masterLed").classList.add("on");
-  setTimeout(() => {
-    ch._pad.classList.remove("hit");
-    document.getElementById("masterLed").classList.remove("on");
-  }, 100);
+function blinkPad(c) {
+  const b = state.channels[c]._pad;
+  if (!b) return;
+  b.classList.add("hit");
+  setTimeout(() => b.classList.remove("hit"), 80);
 }
 
-/* ----- tabs ----- */
+function buildSeq() {
+  els.seq.innerHTML = "";
+  state.channels.forEach((ch, c) => {
+    const row = el("div", "seqRow");
+    row.appendChild(el("div", "chLbl", ch.name));
+    for (let s = 0; s < 16; s++) {
+      const cell = el("div", "cell" + (state.pattern[c][s] ? " on" : ""));
+      cell.dataset.s = s;
+      cell.addEventListener("pointerdown", e => {
+        e.preventDefault();
+        state.pattern[c][s] = state.pattern[c][s] ? 0 : 1;
+        cell.classList.toggle("on", !!state.pattern[c][s]);
+        if (state.pattern[c][s]) trigger(ch, 0.8);   // audition on placing
+      });
+      row.appendChild(cell);
+    }
+    els.seq.appendChild(row);
+  });
+}
+
 function buildTabs() {
-  const wrap = document.getElementById("tabs");
-  wrap.innerHTML = "";
+  els.tabs.innerHTML = "";
   state.channels.forEach((ch, i) => {
-    const t = el("button", "tab" + (i === state.activeCh ? " active" : ""));
-    t.innerHTML = `Ch${i+1}<span class="role">${ch.label}</span>`;
-    t.addEventListener("click", () => {
-      state.activeCh = i;
-      buildTabs();
-      buildParams();
-    });
-    wrap.appendChild(t);
+    const b = el("button", i === state.activeCh ? "act" : "", ch.name);
+    b.addEventListener("click", () => { state.activeCh = i; buildTabs(); buildParams(); });
+    els.tabs.appendChild(b);
   });
 }
 
-/* ----- params for the active channel ----- */
-function rangeRow(label, getVal, setVal, formatter) {
-  const row = el("div", "row");
-  const l = el("span", "lbl", label);
-  const input = document.createElement("input");
-  input.type = "range";
-  input.min = "0"; input.max = "1"; input.step = "0.001";
-  input.value = getVal();
-  const val = el("span", "val", formatter(getVal()));
-  const updateTrack = () => {
-    const v = parseFloat(input.value);
-    input.style.setProperty("--p", (v * 100).toFixed(1) + "%");
-    val.textContent = formatter(v);
+/* log-scale slider helper: maps [0,1] <-> [lo,hi] exponentially */
+function logMap(lo, hi) {
+  return {
+    to01: v => Math.log(v / lo) / Math.log(hi / lo),
+    from01: p => lo * Math.pow(hi / lo, p),
   };
-  updateTrack();
-  input.addEventListener("input", () => {
-    setVal(parseFloat(input.value));
-    updateTrack();
+}
+function prow(label, get, set, fmtFn, map) {
+  const row = el("div", "prow");
+  row.appendChild(el("span", "lb", label));
+  const inp = document.createElement("input");
+  inp.type = "range"; inp.min = 0; inp.max = 1; inp.step = 0.001;
+  inp.value = map ? map.to01(get()) : get();
+  const vl = el("span", "vl", fmtFn(get()));
+  const paint = () => {
+    inp.style.setProperty("--p", (parseFloat(inp.value) * 100).toFixed(1) + "%");
+    vl.textContent = fmtFn(get());
+  };
+  paint();
+  inp.addEventListener("input", () => {
+    const raw = parseFloat(inp.value);
+    set(map ? map.from01(raw) : raw);
+    paint();
   });
-  row.appendChild(l);
-  row.appendChild(input);
-  row.appendChild(val);
+  /* audition on release so you hear the result of the tweak */
+  inp.addEventListener("change", () => trigger(state.channels[state.activeCh], 0.85));
+  row.appendChild(inp);
+  row.appendChild(vl);
   return row;
 }
 
-function segRow(values, labels, getVal, setVal, klass="") {
-  const seg = el("div", "seg " + klass);
-  seg.style.setProperty("--cols", values.length);
-  values.forEach((v, i) => {
-    const b = el("button", getVal() === v ? "on" : "", labels[i]);
+const mTune  = logMap(30, 500);
+const mDecay = logMap(30, 800);
+const mSwMs  = logMap(5, 200);
+
+function buildParams() {
+  els.params.innerHTML = "";
+  const ch = state.channels[state.activeCh];
+
+  const tone = el("div", "sec");
+  tone.appendChild(el("h3", null, "TONE"));
+  const seg = el("div", "segBtns");
+  seg.style.setProperty("--n", 3);
+  [["sine","SIN"],["triangle","TRI"],["square","SQR"]].forEach(([v, lb]) => {
+    const b = el("button", ch.wave === v ? "act" : "", lb);
     b.addEventListener("click", () => {
-      setVal(v);
-      seg.querySelectorAll("button").forEach((bb, j) => bb.classList.toggle("on", values[j] === v));
+      ch.wave = v;
+      seg.querySelectorAll("button").forEach((x,i) =>
+        x.classList.toggle("act", ["sine","triangle","square"][i] === v));
+      trigger(ch, 0.85);
     });
     seg.appendChild(b);
   });
-  return seg;
+  tone.appendChild(seg);
+  tone.appendChild(prow("Tune",  () => ch.tune,  v => ch.tune  = v, v => v.toFixed(0) + " Hz", mTune));
+  tone.appendChild(prow("Decay", () => ch.decay, v => ch.decay = v, v => v.toFixed(0) + " ms", mDecay));
+  els.params.appendChild(tone);
+
+  const sw = el("div", "sec");
+  sw.appendChild(el("h3", null, "PITCH SWEEP"));
+  sw.appendChild(prow("Depth", () => ch.sweepOct, v => ch.sweepOct = v,
+                      v => v.toFixed(2) + " oct",
+                      { to01: v => v / 4, from01: p => p * 4 }));
+  sw.appendChild(prow("Speed", () => ch.sweepMs, v => ch.sweepMs = v, v => v.toFixed(0) + " ms", mSwMs));
+  els.params.appendChild(sw);
+
+  const mix = el("div", "sec");
+  mix.appendChild(el("h3", null, "MIX"));
+  mix.appendChild(prow("Noise", () => ch.noise, v => ch.noise = v, v => Math.round(v*100) + "%"));
+  mix.appendChild(prow("Click", () => ch.click, v => ch.click = v, v => Math.round(v*100) + "%"));
+  mix.appendChild(prow("Level", () => ch.level, v => ch.level = v, v => Math.round(v*100) + "%"));
+  els.params.appendChild(mix);
 }
 
-function toggleButton(label, getVal, setVal) {
-  const b = el("button", "toggle" + (getVal() ? " on" : ""), label);
-  b.addEventListener("click", () => {
-    setVal(!getVal());
-    b.classList.toggle("on", getVal());
-  });
-  return b;
-}
-
-function buildParams() {
-  const wrap = document.getElementById("params");
-  wrap.innerHTML = "";
-  const ch = state.channels[state.activeCh];
-
-  /* --- WAVEFORM (4 standard analog drum-synth shapes) --- */
-  const wfSec = el("div", "section");
-  wfSec.appendChild(el("h3", null, `WAVEFORM <span class="right">VCO shape</span>`));
-  wfSec.appendChild(segRow(
-    ["sin","tri","sqr","saw"], ["∿ SIN","△ TRI","⊓ SQR","⋀ SAW"],
-    () => ch.waveform, v => { ch.waveform = v; buildParams(); }
-  ));
-  const wfHint = (
-    ch.waveform === "sin" ? "純粋サイン波 (倍音なし)" :
-    ch.waveform === "tri" ? "三角波 (奇数倍音、1/n² 減衰)" :
-    ch.waveform === "sqr" ? "矩形波 (奇数倍音、1/n 減衰、明るい)" :
-                             "鋸歯状波 (全倍音、最も明るい)"
-  );
-  wfSec.appendChild(el("div", "info", wfHint));
-  wrap.appendChild(wfSec);
-
-  /* --- NOISE MIX (independent toggle, channel-specific colour) --- */
-  const nzSec = el("div", "section");
-  nzSec.appendChild(el("h3", null, `NOISE MIX <span class="right">${ch.label} colour</span>`));
-  const nzRow = el("div");
-  nzRow.style.display = "flex";
-  nzRow.style.alignItems = "center";
-  nzRow.style.gap = "8px";
-  nzRow.appendChild(toggleButton(
-    ch.noiseOn ? "NOISE ON" : "NOISE OFF",
-    () => ch.noiseOn,
-    v => { ch.noiseOn = v; buildParams(); }
-  ));
-  nzSec.appendChild(nzRow);
-  const nzHint =
-    ch.label === "CYMBAL" ? "シャラ系広帯域ノイズ (4.5-7.5kHz LP)" :
-    ch.label === "SNARE"  ? "中域 BP + 胴鳴り (600-4200Hz)" :
-                             "低域広帯域ノイズ (2-7kHz LP)";
-  nzSec.appendChild(el("div", "info", ch.noiseOn ? nzHint : "ノイズなし (VCO のみ)"));
-  wrap.appendChild(nzSec);
-
-  /* --- PITCH --- */
-  const pitch = el("div", "section");
-  pitch.appendChild(el("h3", null, "PITCH"));
-  pitch.appendChild(rangeRow("Note",      () => ch.vco,      v => { ch.vco      = v; }, fmt.note));
-  pitch.appendChild(rangeRow("Beat Tune", () => ch.beatTune, v => { ch.beatTune = v; }, fmt.beatTune));
-  /* octave stepper */
-  const octRow = el("div", "row");
-  octRow.style.gridTemplateColumns = "86px 1fr 74px";
-  octRow.appendChild(el("span", "lbl", "Octave"));
-  const stepper = el("div", "stepper");
-  stepper.style.gridColumn = "2/4";
-  for (let o = 1; o <= 5; ++o) {
-    const b = el("button", ch.octave === o ? "on" : "", String(o));
-    b.addEventListener("click", () => {
-      ch.octave = o;
-      stepper.querySelectorAll("button").forEach((bb, i) => bb.classList.toggle("on", i+1 === o));
-    });
-    stepper.appendChild(b);
-  }
-  octRow.appendChild(stepper);
-  pitch.appendChild(octRow);
-  wrap.appendChild(pitch);
-
-  /* --- ENVELOPE --- */
-  const env = el("div", "section");
-  env.appendChild(el("h3", null, "ENVELOPE"));
-  env.appendChild(rangeRow("Attack",  () => ch.attack,  v => { ch.attack  = v; }, fmt.attack));
-  env.appendChild(rangeRow("Sustain", () => ch.sustain, v => { ch.sustain = v; }, fmt.sustain));
-  wrap.appendChild(env);
-
-  /* --- SWEEP --- */
-  const sw = el("div", "section");
-  sw.appendChild(el("h3", null, "SWEEP"));
-  sw.appendChild(rangeRow("Width", () => ch.sweep, v => { ch.sweep = v; }, fmt.sweep));
-  const dirSeg = segRow(
-    ["up","off","down"], ["UP","OFF","DOWN"],
-    () => ch.sweepDir, v => { ch.sweepDir = v; },
-    "cyan"
-  );
-  sw.appendChild(dirSeg);
-  wrap.appendChild(sw);
-
-  /* --- LFO --- */
-  const lfo = el("div", "section");
-  lfo.appendChild(el("h3", null, `LFO`));
-  lfo.appendChild(rangeRow("Rate",  () => ch.lfoRate,  v => { ch.lfoRate  = v; }, fmt.lfoRate));
-  lfo.appendChild(rangeRow("Depth", () => ch.lfoDepth, v => { ch.lfoDepth = v; }, fmt.pct));
-  const lfoRow = el("div");
-  lfoRow.style.marginTop = "6px";
-  lfoRow.appendChild(toggleButton("LFO ON", () => ch.lfoOn, v => { ch.lfoOn = v; }));
-  lfo.appendChild(lfoRow);
-  wrap.appendChild(lfo);
-
-  /* --- OUTPUT --- */
-  const out = el("div", "section");
-  out.appendChild(el("h3", null, "OUTPUT"));
-  out.appendChild(rangeRow("Volume", () => ch.output,     v => { ch.output     = v; }, fmt.pct));
-  out.appendChild(rangeRow("Sense",  () => ch.senseLevel, v => { ch.senseLevel = v; }, fmt.pct));
-  const optRow = el("div");
-  optRow.style.marginTop = "6px";
-  optRow.appendChild(toggleButton("MULTI VCO", () => ch.multiVCO,    v => { ch.multiVCO    = v; }));
-  optRow.appendChild(toggleButton("BEAT SENSE", () => state.beatSense, v => { state.beatSense = v; }));
-  out.appendChild(optRow);
-  wrap.appendChild(out);
-}
-
-/* ----- master volume + preset + demo (footer) ----- */
-function bindFooter() {
-  const mv = document.getElementById("masterVol");
-  const mvVal = document.getElementById("masterVolVal");
-  mv.value = state.masterVolume;
-  mvVal.textContent = Math.round(state.masterVolume * 100) + "%";
-  mv.addEventListener("input", () => {
-    state.masterVolume = parseFloat(mv.value);
-    mvVal.textContent = Math.round(state.masterVolume * 100) + "%";
-    if (master) master.gain.value = state.masterVolume;
-  });
-
-  const sel = document.getElementById("preset");
-  Object.keys(PRESETS).forEach(k => {
-    const o = document.createElement("option");
-    o.value = k; o.textContent = PRESETS[k]._name;
-    sel.appendChild(o);
-  });
-  sel.addEventListener("change", () => {
-    const p = PRESETS[sel.value];
-    if (!p) return;
-    p._apply();
-    buildTabs(); buildParams();
-    sel.value = "";
-  });
-
-  document.getElementById("demoBtn").addEventListener("click", () => {
-    if (demoTimer) stopDemo(); else startDemo();
-    document.getElementById("demoBtn").textContent = demoTimer ? "■ STOP" : "▶ DEMO";
-  });
-}
-
-/* =========================================================
-   PRESETS  -- each has a _name, _apply(): rewrites all 4 channels.
-   ========================================================= */
-function setCh(i, patch) { Object.assign(state.channels[i], patch); }
+/* ---------------------------------------------------------------
+   PRESETS — sound + pattern together.
+   --------------------------------------------------------------- */
 const PRESETS = {
-  init: {
-    _name: "Init",
-    _apply() {
-      for (let i = 0; i < 4; ++i)
-        setCh(i, { vco:0.5, beatTune:0.0, octave:3, attack:0.0, sustain:0.3,
-                   waveform:"sin", lfoRate:0.3, lfoDepth:0.5, lfoOn:false,
-                   sweep:0.0, sweepDir:"off", output:0.8, senseLevel:0.7, multiVCO:false });
+  thousand: {
+    name: "Thousand Knives ポコポコ",
+    apply() {
+      /* melodic poko toms: sine, ~1.5 oct sweep, RC ~25 ms, short tail */
+      Object.assign(state.channels[0], { wave:"sine", tune:196, decay:130, sweepOct:1.4, sweepMs:22, noise:0, click:0.45, level:0.88 }); // G3
+      Object.assign(state.channels[1], { wave:"sine", tune:147, decay:140, sweepOct:1.5, sweepMs:24, noise:0, click:0.45, level:0.90 }); // D3
+      Object.assign(state.channels[2], { wave:"sine", tune:110, decay:155, sweepOct:1.6, sweepMs:26, noise:0, click:0.40, level:0.92 }); // A2
+      Object.assign(state.channels[3], { wave:"sine", tune: 73, decay:180, sweepOct:1.8, sweepMs:30, noise:0, click:0.35, level:0.95 }); // D2
+      state.pattern = [
+        [0,0,1,0, 0,0,0,0, 0,0,1,0, 0,1,0,0],
+        [0,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0],
+        [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0],
+        [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,1],
+      ];
+      state.bpm = 126;
     },
   },
   syndrum: {
-    _name: "Syndrum Classic",
-    _apply() {
-      setCh(0, { vco:0.85, octave:4, attack:0, sustain:0.18, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.78, lfoOn:false, multiVCO:false });
-      setCh(1, { vco:0.65, octave:4, attack:0, sustain:0.22, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.80, lfoOn:false, multiVCO:false });
-      setCh(2, { vco:0.45, octave:3, attack:0, sustain:0.28, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.85, lfoOn:false, multiVCO:false });
-      setCh(3, { vco:0.25, octave:2, attack:0, sustain:0.32, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.92, lfoOn:false, multiVCO:false });
-    },
-  },
-  pokoToms: {
-    _name: "Poko Toms",
-    /* Late-70s analog drum-synth tom character: warm-sine carrier in
-       the low-tom register, fast downward pitch sweep (~2.7 oct) at
-       a short sustain so each hit reads as 'po-ko' rather than a
-       long ringing note. Four channels are tuned a few semitones
-       apart so you can play melodic tom sequences with 1-4. */
-    _apply() {
-      setCh(0, { vco:0.42, octave:3, attack:0, sustain:0.18, sweep:0.45, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.88, lfoOn:false, multiVCO:false });
-      setCh(1, { vco:0.30, octave:3, attack:0, sustain:0.20, sweep:0.45, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.90, lfoOn:false, multiVCO:false });
-      setCh(2, { vco:0.55, octave:2, attack:0, sustain:0.22, sweep:0.45, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.92, lfoOn:false, multiVCO:false });
-      setCh(3, { vco:0.30, octave:2, attack:0, sustain:0.26, sweep:0.50, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.95, lfoOn:false, multiVCO:false });
+    name: "Syndrum Pew",
+    apply() {
+      Object.assign(state.channels[0], { wave:"sine", tune:330, decay:240, sweepOct:2.6, sweepMs:55, noise:0, click:0.3, level:0.85 });
+      Object.assign(state.channels[1], { wave:"sine", tune:220, decay:260, sweepOct:2.8, sweepMs:60, noise:0, click:0.3, level:0.88 });
+      Object.assign(state.channels[2], { wave:"sine", tune:147, decay:280, sweepOct:3.0, sweepMs:65, noise:0, click:0.3, level:0.90 });
+      Object.assign(state.channels[3], { wave:"sine", tune: 98, decay:300, sweepOct:3.2, sweepMs:70, noise:0, click:0.3, level:0.92 });
+      state.pattern = [
+        [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+        [0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
+        [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,1,0,0],
+        [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0],
+      ];
+      state.bpm = 112;
     },
   },
   electro: {
-    _name: "Electro Kit",
-    _apply() {
-      setCh(0, { vco:0.5, octave:3, attack:0, sustain:0.08, sweep:0.0,  sweepDir:"off",  waveform:"sin", noiseOn:true,  output:0.55, lfoOn:false, multiVCO:false });
-      setCh(1, { vco:0.5, octave:3, attack:0, sustain:0.28, sweep:0.0,  sweepDir:"off",  waveform:"sin", noiseOn:true,  output:0.55, lfoOn:false, multiVCO:false });
-      setCh(2, { vco:0.55,octave:3, attack:0, sustain:0.18, sweep:0.30, sweepDir:"down", waveform:"sqr", noiseOn:false, output:0.75, lfoOn:false, multiVCO:false });
-      setCh(3, { vco:0.25,octave:2, attack:0, sustain:0.30, sweep:0.55, sweepDir:"down", waveform:"sin", noiseOn:false, output:0.92, lfoOn:false, multiVCO:false });
+    name: "Electro Kit",
+    apply() {
+      Object.assign(state.channels[0], { wave:"square",   tune:420, decay: 60, sweepOct:0.4, sweepMs:10, noise:0.65, click:0.7, level:0.55 }); // hat
+      Object.assign(state.channels[1], { wave:"triangle", tune:240, decay:140, sweepOct:1.0, sweepMs:18, noise:0.45, click:0.6, level:0.75 }); // snare
+      Object.assign(state.channels[2], { wave:"sine",     tune:130, decay:170, sweepOct:1.4, sweepMs:24, noise:0,    click:0.4, level:0.85 }); // tom
+      Object.assign(state.channels[3], { wave:"sine",     tune: 55, decay:220, sweepOct:1.9, sweepMs:34, noise:0,    click:0.5, level:1.0  }); // kick
+      state.pattern = [
+        [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,1],
+        [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+        [0,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
+        [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0],
+      ];
+      state.bpm = 118;
     },
   },
-  cymbalWash: {
-    _name: "Cymbal Wash",
-    _apply() {
-      setCh(0, { vco:0.5, octave:3, attack:0, sustain:0.15, sweep:0.0, sweepDir:"off", waveform:"sin", noiseOn:true,  output:0.65, lfoOn:false, multiVCO:false });
-      setCh(1, { vco:0.5, octave:3, attack:0, sustain:0.30, sweep:0.0, sweepDir:"off", waveform:"sin", noiseOn:true,  output:0.65, lfoOn:false, multiVCO:false });
-      setCh(2, { vco:0.5, octave:3, attack:0, sustain:0.50, sweep:0.0, sweepDir:"off", waveform:"sin", noiseOn:true,  output:0.65, lfoOn:false, multiVCO:false });
-      setCh(3, { vco:0.5, octave:3, attack:0, sustain:0.85, sweep:0.0, sweepDir:"off", waveform:"sin", noiseOn:true,  output:0.65, lfoOn:false, multiVCO:false });
-    },
-  },
-  cosmic: {
-    _name: "Cosmic Up-Sweep",
-    _apply() {
-      for (let i = 0; i < 4; ++i)
-        setCh(i, { vco:0.3+i*0.07, octave:2+(i>>1), attack:0, sustain:0.55+i*0.05, sweep:0.75+i*0.05,
-                   sweepDir:"up", waveform:"sin", output:0.80,
-                   lfoOn:true, lfoRate:0.50-i*0.05, lfoDepth:0.55+i*0.05, multiVCO:false });
-    },
-  },
-  drone: {
-    _name: "Drone Pad",
-    _apply() {
-      for (let i = 0; i < 4; ++i)
-        setCh(i, { vco:0.5+i*0.04, octave:3+(i&1), attack:0.40, sustain:0.95, sweep:0.0, sweepDir:"off",
-                   waveform:"sin", output:0.55, lfoOn:true, lfoRate:0.20+i*0.05, lfoDepth:0.55, multiVCO:false });
-      state.masterVolume = 0.45;
-      const mv = document.getElementById("masterVol");
-      if (mv) mv.value = 0.45;
-      const mvVal = document.getElementById("masterVolVal");
-      if (mvVal) mvVal.textContent = "45%";
-      if (master) master.gain.value = 0.45;
+  empty: {
+    name: "Empty Pattern",
+    apply() {
+      state.pattern = [ new Array(16).fill(0), new Array(16).fill(0),
+                        new Array(16).fill(0), new Array(16).fill(0) ];
     },
   },
 };
 
-/* =========================================================
-   DEMO PATTERN
-   ========================================================= */
-let demoTimer = null;
-function startDemo() {
-  ensureAudio();
-  if (actx && actx.state === "suspended") actx.resume();
-  PRESETS.electro._apply();
-  buildTabs(); buildParams();
-  const pat = [
-    /* CYM closed */ [1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0],
-    /* CYM open   */ [0,0,0,0,0,0,0,0, 0,0,0,0,0,0,1,0],
-    /* SNARE      */ [0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,1],
-    /* KICK       */ [1,0,0,0,0,0,0,0, 1,0,0,1,0,0,0,0],
-  ];
-  const bpm = 112;
-  const stepMs = 60000 / bpm / 4;
-  let step = 0;
-  const tick = () => {
-    for (let i = 0; i < 4; ++i)
-      if (pat[i][step]) { playChannel(state.channels[i], 0.9); flashPad(state.channels[i]); }
-    step = (step + 1) % 16;
-  };
-  tick();
-  demoTimer = setInterval(tick, stepMs);
-}
-function stopDemo() {
-  if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+/* ---------------------------------------------------------------
+   WIRE-UP
+   --------------------------------------------------------------- */
+function refreshAll() {
+  buildPads(); buildSeq(); buildTabs(); buildParams();
+  els.bpmVal.textContent = state.bpm;
 }
 
-/* =========================================================
-   KEYBOARD (desktop convenience) -- 1..4 trigger channels
-   ========================================================= */
-window.addEventListener("keydown", e => {
-  if (e.repeat) return;
-  const i = "1234".indexOf(e.key);
-  if (i >= 0) {
-    const ch = state.channels[i];
-    playChannel(ch, 0.95);
-    flashPad(ch);
-  }
-});
-
-/* =========================================================
-   SPLASH -- iOS / Android both need a user gesture to start audio
-   ========================================================= */
-document.getElementById("splashBtn").addEventListener("click", () => {
-  ensureAudio();
+document.getElementById("startBtn").addEventListener("click", () => {
+  audioInit();
   if (actx.state === "suspended") actx.resume();
   document.getElementById("splash").remove();
-  const app = document.getElementById("app");
-  app.hidden = false;
-  buildPads(); buildTabs(); buildParams(); bindFooter();
-});
+  document.getElementById("app").hidden = false;
+  document.getElementById("foot").hidden = false;
 
-/* desktop fallback: clicking anywhere also unlocks */
-window.addEventListener("pointerdown", () => {
-  ensureAudio();
-  if (actx && actx.state === "suspended") actx.resume();
-}, { once: true });
+  els.pads   = document.getElementById("pads");
+  els.seq    = document.getElementById("seq");
+  els.tabs   = document.getElementById("tabs");
+  els.params = document.getElementById("params");
+  els.bpmVal = document.getElementById("bpmVal");
+  els.playBtn= document.getElementById("playBtn");
+
+  /* default to the Thousand Knives patch + pattern */
+  PRESETS.thousand.apply();
+  refreshAll();
+
+  els.playBtn.addEventListener("click", () => state.playing ? stop() : play());
+  document.getElementById("bpmUp").addEventListener("click", () => {
+    state.bpm = Math.min(200, state.bpm + 2); els.bpmVal.textContent = state.bpm;
+  });
+  document.getElementById("bpmDn").addEventListener("click", () => {
+    state.bpm = Math.max(60, state.bpm - 2); els.bpmVal.textContent = state.bpm;
+  });
+  document.getElementById("clearBtn").addEventListener("click", () => {
+    PRESETS.empty.apply(); buildSeq();
+  });
+  document.getElementById("randBtn").addEventListener("click", () => {
+    for (let c = 0; c < 4; c++)
+      for (let s = 0; s < 16; s++)
+        state.pattern[c][s] = Math.random() < (c === 3 ? 0.28 : 0.18) ? 1 : 0;
+    buildSeq();
+  });
+  const mv = document.getElementById("mvol");
+  mv.value = state.vol;
+  mv.addEventListener("input", () => {
+    state.vol = parseFloat(mv.value);
+    if (master) master.gain.value = state.vol;
+  });
+  const sel = document.getElementById("preset");
+  Object.entries(PRESETS).forEach(([k, p]) => {
+    const o = document.createElement("option");
+    o.value = k; o.textContent = p.name;
+    sel.appendChild(o);
+  });
+  sel.addEventListener("change", () => {
+    const p = PRESETS[sel.value];
+    if (p) { p.apply(); refreshAll(); }
+    sel.value = "";
+  });
+
+  /* keyboard 1-4 (desktop) */
+  window.addEventListener("keydown", e => {
+    if (e.repeat) return;
+    if (e.key === " ") { e.preventDefault(); state.playing ? stop() : play(); return; }
+    const i = "1234".indexOf(e.key);
+    if (i >= 0) {
+      trigger(state.channels[i], 1);
+      blinkPad(i);
+    }
+  });
+});
 </script>
 </body>
 </html>
