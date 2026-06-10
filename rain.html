@@ -95,30 +95,43 @@
 <script>
 "use strict";
 /* ================================================================
-   雨の水面 — a water HEIGHT FIELD shown as a matte 3-D relief on black.
+   雨の水面 — rain on a glossy black water surface.
 
-   The water surface is a height field h(x,y,t): every raindrop launches
-   an expanding, decaying ripple wave-packet and the contributions of all
-   drops are SUMMED, so wavefronts genuinely interfere. A WebGL fragment
-   shader derives the surface normal and lights it with a specular sheen so
-   the water surface glistens (a wet, glossy look) while calm water reads
-   black and the ripple slopes catch light. A pinhole camera lets the view
-   tilt from straight-down (真上) to ~45°, foreshortening the ripples and
-   receding to a horizon.
+   One event drives everything: a raindrop impact.
 
-   Rain timing is a Poisson process; drop sizes follow a
-   Marshall-Palmer-like law. Each impact also fires a short water-drop
-   grain (selectable oscillator), so picture and sound share one event.
+   VISUAL — the water is a height field h(x,y,t). Each drop launches an
+   expanding wave packet:
+
+       h_i = A·e^(-age/τ) · (r+r0)^(-1/2) · exp(-(s/σ)²) · sin(k·s)
+       s   = r - c·age          (distance from the moving front)
+
+   with mild dispersion (the packet stretches and its wavelength grows
+   as it travels). All packets are SUMMED, so ripples genuinely
+   interfere. A WebGL2 fragment shader evaluates h and its analytic
+   gradient per pixel, builds a surface normal, and lights it with a
+   two-lobe specular (a tight glint + a broad wet sheen) over black —
+   the surface itself glistens. A faint multi-directional swell keeps
+   calm water alive. A pinhole camera tilts the view from straight
+   down (真上) to ~45°, foreshortening rings toward a horizon.
+
+   AUDIO — impact times form a Poisson process (exponential inter-
+   arrival), drop sizes follow a Marshall-Palmer-like exponential law.
+   Each impact fires one grain: a broadband tick + a tonal "plip"
+   (selectable oscillator) sweeping up like the Minnaert resonance of
+   the entrained bubble. Pan follows the on-screen position, and when
+   the camera is tilted, far drops sound quieter and duller (distance
+   low-pass). Jitter humanises time, pitch and level; the decay knob
+   scales grain length. A soft tanh bus stops dense rain clipping.
    ================================================================ */
 
 /* ---------------------------------------------------------------- */
-/* Canvas / WebGL2                                                  */
+/* WebGL2 setup                                                     */
 /* ---------------------------------------------------------------- */
-const MAXN = 48;                                  // max simultaneous drops in the shader
+const MAXN = 40;                       // max simultaneous ripples in the shader
 const cv = document.getElementById('stage');
-const gl = cv.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false });
+const gl = cv.getContext('webgl2', { antialias: false, alpha: false });
 
-let W = 0, H = 0, RS = 1;
+let W = 0, H = 0;
 let mobile = matchMedia('(max-width: 720px)').matches;
 
 const VERT = `#version 300 es
@@ -128,81 +141,102 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
 const FRAG = `#version 300 es
 precision highp float;
 out vec4 outColor;
-uniform vec2  uRes;
-uniform vec2  uWorld;           // pond size in world px (W, H)
+uniform vec2  uRes;             // canvas size (device px)
+uniform vec2  uWorld;           // water plane reference size (CSS px)
 uniform float uTilt;            // camera tilt from straight-down (radians)
+uniform float uTime;            // seconds since start
 uniform int   uCount;
-uniform vec4  uDrop[${MAXN}];   // x, y(world px), age(s), amp
+uniform vec4  uDrop[${MAXN}];   // x, y (world px), age (s), amplitude
 
-#define SPEED  160.0            // wavefront speed (px/s)
-#define LAMBDA 36.0             // crest wavelength (px)
-#define KK     (6.28318530718/LAMBDA)
-#define WIDTH  82.0             // wave-packet width (px) -> a tidy set of rings
-#define TAUD   3.1              // amplitude decay time (s) -> reach further
-#define R0     42.0             // softens 1/sqrt(r) near the impact
-#define GAIN   8.0              // slope -> surface normal (relief strength)
+#define SPEED   150.0           // wavefront speed (px/s)
+#define LAMBDA  34.0            // base crest wavelength (px)
+#define SIGMA   80.0            // base packet width (px)
+#define DISP    0.18            // dispersion: packet/wavelength growth per second
+#define TAUD    3.0             // amplitude decay time (s)
+#define R0      40.0            // softens 1/sqrt(r) at the impact point
+#define GAIN    7.0             // surface slope -> normal exaggeration
 
 void main(){
-  // ---- pinhole camera: cast a ray through this pixel onto the water plane ----
-  // Straight down at uTilt = 0 (真上); tilt up to ~45° to view the pond at an angle.
-  vec2  uv  = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;   // y-normalised screen coords
-  float th  = tan(0.35);                                  // half field-of-view (~40° fov)
-  vec3  T   = vec3(uWorld * 0.5, 0.0);                    // look at the pond centre
-  float dist = (uWorld.y * 0.5) / th;                     // frame the pond at tilt 0
-  vec3  C   = T + dist * vec3(0.0, -sin(uTilt), cos(uTilt));  // camera position
+  /* ---- pinhole camera: cast this pixel's ray onto the water plane ---- */
+  vec2  uv  = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;
+  float th  = tan(0.35);                                   // ~40° fov
+  vec3  T   = vec3(uWorld * 0.5, 0.0);                     // look-at: centre
+  float dst = (uWorld.y * 0.5) / th;                       // frames the view at tilt 0
+  vec3  C   = T + dst * vec3(0.0, -sin(uTilt), cos(uTilt));
   vec3  fwd = normalize(T - C);
   vec3  rgt = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
   vec3  upv = cross(rgt, fwd);
   vec3  dir = normalize(fwd + uv.x * th * rgt + uv.y * th * upv);
-  if (dir.z > -1e-3){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; } // at/above horizon
-  float sdist = -C.z / dir.z;                             // ray-plane (z=0) intersection
-  vec2  p = (C + sdist * dir).xy;                         // world point on the water
+  if (dir.z > -1e-3){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  float sd = -C.z / dir.z;                                 // ray ∩ plane z=0
+  vec2  p  = (C + sd * dir).xy;
 
-  float h = 0.0;     // summed surface height (interference happens here)
-  vec2  g = vec2(0.0); // summed surface gradient (analytic)
+  /* ---- sum every ripple's height and analytic gradient ---- */
+  float h = 0.0;
+  vec2  g = vec2(0.0);
 
   for (int i = 0; i < uCount; i++){
     vec4 d = uDrop[i];
     vec2 rel = p - d.xy;
-    float r  = length(rel) + 1e-3;
+    float r   = length(rel) + 1e-3;
     float age = d.z;
 
-    float s   = r - SPEED * age;          // signed distance from the moving front
-    float env = exp(-(s*s)/(WIDTH*WIDTH)); // gaussian packet envelope
-    float sp  = inversesqrt(r + R0);       // circular energy spreading ~ 1/sqrt(r)
-    float td  = exp(-age / TAUD);
-    float A   = d.w * td;
-    float ph  = KK * s;
-    float c   = cos(ph), sn = sin(ph);
+    float grow = 1.0 + DISP * age;          // dispersion stretches the packet
+    float sig  = SIGMA * grow;
+    float k    = 6.2831853 / (LAMBDA * grow);
 
-    h += A * sp * env * sn;
+    float s   = r - SPEED * age;
+    float env = exp(-(s*s)/(sig*sig));
+    if (env < 0.004) continue;
+    float sp  = inversesqrt(r + R0);
+    float A   = d.w * exp(-age / TAUD);
 
-    // d/dr of [ A·sp·env·sin(KK·s) ], with ds/dr = 1
+    float ph = k * s;
+    float c  = cos(ph), sn = sin(ph);
+    float w  = A * sp * env;
+
+    h += w * sn;
+
+    // d/dr of [ A·sp·env·sin(k·s) ]   (ds/dr = 1)
     float dsp  = -0.5 * sp / (r + R0);
-    float denv = env * (-2.0 * s / (WIDTH*WIDTH));
-    float dhdr = A * ( dsp*env*sn + sp*denv*sn + sp*env*c*KK );
+    float denv = -2.0 * s / (sig*sig);
+    float dhdr = A * env * sn * dsp + w * (denv * sn + k * c);
     g += dhdr * (rel / r);
   }
 
-  // ---- glossy wet water on black: 3-D relief + specular sheen ----
-  vec3 N = normalize(vec3(-g.x * GAIN, -g.y * GAIN, 1.0));
-  vec3 L = normalize(vec3(0.45, 0.55, 0.72));
+  /* ---- faint swell so calm water still reads as living water ----
+     (lighting only: three slow, long, crossing wavetrains)            */
+  vec2 gsw = vec2(0.0);
+  {
+    vec2 k1 = vec2( 0.013,  0.009);
+    vec2 k2 = vec2(-0.011,  0.014);
+    vec2 k3 = vec2( 0.006, -0.016);
+    gsw += 0.40 * cos(dot(k1, p) + uTime * 0.50) * k1;
+    gsw += 0.32 * cos(dot(k2, p) + uTime * 0.37) * k2;
+    gsw += 0.26 * cos(dot(k3, p) + uTime * 0.61) * k3;
+  }
+
+  /* ---- two-lobe glossy lighting over black ---- */
+  vec3 N = normalize(vec3(-(g.x + gsw.x) * GAIN, -(g.y + gsw.y) * GAIN, 1.0));
+  vec3 L = normalize(vec3(0.50, 0.60, 0.62));
   vec3 Hh = normalize(L + vec3(0.0, 0.0, 1.0));
+  float dNH = max(dot(N, Hh), 0.0);
 
-  // calm water stays black; ripple slopes get soft body (relief) and the
-  // water surface itself glistens with a specular highlight (テカリ)
-  float relief = dot(N, L) - L.z;
-  float spec = max(pow(max(dot(N, Hh), 0.0), 30.0) - pow(Hh.z, 30.0), 0.0);
+  float glint = pow(dNH, 60.0);                            // tight sparkling glints
+  float sheen = max(pow(dNH, 7.0) - pow(Hh.z, 7.0), 0.0);  // broad wet sheen (flat water -> 0)
+  float relief = dot(N, L) - L.z;                          // signed 3-D flank shading
 
-  float lum = 0.014 + 0.7 * relief + 1.8 * spec + 0.04 * clamp(h * 0.8, -1.0, 1.0);
-  lum = clamp(lum, 0.0, 1.0);
-  vec3 col = vec3(lum);
+  float lum = 0.016 + 2.6 * glint + 0.5 * sheen + 0.42 * relief
+            + 0.05 * clamp(h * 1.2, -1.0, 1.0);
+  lum = max(lum, 0.0);
 
-  // recede to a horizon (no rectangular pond), plus a soft round vignette
-  col *= clamp(1.0 - sdist / (dist * 9.0), 0.0, 1.0);
-  col *= 1.0 - 0.22 * dot(uv, uv);
+  /* recede to a horizon when tilted; settle the frame into black */
+  lum *= clamp(1.0 - sd / (dst * 9.0), 0.0, 1.0);
+  lum *= 1.0 - 0.18 * dot(uv, uv);
 
-  outColor = vec4(col, 1.0);
+  /* filmic-ish soft knee keeps glints bright without hard clipping */
+  float tone = 1.0 - exp(-lum * 1.7);
+  outColor = vec4(vec3(tone), 1.0);
 }`;
 
 function compile(type, src){
@@ -218,7 +252,6 @@ gl.linkProgram(prog);
 if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
 gl.useProgram(prog);
 
-// full-screen triangle
 const vbo = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -229,6 +262,7 @@ gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 const uRes   = gl.getUniformLocation(prog, 'uRes');
 const uWorld = gl.getUniformLocation(prog, 'uWorld');
 const uTilt  = gl.getUniformLocation(prog, 'uTilt');
+const uTime  = gl.getUniformLocation(prog, 'uTime');
 const uCount = gl.getUniformLocation(prog, 'uCount');
 const uDrop  = gl.getUniformLocation(prog, 'uDrop');
 const dropBuf = new Float32Array(MAXN * 4);
@@ -237,9 +271,9 @@ function resize(){
   const dpr = window.devicePixelRatio || 1;
   W = window.innerWidth; H = window.innerHeight;
   mobile = W < 720;
-  RS = Math.min(dpr, mobile ? 1.0 : 1.25);   // cap backing-store resolution for fill-rate
+  const rs = Math.min(dpr, mobile ? 1.0 : 1.25);   // cap fill-rate cost
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
-  cv.width = Math.round(W * RS); cv.height = Math.round(H * RS);
+  cv.width = Math.round(W * rs); cv.height = Math.round(H * rs);
   gl.viewport(0, 0, cv.width, cv.height);
 }
 window.addEventListener('resize', resize);
@@ -260,8 +294,8 @@ const panel  = document.getElementById('panel');
 const params = {
   get rate()   { return +elRate.value; },
   get jitter() { return +elJit.value / 100; },
-  get decay()  { return +elDec.value / 100; },          // 0 = shortest, 1 = longest
-  get tilt()   { return +elTilt.value * Math.PI / 180; },// camera tilt in radians
+  get decay()  { return +elDec.value / 100; },
+  get tilt()   { return +elTilt.value * Math.PI / 180; },
   get vol()    { return +elVol.value / 100; },
   get osc()    { return elOsc.value; },
   soundOn: true,
@@ -277,6 +311,7 @@ elVol.addEventListener('input', () => {
   if (master && params.soundOn) master.gain.setTargetAtTime(params.vol, ac.currentTime, 0.03);
 });
 
+/* controls vanish entirely when idle, return on any touch / movement */
 let dimTimer = null;
 function wake(){
   panel.classList.remove('dim');
@@ -293,29 +328,27 @@ const rnd = Math.random;
 function expVar(lambda){ return -Math.log(1 - rnd()) / lambda; }
 function clamp(x, a, b){ return x < a ? a : x > b ? b : x; }
 
-/* Cast a screen ray (u in [-aspect,aspect], v in [-1,1]) onto the water plane,
-   mirroring the shader's pinhole camera. Returns [worldX, worldY] or null if
-   the ray points at/above the horizon. Used so rain falls across exactly the
-   visible surface at any tilt — no rectangular pond. */
+/* Cast a screen point (u in ±aspect, v in ±1) onto the water plane with the
+   same pinhole camera as the shader, so rain lands across exactly the visible
+   surface at any tilt. Returns [x, y] in world px, or null above the horizon. */
 function screenToWorld(u, v){
   const th = Math.tan(0.35);
   const Tx = W * 0.5, Ty = H * 0.5;
-  const dist = (H * 0.5) / th;
+  const dst = (H * 0.5) / th;
   const t = params.tilt;
-  const Cx = Tx, Cy = Ty - dist * Math.sin(t), Cz = dist * Math.cos(t);
-  let fx = Tx - Cx, fy = Ty - Cy, fz = -Cz;
-  const fl = Math.hypot(fx, fy, fz); fx /= fl; fy /= fl; fz /= fl;
-  // rgt = normalize(cross(fwd, (0,1,0))) = normalize((-fz, 0, fx))
-  const rl = Math.hypot(fz, fx); const rx = -fz / rl, rz = fx / rl;
-  // up = cross(rgt, fwd)
-  const ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
-  let dx = fx + u * th * rx + v * th * ux;
-  let dy = fy + v * th * uy;
-  let dz = fz + u * th * rz + v * th * uz;
+  const Cy = Ty - dst * Math.sin(t), Cz = dst * Math.cos(t);
+  // fwd = normalize(T - C); the camera only pitches, so fwd.x = 0
+  let fy = Ty - Cy, fz = -Cz;
+  const fl = Math.hypot(fy, fz); fy /= fl; fz /= fl;
+  // rgt = normalize(cross(fwd, (0,1,0))) = (1, 0, 0) for this camera,
+  // upv = cross(rgt, fwd) = (0, -fz, fy)
+  let dx = u * th;
+  let dy = fy + v * th * (-fz);
+  let dz = fz + v * th * ( fy);
   const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
   if (dz > -1e-3) return null;
   const s = -Cz / dz;
-  return [Cx + s * dx, Cy + s * dy];
+  return [Tx + s * dx, Cy + s * dy];
 }
 
 /* ---------------------------------------------------------------- */
@@ -329,58 +362,62 @@ function initAudio(){
   master = ac.createGain();
   master.gain.value = params.soundOn ? params.vol : 0;
 
-  // soft clip keeps dense rain from clipping
-  const shaper = ac.createWaveShaper();
+  const shaper = ac.createWaveShaper();          // soft bus saturation
   const n = 1024, curve = new Float32Array(n);
   for (let i = 0; i < n; i++){ const x = (i / (n - 1)) * 2 - 1; curve[i] = Math.tanh(x * 1.5); }
   shaper.curve = curve;
 
-  analyser = ac.createAnalyser();   // also used by the test harness to confirm output
+  analyser = ac.createAnalyser();
   analyser.fftSize = 1024;
   master.connect(shaper).connect(analyser).connect(ac.destination);
 
   const len = ac.sampleRate * 2;
   noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
-  const dd = noiseBuf.getChannelData(0);
-  for (let i = 0; i < len; i++) dd[i] = rnd() * 2 - 1;
+  const ch = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) ch[i] = rnd() * 2 - 1;
 
-  // faint continuous rain hiss whose level tracks the rate
+  // continuous faint rain hiss; its level follows the rate in the main loop
   const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
-  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 0.5;
   const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 700;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 0.5;
   ambGain = ac.createGain(); ambGain.gain.value = 0.0;
   src.connect(hp).connect(bp).connect(ambGain).connect(master);
   src.start();
 
-  // expose RMS for verification
+  // RMS probe (used by the headless test harness to confirm audible output)
   const td = new Float32Array(analyser.fftSize);
   window.__rms = () => { analyser.getFloatTimeDomainData(td);
     let s = 0; for (let i = 0; i < td.length; i++) s += td[i] * td[i];
     return Math.sqrt(s / td.length); };
 }
 
-/* one water-drop grain: a broadband impact "tick" plus a short tonal
-   "plip" (selectable oscillator) whose pitch sweeps slightly UP, like the
-   Minnaert resonance of the entrained bubble. Big drops are lower & longer. */
-function playDrop(size, panX){
+/* One raindrop grain.
+   size  0..1  Marshall-Palmer sample — big drops are lower, longer, louder.
+   panX -1..1  stereo position matching the screen.
+   far   0..1  distance up the tilted view — far drops get quieter and duller. */
+function playDrop(size, panX, far){
   if (!ac || !params.soundOn) return;
   const t = ac.currentTime, j = params.jitter;
 
-  const durScale = 0.3 + 1.15 * params.decay;   // decay knob: short → long
-  const dur = (0.09 + 0.28 * size) * durScale * (1 + (rnd() - 0.5) * 0.5 * j);
+  const durScale = 0.25 + 1.3 * params.decay;
+  const dur = (0.08 + 0.26 * size) * durScale * (1 + (rnd() - 0.5) * 0.5 * j);
   const wob = Math.pow(2, (rnd() - 0.5) * 0.9 * j);
-  const f0  = (240 + 1200 * Math.pow(1 - size, 1.6)) * wob; // small ~1.4k, big ~240
-  const amp = (0.22 + 0.7 * size) * (0.75 + 0.5 * rnd());
+  const f0  = (240 + 1200 * Math.pow(1 - size, 1.6)) * wob;
+  const dim = 1 - 0.55 * far;                               // distance attenuation
+  const amp = (0.22 + 0.7 * size) * (0.75 + 0.5 * rnd()) * dim;
 
+  const lp = ac.createBiquadFilter();                        // distance dulling
+  lp.type = 'lowpass';
+  lp.frequency.value = 16000 - 13000 * far;
   const pan = ac.createStereoPanner ? ac.createStereoPanner() : ac.createGain();
   if (pan.pan) pan.pan.value = clamp(panX, -1, 1);
-  pan.connect(master);
+  lp.connect(pan).connect(master);
 
   const vca = ac.createGain();
   vca.gain.setValueAtTime(0.0001, t);
   vca.gain.exponentialRampToValueAtTime(amp, t + 0.004);
   vca.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  vca.connect(pan);
+  vca.connect(lp);
 
   let voice;
   if (params.osc === 'noise'){
@@ -388,7 +425,7 @@ function playDrop(size, panX){
     voice.playbackRate.value = 0.6 + rnd() * 0.8;
     const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 5 + 9 * size;
     bp.frequency.setValueAtTime(f0, t);
-    bp.frequency.exponentialRampToValueAtTime(f0 * 1.6, t + dur);
+    bp.frequency.exponentialRampToValueAtTime(f0 * 1.6, t + dur);   // Minnaert up-chirp
     voice.connect(bp).connect(vca);
   } else {
     voice = ac.createOscillator(); voice.type = params.osc;
@@ -398,35 +435,26 @@ function playDrop(size, panX){
   }
   voice.start(t); voice.stop(t + dur + 0.03);
 
-  // attack tick for the granular bite
+  // broadband attack tick — the granular bite of each drop
   const click = ac.createBufferSource(); click.buffer = noiseBuf; click.loop = true;
   click.playbackRate.value = 1 + rnd();
-  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1200 + 1800 * size;
+  const chp = ac.createBiquadFilter(); chp.type = 'highpass'; chp.frequency.value = 1200 + 1800 * size;
   const cg = ac.createGain();
   cg.gain.setValueAtTime(amp * 0.6, t);
   cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.018 + 0.02 * size);
-  click.connect(hp).connect(cg).connect(pan);
+  click.connect(chp).connect(cg).connect(lp);
   click.start(t); click.stop(t + 0.09);
 }
 
 /* ---------------------------------------------------------------- */
-/* Drops                                                            */
+/* Drops + main loop                                                */
 /* ---------------------------------------------------------------- */
-const WAVE_SPEED = 160;   // must match SPEED in the shader (for culling)
-const PACKET     = 110;   // must match WIDTH
-const DECAY_TAU  = 3.1;   // must match TAUD
+const DECAY_TAU = 3.0;                       // must match TAUD in the shader
 const drops = [];
-const MAX_DROPS = mobile ? 20 : 24;
+const MAX_DROPS = mobile ? 20 : 28;
 
-function spawnDrop(x, y, size){
-  if (drops.length >= MAX_DROPS) drops.shift();
-  drops.push({ x, y, t0: performance.now() / 1000, amp: 0.7 + 0.9 * size });
-}
-
-/* ---------------------------------------------------------------- */
-/* Main loop — Poisson scheduling + render                          */
-/* ---------------------------------------------------------------- */
 let lastFrame = performance.now() / 1000;
+const t0 = lastFrame;
 let nextDropIn = 0;
 
 function frame(){
@@ -434,44 +462,42 @@ function frame(){
   let dt = now - lastFrame; lastFrame = now;
   if (dt > 0.1) dt = 0.1;
 
-  // schedule impacts as a Poisson process
+  /* impacts arrive as a Poisson process across the visible water */
   const lambda = params.rate;
+  const aspect = W / H;
   nextDropIn -= dt;
   let guard = 0;
-  const aspect = W / H;
   while (nextDropIn <= 0 && guard++ < 40){
-    const size = clamp(1 - Math.exp(-expVar(2.4)), 0.04, 1);   // Marshall-Palmer-ish
-    // sample a point on screen (with margin) and project onto the water,
-    // so drops land across the whole visible surface for any tilt
-    let world = null, u = 0, tries = 0;
+    const size = clamp(1 - Math.exp(-expVar(2.4)), 0.04, 1);  // Marshall-Palmer-ish
+    let world = null, u = 0, v = 0, tries = 0;
     do {
-      u = (rnd() * 2 - 1) * aspect * 1.12;
-      const v = (rnd() * 2 - 1) * 1.06;
+      u = (rnd() * 2 - 1) * aspect * 1.1;
+      v = (rnd() * 2 - 1) * 1.05;
       world = screenToWorld(u, v);
     } while (!world && ++tries < 8);
     if (world){
-      spawnDrop(world[0], world[1], size);
-      if (started) playDrop(size, clamp(u / aspect, -1, 1));
+      if (drops.length >= MAX_DROPS) drops.shift();
+      drops.push({ x: world[0], y: world[1], t0: now, amp: 0.7 + 0.9 * size });
+      if (started){
+        const far = clamp((v + 1) * 0.5, 0, 1) * (params.tilt / (Math.PI / 4));
+        playDrop(size, clamp(u / aspect, -1, 1), clamp(far, 0, 1));
+      }
     }
     nextDropIn += expVar(lambda);
   }
 
   if (ambGain) ambGain.gain.setTargetAtTime(0.005 + 0.014 * (lambda / 60), ac.currentTime, 0.2);
 
-  // cull dead drops and pack live ones into the uniform buffer
-  const diag = Math.hypot(W, H);
+  /* cull dead ripples, pack live ones for the shader */
   let cnt = 0;
   for (let i = drops.length - 1; i >= 0; i--){
     const d = drops[i];
     const age = now - d.t0;
-    const front = WAVE_SPEED * age;
-    if (Math.exp(-age / DECAY_TAU) < 0.03 || front - 2 * PACKET > diag){
-      drops.splice(i, 1); continue;
-    }
+    if (Math.exp(-age / DECAY_TAU) < 0.03){ drops.splice(i, 1); continue; }
     if (cnt < MAXN){
       const o = cnt * 4;
-      dropBuf[o] = d.x; dropBuf[o + 1] = d.y;   // world px (camera maps screen → world)
-      dropBuf[o + 2] = age;  dropBuf[o + 3] = d.amp;
+      dropBuf[o] = d.x; dropBuf[o + 1] = d.y;
+      dropBuf[o + 2] = age; dropBuf[o + 3] = d.amp;
       cnt++;
     }
   }
@@ -479,6 +505,7 @@ function frame(){
   gl.uniform2f(uRes, cv.width, cv.height);
   gl.uniform2f(uWorld, W, H);
   gl.uniform1f(uTilt, params.tilt);
+  gl.uniform1f(uTime, now - t0);
   gl.uniform1i(uCount, cnt);
   gl.uniform4fv(uDrop, dropBuf);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -488,7 +515,7 @@ function frame(){
 requestAnimationFrame(frame);
 
 /* ---------------------------------------------------------------- */
-/* Start gate (audio needs a user gesture)                          */
+/* Start gate (audio requires a user gesture)                       */
 /* ---------------------------------------------------------------- */
 const gate = document.getElementById('gate');
 function begin(){

@@ -98,11 +98,14 @@ cd ds4-native/tests
 
 ## 3. Rain on Water (`rain.html`)
 
-A single self-contained `rain.html` (no dependencies): a water surface
-seen from straight above, rendered as expanding white concentric
-wavefronts on black with a constant stroke width and angular shading
-for a sketch-like 3-D dimple. Each raindrop also fires a short
-synthesised grain.
+A single self-contained `rain.html` (no dependencies): rain falling on
+a glossy black water surface. The water is a real height field — every
+raindrop launches an expanding, dispersing wave packet, all packets
+are summed so ripples genuinely interfere, and a WebGL2 fragment
+shader lights the surface normal with a two-lobe specular (tight
+glints + a broad wet sheen) over black. A faint swell keeps calm water
+alive, and a pinhole camera tilts the view from straight above (真上)
+to ~45°, foreshortening the rings toward a horizon.
 
 The rain is driven mathematically: impacts are a **Poisson point
 process** in time (exponential inter-arrival times), drop sizes follow
@@ -112,7 +115,9 @@ the same physics. The grain is a selectable oscillator
 (sine / triangle / saw / square / noise) with a fast percussive
 envelope, a Minnaert-style upward pitch sweep, a broadband impact
 "tick" for granularity, and stereo panning matched to the on-screen
-position. Rate, random jitter, volume and waveform are adjustable.
+position; with the camera tilted, far drops sound quieter and duller.
+Rate, jitter, grain decay, camera tilt, volume and waveform are
+adjustable from a panel that fades away when idle.
 
 ```
 xdg-open rain.html    # then tap to begin (audio needs a gesture)
