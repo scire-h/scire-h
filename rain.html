@@ -163,9 +163,12 @@ uniform vec4  uDrop[${MAXN}];   // x, y (world px), age (s), amplitude
 
 #define SPEED   150.0           // wavefront speed (px/s)
 #define LAMBDA  34.0            // base crest wavelength (px)
-#define SIGMA   80.0            // base packet width (px)
+#define SIGMA   78.0            // base packet width (px)
 #define DISP    0.18            // dispersion: packet/wavelength growth per second
-#define TAUD    3.0             // amplitude decay time (s)
+#define TAUD    3.6             // amplitude decay time (s) — gentle, long tail
+#define ATTEN   0.0014          // distance attenuation 1/px (energy lost as it travels)
+#define LEAD    0.62            // leading-edge tightness (crisp front)
+#define TRAIL   1.7             // trailing-edge length (lingering wake)
 #define R0      40.0            // softens 1/sqrt(r) at the impact point
 #define GAIN    7.0             // surface slope -> normal exaggeration
 
@@ -199,21 +202,25 @@ void main(){
     float k    = 6.2831853 / (LAMBDA * grow);
 
     float s   = r - SPEED * age;
-    float env = exp(-(s*s)/(sig*sig));
+    // asymmetric packet: crisp leading edge, long lingering trailing wake,
+    // so the ripple trails off behind the front the way real water does
+    float sigSel = (s > 0.0 ? LEAD : TRAIL) * sig;
+    float sl  = s / sigSel;
+    float env = exp(-sl * sl);
     if (env < 0.004) continue;
     float sp  = inversesqrt(r + R0);
+    float att = exp(-r * ATTEN);            // energy lost with distance travelled
     float A   = d.w * exp(-age / TAUD);
 
     float ph = k * s;
     float c  = cos(ph), sn = sin(ph);
-    float w  = A * sp * env;
+    float w  = A * sp * env * att;
 
     h += w * sn;
 
-    // d/dr of [ A·sp·env·sin(k·s) ]   (ds/dr = 1)
-    float dsp  = -0.5 * sp / (r + R0);
-    float denv = -2.0 * s / (sig*sig);
-    float dhdr = A * env * sn * dsp + w * (denv * sn + k * c);
+    // d/dr of [ w·sin(k·s) ] via the log-derivative of w  (ds/dr = 1)
+    float dlog = -0.5 / (r + R0) - 2.0 * sl / sigSel - ATTEN;
+    float dhdr = w * (dlog * sn + k * c);
     g += dhdr * (rel / r);
   }
 
@@ -511,7 +518,7 @@ function playDrop(size, panX, far){
 /* ---------------------------------------------------------------- */
 /* Drops + main loop                                                */
 /* ---------------------------------------------------------------- */
-const DECAY_TAU = 3.0;                       // must match TAUD in the shader
+const DECAY_TAU = 3.6;                       // must match TAUD in the shader
 const drops = [];
 const MAX_DROPS = mobile ? 20 : 28;
 
