@@ -48,6 +48,18 @@
     border-radius: 8px; padding: 6px 9px; font-size: 12px; cursor: pointer;
   }
   button.tg.off { color: #777; }
+
+  /* pseudo-fullscreen fallback for browsers without the element Fullscreen API
+     (notably iPhone Safari): fill the dynamic viewport and sit above page chrome */
+  body.pseudo-fs #stage { width: 100vw; height: 100dvh; }
+  #toast {
+    position: fixed; z-index: 40; left: 50%; bottom: 84px; transform: translateX(-50%) translateY(8px);
+    padding: 8px 14px; border-radius: 10px; font-size: 12px; letter-spacing: .05em;
+    background: rgba(20,20,22,.86); color: #ddd; border: 1px solid rgba(255,255,255,.12);
+    opacity: 0; pointer-events: none; transition: opacity .35s ease, transform .35s ease;
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -312,18 +324,51 @@ elVol.addEventListener('input', () => {
   if (master && params.soundOn) master.gain.setTargetAtTime(params.vol, ac.currentTime, 0.03);
 });
 
-/* fullscreen toggle (with vendor prefixes for Safari) */
+/* fullscreen toggle.
+   - Desktop Safari / Chrome / Firefox / iPad: native Fullscreen API
+     (webkit-prefixed fallbacks cover older Safari).
+   - iPhone Safari has NO element Fullscreen API, so fall back to a CSS
+     "pseudo-fullscreen" (immersive full-viewport via dvh) and, the first
+     time, hint that Add-to-Home-Screen gives a true fullscreen app. */
 const elFs = document.getElementById('fs');
-function fsElement(){ return document.fullscreenElement || document.webkitFullscreenElement; }
-function toggleFullscreen(){
-  if (!fsElement()){
-    const el = document.documentElement;
-    (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
-  } else {
-    (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
-  }
+const docEl = document.documentElement;
+const canNativeFs = !!(docEl.requestFullscreen || docEl.webkitRequestFullscreen);
+const isStandalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let hintedFs = false;
+
+function nativeFsEl(){ return document.fullscreenElement || document.webkitFullscreenElement; }
+function pseudoOn(){ return document.body.classList.contains('pseudo-fs'); }
+function isFs(){ return !!nativeFsEl() || pseudoOn(); }
+
+function enterNative(){
+  const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+  try { const p = req.call(docEl); if (p && p.catch) p.catch(enterPseudo); }
+  catch (e) { enterPseudo(); }
 }
-function syncFs(){ elFs.textContent = fsElement() ? '⛶ EXIT' : '⛶ FULL'; }
+function enterPseudo(){
+  document.body.classList.add('pseudo-fs');
+  window.scrollTo(0, 1);                 // nudge iOS to retract the toolbar
+  if (!isStandalone && !hintedFs){ hintedFs = true; showToast('全画面はホーム画面に追加でも可'); }
+  syncFs();
+}
+function exitFs(){
+  if (nativeFsEl()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  if (pseudoOn()){ document.body.classList.remove('pseudo-fs'); syncFs(); }
+}
+function toggleFullscreen(){
+  if (isFs()){ exitFs(); return; }
+  if (canNativeFs) enterNative(); else enterPseudo();
+}
+function syncFs(){ elFs.textContent = isFs() ? '⛶ EXIT' : '⛶ FULL'; }
+
+let toastT = null;
+function showToast(msg){
+  let t = document.getElementById('toast');
+  if (!t){ t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
 elFs.addEventListener('click', toggleFullscreen);
 document.addEventListener('fullscreenchange', syncFs);
 document.addEventListener('webkitfullscreenchange', syncFs);
