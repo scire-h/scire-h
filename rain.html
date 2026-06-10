@@ -85,6 +85,7 @@
     </select>
   </div>
   <button id="sound" class="tg">SOUND ON</button>
+  <button id="fs" class="tg">⛶ FULL</button>
 </div>
 
 <div id="gate">
@@ -310,6 +311,22 @@ elSnd.addEventListener('click', () => {
 elVol.addEventListener('input', () => {
   if (master && params.soundOn) master.gain.setTargetAtTime(params.vol, ac.currentTime, 0.03);
 });
+
+/* fullscreen toggle (with vendor prefixes for Safari) */
+const elFs = document.getElementById('fs');
+function fsElement(){ return document.fullscreenElement || document.webkitFullscreenElement; }
+function toggleFullscreen(){
+  if (!fsElement()){
+    const el = document.documentElement;
+    (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+  }
+}
+function syncFs(){ elFs.textContent = fsElement() ? '⛶ EXIT' : '⛶ FULL'; }
+elFs.addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', syncFs);
+document.addEventListener('webkitfullscreenchange', syncFs);
 
 /* controls vanish entirely when idle, return on any touch / movement */
 let dimTimer = null;
