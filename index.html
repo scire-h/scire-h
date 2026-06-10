@@ -275,14 +275,23 @@ function getNoise() {
 /* ---------------------------------------------------------------
    STATE — params are stored in real musical units.
    --------------------------------------------------------------- */
-function mkCh(name) {
+function mkCh(name, idx) {
   return {
-    name,
+    name, _idx: idx,
     wave:     "sine",   // sine | triangle | square
     tune:     100,      // settle frequency Hz (30..500, log)
+    attack:   1.5,      // amp attack time ms (0.5..120, log)
     decay:    140,      // amp RC tau in ms (30..800, log)
-    sweepOct: 1.6,      // pitch starts sweepOct octaves above tune (0..4)
+    sweepOct: 1.6,      // pitch sweep depth (0..6 oct, panel scale)
+    sweepDir: "down",   // "up" | "off" | "down"
     sweepMs:  28,       // pitch RC tau in ms (5..200, log)
+    beatTune: 0,        // cents detune offset (0..50)
+    lfoOn:    false,    // LFO on/off
+    lfoWave:  "sine",   // sine | triangle | square (DS-4 "Pulse" LFO = square)
+    lfoRate:  6,        // Hz (0.3..30, log)
+    lfoDepth: 30,       // cents (0..200)
+    multi:    false,    // PULL: also fire the next channel
+    sense:    0.85,     // velocity sensitivity 0..1
     noise:    0,        // 0..1 noise mix
     click:    0.5,      // 0..1 attack click amount
     level:    0.9,      // 0..1
@@ -294,7 +303,7 @@ const state = {
   playing: false,
   step: 0,
   activeCh: 0,
-  channels: [ mkCh("HI"), mkCh("MID"), mkCh("LOW"), mkCh("KICK") ],
+  channels: [ mkCh("HI",0), mkCh("MID",1), mkCh("LOW",2), mkCh("KICK",3) ],
   pattern: [
     new Array(16).fill(0), new Array(16).fill(0),
     new Array(16).fill(0), new Array(16).fill(0),
@@ -304,61 +313,83 @@ const state = {
 /* ---------------------------------------------------------------
    VOICE — one trigger. All curves are setTargetAtTime RC shapes.
    --------------------------------------------------------------- */
-function trigger(ch, vel = 1, when = null) {
+function trigger(ch, vel = 1, when = null, cascadeFrom = null) {
   audioInit();
   if (actx.state === "suspended") actx.resume();
   const t = when ?? actx.currentTime;
 
-  const peak = ch.level * vel;
+  /* SENSE LEVEL: per-channel velocity sensitivity (panel knob on DS-4) */
+  const senseVel = ch.sense + (1 - ch.sense) * vel;
+  const peak = ch.level * senseVel;
   if (peak <= 0.001) return;
 
-  const f1 = ch.tune;                                  // settle pitch
-  const f0 = f1 * Math.pow(2, ch.sweepOct);            // strike pitch
-  const tauP = ch.sweepMs / 1000;                      // pitch RC
-  const tauA = ch.decay  / 1000;                       // amp RC
+  /* SWEEP DIRECTION: panel UP / OFF / DOWN */
+  const f1 = ch.tune;
+  let f0;
+  if (ch.sweepDir === "off")      f0 = f1;
+  else if (ch.sweepDir === "up")  f0 = f1 / Math.pow(2, ch.sweepOct);
+  else                            f0 = f1 * Math.pow(2, ch.sweepOct);    // down
+  const tauP = ch.sweepMs / 1000;
+  const tauA = ch.decay  / 1000;
+  const atkS = Math.max(0.0006, ch.attack / 1000);
 
   /* ----- tone ----- */
   const osc = actx.createOscillator();
   if (ch.wave === "sine") {
-    /* ICL8038-style sine with characteristic H3 at -42 dB instead of
-       the pure mathematical Web Audio sine. */
     const pw = getWarmSine();
     if (pw) osc.setPeriodicWave(pw);
     else    osc.type = "sine";
   } else {
     osc.type = ch.wave;
   }
-  /* per-hit drift: ±4 cents, plus a tiny slow LFO during the tail
-     simulates an analog VCO's voltage reference instability */
-  osc.detune.value = (Math.random() - 0.5) * 8;
+
+  /* per-hit drift ±4 cents + BEAT TUNE static detune */
+  osc.detune.value = (Math.random() - 0.5) * 8 + ch.beatTune;
+
+  /* slow analog drift wobble */
   const driftLFO  = actx.createOscillator();
   driftLFO.type = "sine";
   driftLFO.frequency.value = 0.6 + Math.random() * 0.5;
   const driftAmp  = actx.createGain();
-  driftAmp.gain.value = 2.0;       // ±2 cents
+  driftAmp.gain.value = 2.0;
   driftLFO.connect(driftAmp).connect(osc.detune);
 
-  osc.frequency.setValueAtTime(f0, t);
-  osc.frequency.setTargetAtTime(f1, t, tauP);          // RC pitch settle
+  /* ----- LFO (panel section) ----- */
+  let lfo = null, lfoG = null;
+  if (ch.lfoOn && ch.lfoDepth > 0.1) {
+    lfo = actx.createOscillator();
+    /* Pollard / DS-4 "Pulse" LFO is a square -- the rhythmic stutter
+       you hear on classic late-70s synth drums comes from a square
+       LFO modulating VCO pitch fast. */
+    lfo.type = ch.lfoWave;          // "sine" | "triangle" | "square"
+    lfo.frequency.value = ch.lfoRate;
+    lfoG = actx.createGain();
+    lfoG.gain.value = ch.lfoDepth;  // depth is already in cents
+    lfo.connect(lfoG).connect(osc.detune);
+  }
 
+  /* pitch RC sweep */
+  osc.frequency.setValueAtTime(f0, t);
+  osc.frequency.setTargetAtTime(f1, t, tauP);
+
+  /* amp envelope: linear ATTACK rise, then RC discharge */
   const vca = actx.createGain();
   vca.gain.setValueAtTime(0, t);
-  vca.gain.linearRampToValueAtTime(peak, t + 0.0006);  // 0.6 ms strike
-  vca.gain.setTargetAtTime(0, t + 0.0006, tauA);       // RC amp discharge
+  vca.gain.linearRampToValueAtTime(peak, t + atkS);
+  vca.gain.setTargetAtTime(0, t + atkS, tauA);
 
-  /* OTA-style soft saturation -- gentle non-linearity that the
-     CA3080 in a real Pollard / ULT-SOUND VCA produces at hit time.
-     Without this the attack feels flat and 'too clean'. */
+  /* OTA-style soft saturation */
   const sat = actx.createWaveShaper();
   sat.curve = getVcaCurve();
   sat.oversample = "2x";
 
   osc.connect(vca).connect(sat).connect(master);
-  const stopAt = t + tauA * 8 + 0.15;
+  const stopAt = t + tauA * 8 + atkS + 0.15;
   osc.start(t);
   osc.stop(stopAt);
   driftLFO.start(t);
   driftLFO.stop(stopAt);
+  if (lfo) { lfo.start(t); lfo.stop(stopAt); }
 
   /* ----- noise layer (snare wires / hat sizzle) ----- */
   if (ch.noise > 0.003) {
@@ -400,6 +431,17 @@ function trigger(ch, vel = 1, when = null) {
     cg.gain.value = peak * ch.click * 0.9;
     ck.connect(flt).connect(cg).connect(master);
     ck.start(t);
+  }
+
+  /* ----- MULTI VCO PULL (DS-4 cascade) -----
+     When PULL is engaged, triggering this channel also fires the
+     next one with slight pitch offset, like the panel cascade
+     trigger on the original instrument. cascadeFrom prevents
+     infinite loops. */
+  if (ch.multi && cascadeFrom !== ch._idx) {
+    const next = state.channels[(ch._idx + 1) % 4];
+    /* 4 ms stagger so you hear two separate transients */
+    trigger(next, vel * 0.85, t + 0.004, ch._idx);
   }
 }
 
@@ -546,59 +588,131 @@ function prow(label, get, set, fmtFn, map) {
 
 const mTune  = logMap(30, 500);
 const mDecay = logMap(30, 800);
+const mAtk   = logMap(0.5, 120);
 const mSwMs  = logMap(5, 200);
+const mLfo   = logMap(0.3, 30);
+
+/* generic segmented-button picker */
+function picker(values, labels, get, set, sideEffect) {
+  const seg = el("div", "segBtns");
+  seg.style.setProperty("--n", values.length);
+  values.forEach((v, i) => {
+    const b = el("button", get() === v ? "act" : "", labels[i]);
+    b.addEventListener("click", () => {
+      set(v);
+      seg.querySelectorAll("button").forEach((x, j) => x.classList.toggle("act", values[j] === v));
+      if (sideEffect) sideEffect();
+    });
+    seg.appendChild(b);
+  });
+  return seg;
+}
+
+function toggleRow(label, get, set, sideEffect) {
+  const row = el("div", "prow");
+  row.style.gridTemplateColumns = "78px 1fr";
+  row.appendChild(el("span", "lb", label));
+  const b = el("button", "", get() ? "ON" : "OFF");
+  b.style.cssText = "padding:10px 0; border-radius:8px; border:1px solid var(--line); font-weight:800; font-size:13px;"
+                  + (get() ? "background:var(--acc); color:#000; border-color:var(--acc);"
+                           : "background:var(--panel2); color:var(--dim);");
+  b.addEventListener("click", () => {
+    set(!get());
+    b.textContent = get() ? "ON" : "OFF";
+    b.style.cssText = "padding:10px 0; border-radius:8px; border:1px solid var(--line); font-weight:800; font-size:13px;"
+                    + (get() ? "background:var(--acc); color:#000; border-color:var(--acc);"
+                             : "background:var(--panel2); color:var(--dim);");
+    if (sideEffect) sideEffect();
+  });
+  row.appendChild(b);
+  return row;
+}
 
 function buildParams() {
   els.params.innerHTML = "";
   const ch = state.channels[state.activeCh];
+  const ping = () => trigger(ch, 0.85);
 
+  /* ---------- TONE ---------- */
   const tone = el("div", "sec");
   tone.appendChild(el("h3", null, "TONE"));
-  const seg = el("div", "segBtns");
-  seg.style.setProperty("--n", 3);
-  [["sine","SIN"],["triangle","TRI"],["square","SQR"]].forEach(([v, lb]) => {
-    const b = el("button", ch.wave === v ? "act" : "", lb);
-    b.addEventListener("click", () => {
-      ch.wave = v;
-      seg.querySelectorAll("button").forEach((x,i) =>
-        x.classList.toggle("act", ["sine","triangle","square"][i] === v));
-      trigger(ch, 0.85);
-    });
-    seg.appendChild(b);
-  });
-  tone.appendChild(seg);
-  tone.appendChild(prow("Tune",  () => ch.tune,  v => ch.tune  = v, v => v.toFixed(0) + " Hz", mTune));
-  tone.appendChild(prow("Decay", () => ch.decay, v => ch.decay = v, v => v.toFixed(0) + " ms", mDecay));
+  tone.appendChild(picker(["sine","triangle","square"], ["SIN","TRI","SQR"],
+                          () => ch.wave, v => ch.wave = v, ping));
+  tone.appendChild(prow("Tune",   () => ch.tune,   v => ch.tune   = v, v => v.toFixed(0) + " Hz", mTune));
+  tone.appendChild(prow("Attack", () => ch.attack, v => ch.attack = v, v => v.toFixed(1) + " ms", mAtk));
+  tone.appendChild(prow("Decay",  () => ch.decay,  v => ch.decay  = v, v => v.toFixed(0) + " ms", mDecay));
   els.params.appendChild(tone);
 
+  /* ---------- PITCH SWEEP ---------- */
   const sw = el("div", "sec");
   sw.appendChild(el("h3", null, "PITCH SWEEP"));
+  sw.appendChild(picker(["up","off","down"], ["UP","OFF","DOWN"],
+                        () => ch.sweepDir, v => ch.sweepDir = v, ping));
   sw.appendChild(prow("Depth", () => ch.sweepOct, v => ch.sweepOct = v,
                       v => v.toFixed(2) + " oct",
-                      { to01: v => v / 4, from01: p => p * 4 }));
-  sw.appendChild(prow("Speed", () => ch.sweepMs, v => ch.sweepMs = v, v => v.toFixed(0) + " ms", mSwMs));
+                      { to01: v => v / 6, from01: p => p * 6 }));
+  sw.appendChild(prow("Speed", () => ch.sweepMs,  v => ch.sweepMs  = v, v => v.toFixed(0) + " ms", mSwMs));
   els.params.appendChild(sw);
 
+  /* ---------- LFO ----------
+     Pollard / DS-4 LFO modulates VCO pitch. SQR / "Pulse" LFO at a
+     few Hz gives the characteristic stutter on classic late-70s
+     synth drums. */
+  const lfo = el("div", "sec");
+  lfo.appendChild(el("h3", null, "LFO (VCO MOD)"));
+  lfo.appendChild(toggleRow("Enable", () => ch.lfoOn, v => ch.lfoOn = v, ping));
+  lfo.appendChild(picker(["sine","triangle","square"], ["∿ SIN","△ TRI","⊓ PULSE"],
+                         () => ch.lfoWave, v => ch.lfoWave = v, ping));
+  lfo.appendChild(prow("Rate",  () => ch.lfoRate,  v => ch.lfoRate  = v, v => v.toFixed(1) + " Hz",  mLfo));
+  lfo.appendChild(prow("Depth", () => ch.lfoDepth, v => ch.lfoDepth = v,
+                       v => v.toFixed(0) + " ct",
+                       { to01: v => v / 200, from01: p => p * 200 }));
+  els.params.appendChild(lfo);
+
+  /* ---------- MIX ---------- */
   const mix = el("div", "sec");
   mix.appendChild(el("h3", null, "MIX"));
   mix.appendChild(prow("Noise", () => ch.noise, v => ch.noise = v, v => Math.round(v*100) + "%"));
   mix.appendChild(prow("Click", () => ch.click, v => ch.click = v, v => Math.round(v*100) + "%"));
   mix.appendChild(prow("Level", () => ch.level, v => ch.level = v, v => Math.round(v*100) + "%"));
   els.params.appendChild(mix);
+
+  /* ---------- DS-4 EXTRAS ---------- */
+  const adv = el("div", "sec");
+  adv.appendChild(el("h3", null, "DS-4 EXTRAS"));
+  adv.appendChild(prow("Beat Tune", () => ch.beatTune, v => ch.beatTune = v,
+                       v => v.toFixed(0) + " ct",
+                       { to01: v => v / 50, from01: p => p * 50 }));
+  adv.appendChild(prow("Sense",     () => ch.sense,    v => ch.sense    = v, v => Math.round(v*100) + "%"));
+  adv.appendChild(toggleRow("Multi VCO", () => ch.multi, v => ch.multi = v, ping));
+  const note = el("div");
+  note.style.cssText = "font-size:11px; color:var(--dim); margin-top:4px; line-height:1.5;";
+  note.innerHTML = "Multi VCO = この ch を叩くと隣 ch も同時発火 (DS-4 PULL カスケード)";
+  adv.appendChild(note);
+  els.params.appendChild(adv);
 }
 
 /* ---------------------------------------------------------------
    PRESETS — sound + pattern together.
    --------------------------------------------------------------- */
+/* helper to fill in default values for params the preset doesn't set */
+function chDefaults() {
+  return {
+    attack:1.5, sweepDir:"down", beatTune:0,
+    lfoOn:false, lfoWave:"sine", lfoRate:6, lfoDepth:30,
+    multi:false, sense:0.85,
+  };
+}
+function setCh(i, p) { Object.assign(state.channels[i], chDefaults(), p); }
+
 const PRESETS = {
   thousand: {
     name: "Thousand Knives ポコポコ",
     apply() {
-      /* melodic poko toms: sine, ~1.5 oct sweep, RC ~25 ms, short tail */
-      Object.assign(state.channels[0], { wave:"sine", tune:196, decay:130, sweepOct:1.4, sweepMs:22, noise:0, click:0.45, level:0.88 }); // G3
-      Object.assign(state.channels[1], { wave:"sine", tune:147, decay:140, sweepOct:1.5, sweepMs:24, noise:0, click:0.45, level:0.90 }); // D3
-      Object.assign(state.channels[2], { wave:"sine", tune:110, decay:155, sweepOct:1.6, sweepMs:26, noise:0, click:0.40, level:0.92 }); // A2
-      Object.assign(state.channels[3], { wave:"sine", tune: 73, decay:180, sweepOct:1.8, sweepMs:30, noise:0, click:0.35, level:0.95 }); // D2
+      setCh(0, { wave:"sine", tune:196, attack:0.6, decay:130, sweepOct:1.4, sweepMs:22, noise:0, click:0.55, level:0.88 });
+      setCh(1, { wave:"sine", tune:147, attack:0.6, decay:140, sweepOct:1.5, sweepMs:24, noise:0, click:0.55, level:0.90 });
+      setCh(2, { wave:"sine", tune:110, attack:0.7, decay:155, sweepOct:1.6, sweepMs:26, noise:0, click:0.50, level:0.92 });
+      setCh(3, { wave:"sine", tune: 73, attack:0.8, decay:180, sweepOct:1.8, sweepMs:30, noise:0, click:0.45, level:0.95 });
       state.pattern = [
         [0,0,1,0, 0,0,0,0, 0,0,1,0, 0,1,0,0],
         [0,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0],
@@ -611,10 +725,10 @@ const PRESETS = {
   syndrum: {
     name: "Syndrum Pew",
     apply() {
-      Object.assign(state.channels[0], { wave:"sine", tune:330, decay:240, sweepOct:2.6, sweepMs:55, noise:0, click:0.3, level:0.85 });
-      Object.assign(state.channels[1], { wave:"sine", tune:220, decay:260, sweepOct:2.8, sweepMs:60, noise:0, click:0.3, level:0.88 });
-      Object.assign(state.channels[2], { wave:"sine", tune:147, decay:280, sweepOct:3.0, sweepMs:65, noise:0, click:0.3, level:0.90 });
-      Object.assign(state.channels[3], { wave:"sine", tune: 98, decay:300, sweepOct:3.2, sweepMs:70, noise:0, click:0.3, level:0.92 });
+      setCh(0, { wave:"sine", tune:330, attack:0.5, decay:240, sweepOct:2.6, sweepMs:55, noise:0, click:0.4, level:0.85 });
+      setCh(1, { wave:"sine", tune:220, attack:0.5, decay:260, sweepOct:2.8, sweepMs:60, noise:0, click:0.4, level:0.88 });
+      setCh(2, { wave:"sine", tune:147, attack:0.5, decay:280, sweepOct:3.0, sweepMs:65, noise:0, click:0.4, level:0.90 });
+      setCh(3, { wave:"sine", tune: 98, attack:0.5, decay:300, sweepOct:3.2, sweepMs:70, noise:0, click:0.4, level:0.92 });
       state.pattern = [
         [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
         [0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
@@ -627,10 +741,10 @@ const PRESETS = {
   electro: {
     name: "Electro Kit",
     apply() {
-      Object.assign(state.channels[0], { wave:"square",   tune:420, decay: 60, sweepOct:0.4, sweepMs:10, noise:0.65, click:0.7, level:0.55 }); // hat
-      Object.assign(state.channels[1], { wave:"triangle", tune:240, decay:140, sweepOct:1.0, sweepMs:18, noise:0.45, click:0.6, level:0.75 }); // snare
-      Object.assign(state.channels[2], { wave:"sine",     tune:130, decay:170, sweepOct:1.4, sweepMs:24, noise:0,    click:0.4, level:0.85 }); // tom
-      Object.assign(state.channels[3], { wave:"sine",     tune: 55, decay:220, sweepOct:1.9, sweepMs:34, noise:0,    click:0.5, level:1.0  }); // kick
+      setCh(0, { wave:"square",   tune:420, attack:0.5, decay: 60, sweepOct:0.4, sweepMs:10, noise:0.65, click:0.7, level:0.55 });
+      setCh(1, { wave:"triangle", tune:240, attack:0.5, decay:140, sweepOct:1.0, sweepMs:18, noise:0.45, click:0.6, level:0.75 });
+      setCh(2, { wave:"sine",     tune:130, attack:0.6, decay:170, sweepOct:1.4, sweepMs:24, noise:0,    click:0.4, level:0.85 });
+      setCh(3, { wave:"sine",     tune: 55, attack:0.8, decay:220, sweepOct:1.9, sweepMs:34, noise:0,    click:0.5, level:1.0  });
       state.pattern = [
         [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,1],
         [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
@@ -638,6 +752,52 @@ const PRESETS = {
         [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0],
       ];
       state.bpm = 118;
+    },
+  },
+  pulseLfo: {
+    name: "Pulse LFO Stutter",
+    /* Showcase the square ("Pulse") LFO modulating VCO pitch -- this
+       gives the characteristic stuttering trill on classic late-70s
+       synth drums. Toggle Ch1's LFO off in the panel to A/B against
+       the un-modulated version. */
+    apply() {
+      setCh(0, { wave:"sine", tune:262, attack:0.5, decay:180, sweepOct:1.2, sweepMs:28, noise:0, click:0.4, level:0.85,
+                 lfoOn:true,  lfoWave:"square",   lfoRate:14, lfoDepth:120 }); // stutter trill
+      setCh(1, { wave:"sine", tune:165, attack:0.5, decay:200, sweepOct:1.3, sweepMs:30, noise:0, click:0.4, level:0.88,
+                 lfoOn:true,  lfoWave:"square",   lfoRate: 9, lfoDepth: 90 });
+      setCh(2, { wave:"sine", tune:131, attack:0.6, decay:220, sweepOct:1.5, sweepMs:32, noise:0, click:0.4, level:0.92,
+                 lfoOn:true,  lfoWave:"triangle", lfoRate: 5, lfoDepth: 60 }); // smooth vibrato
+      setCh(3, { wave:"sine", tune: 65, attack:0.8, decay:240, sweepOct:1.8, sweepMs:36, noise:0, click:0.5, level:1.0 });
+      state.pattern = [
+        [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0],
+        [0,0,1,0, 0,1,0,0, 0,0,1,0, 0,1,0,0],
+        [0,1,0,0, 1,0,0,0, 0,1,0,0, 1,0,0,1],
+        [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
+      ];
+      state.bpm = 124;
+    },
+  },
+  beatTuneChord: {
+    name: "Beat Tune Chord",
+    /* MULTI VCO PULL with BEAT TUNE detune: hitting a single pad
+       chains to the next channel with a slight pitch offset, building
+       a chord-like cluster on each hit. */
+    apply() {
+      setCh(0, { wave:"sine", tune:262, attack:0.6, decay:260, sweepOct:0.6, sweepMs:25, noise:0, click:0.35, level:0.80,
+                 multi:true, beatTune:7 });
+      setCh(1, { wave:"sine", tune:330, attack:0.6, decay:260, sweepOct:0.6, sweepMs:25, noise:0, click:0.35, level:0.78,
+                 multi:true, beatTune:14 });
+      setCh(2, { wave:"sine", tune:392, attack:0.6, decay:260, sweepOct:0.6, sweepMs:25, noise:0, click:0.35, level:0.76,
+                 multi:true, beatTune:21 });
+      setCh(3, { wave:"sine", tune:494, attack:0.6, decay:260, sweepOct:0.6, sweepMs:25, noise:0, click:0.35, level:0.74,
+                 beatTune:28 });
+      state.pattern = [
+        [1,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
+        [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+        [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+        [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+      ];
+      state.bpm = 108;
     },
   },
   empty: {
