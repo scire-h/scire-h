@@ -3,6 +3,26 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## Synth Drum 4 — Phase 0
+
+* New project `synth-drum-4/`: a digitally exact recreation of one
+  **Pollard Syndrum 478** channel (the instrument the DS-4 derives
+  from), starting with a single pad.
+* Full channel control set reproduced: SENSITIVITY, TONE waveform
+  (sine / triangle / square, with the function-generator −38 dB H3
+  sine colour), TUNE, TONE SUSTAIN (50 ms – 20 s), SWEEP switch
+  UP/OFF/DOWN + RANGE + SWEEP TIME, VIBRATO (SQR/TRI/RAMP,
+  0.5 – 250 Hz as true audio-rate FM), SNARE OFF/1/2 + SNARE SUSTAIN,
+  VOLUME.
+* Hardware trigger law: one velocity sample drives level, sweep depth
+  and sustain length; envelopes are RC-discharge `setTargetAtTime`
+  curves; monophonic choke on retrigger.
+* Velocity-sensitive pad (tap position = strike strength), six
+  presets (incl. the classic DISCO DROP and audio-rate-vibrato UFO /
+  BUZZ RING voices), oscilloscope.
+* `synth-drum-4/docs/RESEARCH.md` — schematic-derived signal path,
+  panel-to-DSP mapping with per-control confidence, sources.
+
 ## Phase 2.7 — Multi-output bus
 
 * Added four optional stereo aux output buses (`Ch1 Out`…`Ch4 Out`)
