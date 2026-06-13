@@ -21,10 +21,17 @@ reproduced — SENSITIVITY, TONE (sine/tri/square), TUNE, TONE SUSTAIN
 SNARE SUSTAIN, VOLUME. Velocity drives level, sweep depth and sustain
 length, like the hardware trigger conditioner.
 
-Phase 0 is a single self-contained `synth-drum-4/index.html`
-(Web Audio, no dependencies — open it in any browser). Circuit
-research and panel-to-DSP mapping live in
+It is a single self-contained `synth-drum-4/index.html` (Web Audio, no
+dependencies — open it in any browser). Circuit research and
+panel-to-DSP mapping live in
 [`synth-drum-4/docs/RESEARCH.md`](synth-drum-4/docs/RESEARCH.md).
+
+**▶ Try it live (no install):**
+[**raw.githack.com → Synth Drum 4**](https://raw.githack.com/scire-h/scire-h/claude/70s-synth-drum-design-lwul61/synth-drum-4/index.html)
+— served straight from the development branch via githack. Tap the pad
+(centre = harder hit) or use keys `Z` / `X` / `Space`, then click a
+preset. (githack serves this branch URL; once merged, swap the branch
+segment for `main`.)
 
 ## 1. HTML / Web Audio clone (`index.html`)
 
