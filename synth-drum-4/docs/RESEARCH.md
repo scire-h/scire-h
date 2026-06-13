@@ -77,8 +77,20 @@ cover it.
 
 ## 4. Digital modelling choices (Phase 0, Web Audio)
 
-* **Envelopes** — every EG uses `setTargetAtTime`, which is exactly
-  the RC-discharge exponential of the hardware.
+* **Envelopes** — every amplitude EG uses `setTargetAtTime`, which is
+  exactly the RC-discharge exponential of the hardware.
+* **Pitch sweep** — modelled the way the circuit actually behaves: the
+  sweep EG is an RC-discharge *voltage*, and a 1 V/oct VCO turns that
+  into a pitch that decays exponentially **in octaves**, not linearly
+  in Hz. We render that curve with `setValueCurveAtTime`
+  (`f(t) = f0·2^(±range/12 · e^{-t/τ})`), τ set so the pitch settles
+  ≈99 % by the SWEEP TIME value. A naïve `setTargetAtTime` on the
+  frequency param would decay linearly in Hz and sound wrong on big
+  sweeps.
+* **Analog VCO drift** — two layers, matching the `ds4-native`
+  `TriangleCoreVCO` model: a per-hit ±3-cent detune on the base pitch,
+  and a continuous slow wobble (0.15–0.4 Hz, ≈2.5 cents) summed onto
+  `vco.frequency`. Stops the recreation sounding digitally static.
 * **Sine shape** — the function-generator sine of the era is not pure;
   we use a `PeriodicWave` with a −38 dB 3rd harmonic (≈1.3 % THD),
   matching the measurement already validated for the ICL8038 model in
@@ -86,16 +98,18 @@ cover it.
 * **Audio-rate vibrato** — the LFO is a real `OscillatorNode` patched
   into `vco.frequency`, so at 250 Hz it produces genuine FM sidebands
   like the hardware, not a control-rate approximation.
+* **Snare noise** — two parallel band-passes (a body band + a higher
+  emphasis band for the metallic sizzle) per snare type, mirroring the
+  hardware noise voicing rather than a single biquad.
 * **Velocity law** — one velocity sample feeds three places, like the
   conditioned trigger pulse: amplitude (`v^1.3`), sweep depth
   (`0.3 + 0.7 v`), sustain time (`0.35 + 0.65 v`).
 * **Monophonic retrigger** — a Syndrum channel is one voice; a new hit
   chokes the previous one (5 ms fade) and restarts the envelopes.
-* Known Phase-0 simplifications, to fix in the native phase:
-  `OscillatorNode` square/triangle are band-limited (the hardware
-  aliases… the other way: it has analog drift instead), and the noise
-  band shaping is a single biquad per snare type rather than a
-  component-level filter model.
+* Remaining Phase-0 simplification, to revisit in the native phase:
+  `OscillatorNode` square/triangle are band-limited rather than
+  component-level VCO waveshaper models. (The earlier single-biquad
+  snare and linear-Hz sweep simplifications are now resolved above.)
 
 ## 5. Sources
 

@@ -192,8 +192,9 @@
 
   <div class="foot">
     Synth Drum 4 — a digital recreation of one Pollard Syndrum 478 channel.<br>
-    RC-discharge envelopes · velocity drives level + sweep depth + sustain ·
-    vibrato runs to 250 Hz (real FM).<br>
+    RC-discharge envelopes · exponential-in-octaves pitch sweep · analog VCO
+    drift · velocity drives level + sweep depth + sustain · vibrato to 250 Hz
+    (real FM) · 2-band snare noise.<br>
     Circuit notes: <code>docs/RESEARCH.md</code>
   </div>
 </div>
@@ -306,7 +307,10 @@ function trigger(rawVel) {
   if (P.wave === "sine") vco.setPeriodicWave(sine8038);
   else vco.type = P.wave;
 
-  const f0 = P.tune;
+  // analog VCO drift: per-hit detune (±3 cents) on the base pitch
+  const detune = Math.pow(2, ((Math.random() * 2 - 1) * 3) / 1200);
+  const f0 = P.tune * detune;
+
   if (P.dir === "off" || P.range === 0) {
     vco.frequency.setValueAtTime(f0, t);
   } else {
@@ -314,10 +318,28 @@ function trigger(rawVel) {
     const rangeEff = P.range * (0.3 + 0.7 * v);
     // DOWN: jump up then decay down to TUNE; UP: mirror image
     const sgn = P.dir === "down" ? +1 : -1;
-    const fStart = f0 * Math.pow(2, sgn * rangeEff / 12);
-    vco.frequency.setValueAtTime(fStart, t);
-    vco.frequency.setTargetAtTime(f0, t, P.sweepTime / 4.6); // settle ≈99 % at SWEEP TIME
+    // The sweep EG is an RC-discharge voltage; in a 1 V/oct VCO that
+    // makes the pitch decay exponentially *in octaves*, not in Hz.
+    // Render that authentic curve directly.
+    const tau = Math.max(0.004, P.sweepTime / 4.6);   // ≈99 % settle at SWEEP TIME
+    const dur = Math.min(P.sweepTime * 1.3 + 0.02, 6);
+    const N = 256;
+    const curve = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const env = Math.exp(-(i / (N - 1)) * dur / tau);  // 1 → ~0
+      curve[i] = f0 * Math.pow(2, sgn * rangeEff / 12 * env);
+    }
+    vco.frequency.setValueCurveAtTime(curve, t, dur);
   }
+
+  // slow continuous wobble (0.15–0.4 Hz), summed onto VCO pitch
+  const wob = ac.createOscillator();
+  wob.type = "sine";
+  wob.frequency.value = 0.15 + Math.random() * 0.25;
+  const wobG = ac.createGain();
+  wobG.gain.value = f0 * 0.0015;   // ≈2.5 cents peak
+  wob.connect(wobG); wobG.connect(vco.frequency);
+  wob.start(t); voice.oscs.push(wob);
 
   // vibrato LFO straight into VCO pitch — true FM at audio rates
   if (P.vibDepth > 0.001) {
@@ -339,24 +361,34 @@ function trigger(rawVel) {
   voice.oscs.push(vco); voice.gains.push(vca);
   stopAts.push(t + sustEff * 1.6 + 0.25);
 
-  /* --- snare path: noise → band shaping → snare EG VCA --- */
+  /* --- snare path: noise → 2-band shaping → snare EG VCA --- */
   if (P.snare > 0) {
-    // SNARE 1 = quiet + shorter, SNARE 2 = loud + longer
+    // SNARE 1 = quiet + shorter, SNARE 2 = loud + longer.
+    // Two parallel band-passes: a body band + a higher emphasis band
+    // for the metallic sizzle, mirroring the hardware noise voicing.
     const cfg = P.snare === 1
-      ? { freq: 2400, q: 0.8, lvl: 0.45, lenMul: 0.8 }
-      : { freq: 1500, q: 0.6, lvl: 0.95, lenMul: 1.6 };
+      ? { body: 2400, bodyQ: 0.8, emph: 5200, emphQ: 3.5, lvl: 0.45, lenMul: 0.8 }
+      : { body: 1500, bodyQ: 0.6, emph: 3800, emphQ: 3.0, lvl: 0.95, lenMul: 1.6 };
     const snT = P.snSustain * cfg.lenMul;
 
     const src = ac.createBufferSource();
     src.buffer = noiseBuf; src.loop = true;
     src.playbackRate.value = 0.96 + Math.random() * 0.08;
-    const bp = ac.createBiquadFilter();
-    bp.type = "bandpass"; bp.frequency.value = cfg.freq; bp.Q.value = cfg.q;
+
+    const body = ac.createBiquadFilter();
+    body.type = "bandpass"; body.frequency.value = cfg.body; body.Q.value = cfg.bodyQ;
+    const emph = ac.createBiquadFilter();
+    emph.type = "bandpass"; emph.frequency.value = cfg.emph; emph.Q.value = cfg.emphQ;
+    const emphG = ac.createGain(); emphG.gain.value = 0.5;
+
     const sg = ac.createGain();
     sg.gain.setValueAtTime(0, t);
     sg.gain.linearRampToValueAtTime(cfg.lvl * v, t + 0.001);
     sg.gain.setTargetAtTime(0, t + 0.001, snT / 5);
-    src.connect(bp); bp.connect(sg); sg.connect(master.in);
+
+    src.connect(body); body.connect(sg);
+    src.connect(emph); emph.connect(emphG); emphG.connect(sg);
+    sg.connect(master.in);
     src.start(t);
     voice.oscs.push(src); voice.gains.push(sg);
     stopAts.push(t + snT * 1.6 + 0.25);

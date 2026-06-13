@@ -3,6 +3,21 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## Synth Drum 4 — Phase 0.1 (fidelity)
+
+* **Pitch sweep** now modelled as the circuit behaves: the RC-discharge
+  sweep EG voltage drives a 1 V/oct VCO, so the pitch decays
+  exponentially *in octaves*. Rendered via `setValueCurveAtTime`
+  (`f0·2^(±range/12·e^{-t/τ})`) instead of a linear-in-Hz
+  `setTargetAtTime`, which was audibly wrong on large sweeps.
+* **Analog VCO drift**: per-hit ±3-cent detune + continuous
+  0.15–0.4 Hz / ≈2.5-cent wobble summed onto the VCO pitch, matching
+  the `ds4-native` `TriangleCoreVCO` drift model.
+* **Snare noise**: two parallel band-passes (body + high emphasis) per
+  snare type, replacing the single biquad.
+* RESEARCH.md updated; the linear-Hz-sweep and single-biquad-snare
+  Phase-0 simplifications are now resolved.
+
 ## Synth Drum 4 — Phase 0
 
 * New project `synth-drum-4/`: a digitally exact recreation of one
