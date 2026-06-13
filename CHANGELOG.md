@@ -3,6 +3,19 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## Synth Drum 4 — Phase 0.3 (playable pitch)
+
+* Added a **semitone-accurate keyboard** spanning ±2 octaves (C1–C5,
+  centred on C3). Tapping a key sets the played note and fires the
+  voice at that exact pitch, so the drum can be tuned to / played at
+  real musical notes. The keyboard scrolls to centre the current note.
+* **TUNE** is now a **fine offset** (±100 cents) layered on top of the
+  selected note — pick the key, then trim it subtly, exactly the
+  workflow requested.
+* Pitch is now `note → Hz × 2^(fine/1200)`; presets carry note + fine
+  (e.g. DISCO DROP = D2 +37 c ≈ 75 Hz, unchanged from before). A live
+  readout shows note name, cents and Hz.
+
 ## Synth Drum 4 — Phase 0.2 (more parameters)
 
 * Added three performance-extension controls (marked `+` in the UI,

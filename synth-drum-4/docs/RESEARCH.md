@@ -59,7 +59,8 @@ Key facts and where they come from:
 | ------- | ------------------ | ------------------- | ---------- |
 | SENSITIVITY | pad input gain into the trigger conditioner | velocity scaling ahead of all three EGs | **High** (panel + schematic pot list) |
 | VOLUME | channel output level | post-mix gain | **High** |
-| TUNE | VCO base pitch | 30 – 800 Hz exponential | **High** (panel) |
+| TUNE | VCO base pitch. On SD-4 it is a **fine offset** (±100 cents) from the note picked on the keyboard, so the panel TUNE knob still trims pitch exactly as on the hardware | ±100 cents on top of the selected MIDI note | **High** (panel; re-scoped as fine trim) |
+| KEYBOARD `+` | *not on the original panel.* A semitone-accurate ±2-octave keyboard (C1–C5, centred on C3) sets the played note so the drum can be tuned to / played at exact pitches | MIDI-note base frequency; TUNE adds the fine cents | **Extension** (playability) |
 | TONE switch | SINE / TRIANGLE / SQUARE wave select | three oscillator shapes; sine carries the function-generator H3 colour | **High** (panel, Cherry Audio docs) |
 | SWEEP switch | UP / OFF / DOWN. DOWN = pitch jumps *up* on the hit then decays down (the signature); UP = mirror image | start-offset polarity on the sweep EG | **High** (Cherry Audio docs, demos) |
 | RANGE | how far the pitch bends, scaled by velocity | 0 – 36 semitones × velocity | **High** (panel + manual description) |
