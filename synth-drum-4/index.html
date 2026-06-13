@@ -32,7 +32,12 @@
     font-size:20px; font-style:italic; }
   .top .sub { font-size:10px; letter-spacing:.18em; color:var(--dim); }
   .top .spacer { flex:1; }
-  .top .ver { font-size:10px; color:var(--dim); letter-spacing:.1em; }
+  .audToggle {
+    font-size:10px; font-weight:800; letter-spacing:.1em;
+    padding:6px 10px; border-radius:6px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--dim); cursor:pointer;
+  }
+  .audToggle.on { background:var(--red); color:#fff; border-color:var(--red); }
 
   /* ---------- pad ---------- */
   .padWrap { display:flex; flex-direction:column; align-items:center; padding:18px 0 6px; }
@@ -116,12 +121,12 @@
     <span class="logo">SYNTH DRUM 4</span>
     <span class="sub">POLLARD SYNDRUM 478 CHANNEL · DIGITAL RECREATION</span>
     <span class="spacer"></span>
-    <span class="ver">PHASE 0</span>
+    <button class="audToggle on" id="audBtn" title="つまみを動かすと音が鳴る">♪ AUDITION</button>
   </div>
 
   <div class="padWrap">
     <div class="pad" id="pad"><span class="brand">SD-4</span></div>
-    <div class="padHint">TAP — 中心ほど強打 ／ KEYS: Z=soft X=mid SPACE=hard</div>
+    <div class="padHint">TAP — 中心ほど強打 ／ KEYS: Z=soft X=mid SPACE=hard ／ つまみ操作で自動試聴</div>
   </div>
 
   <div class="presets" id="presets"></div>
@@ -426,6 +431,23 @@ const PRESETS = {
 /* ---------- UI wiring ---------- */
 const $ = id => document.getElementById(id);
 
+/* audition: play the sound when a control is adjusted.
+   Sliders fire many input events while dragging, so debounce and play
+   one hit once the knob settles; switches are discrete, play at once. */
+let auditionOn = true;
+let auditionTimer = null;
+function auditionNow() { if (auditionOn) trigger(0.9); }
+function auditionDebounced() {
+  if (!auditionOn) return;
+  clearTimeout(auditionTimer);
+  auditionTimer = setTimeout(() => trigger(0.9), 130);
+}
+const audBtn = $("audBtn");
+audBtn.addEventListener("click", () => {
+  auditionOn = !auditionOn;
+  audBtn.classList.toggle("on", auditionOn);
+});
+
 const SLIDERS = [
   { id:"sens",      get:() => P.sens,      set:x => P.sens = +x,            fmt:v => Math.round(v*100)+" %" },
   { id:"tune",      map:MAPS.tune,      key:"tune",      fmt:fmtHz },
@@ -448,6 +470,7 @@ for (const s of SLIDERS) {
     if (s.map) P[s.key] = s.map.to(+e.target.value);
     else s.set(e.target.value);
     $(s.id + "V").textContent = s.fmt(s.map ? P[s.key] : s.get());
+    auditionDebounced();
   });
 }
 
@@ -466,6 +489,7 @@ for (const s of SEGS) {
     const b = e.target.closest("button"); if (!b) return;
     P[s.key] = s.num ? +b.dataset.v : b.dataset.v;
     refreshSeg(s);
+    auditionNow();
   });
 }
 
