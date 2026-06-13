@@ -75,6 +75,17 @@ Master section on the Quad console (master VOLUME + SENSITIVITY) is
 trivial once more channels exist; with one pad the channel controls
 cover it.
 
+### Performance extensions (marked `+` in the UI)
+
+These knobs are **not on the original 478 panel** — their defaults
+reproduce the hardware, and they only depart from it when moved:
+
+| Control | Default (= hardware) | What it adds | Basis |
+| ------- | -------------------- | ------------ | ----- |
+| ATTACK | 1.5 ms (≈ instant) | amp-envelope rise time, 0.2 – 80 ms | the DS-4 / ULT-SOUND branch of the family exposes a long/short attack on its amp envelope; the Pollard hit is otherwise fixed-instant |
+| VIB DELAY | 0 s | vibrato fades in over 0 – 1.5 s after the hit | standard synth vibrato-delay; lets the LFO swell in on long sustains |
+| DRIVE | 1.25× | pre-gain into the OTA-VCA `tanh`, 0.5 – 6× | exposes the CA3080/LM13700 "bloom" that is otherwise a fixed amount; harder drive = more third-harmonic grit |
+
 ## 4. Digital modelling choices (Phase 0, Web Audio)
 
 * **Envelopes** — every amplitude EG uses `setTargetAtTime`, which is

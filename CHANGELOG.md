@@ -3,6 +3,20 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## Synth Drum 4 — Phase 0.2 (more parameters)
+
+* Added three performance-extension controls (marked `+` in the UI,
+  defaults reproduce the original 478):
+  * **ATTACK** — amp-envelope rise time, 0.2 – 80 ms (was a fixed
+    1.5 ms instant attack).
+  * **VIB DELAY** — vibrato fades in over 0 – 1.5 s after the hit.
+  * **DRIVE** — pre-gain into the OTA-VCA `tanh` (0.5 – 6×), exposing
+    the saturation "bloom" that was previously fixed.
+* New **SOFT MALLET** preset showing the slow-attack voice; presets now
+  carry the three new params and re-apply DRIVE to the live graph.
+* RESEARCH.md documents each extension, its hardware basis and the
+  default that matches the original panel.
+
 ## Synth Drum 4 — Phase 0.1 (fidelity)
 
 * **Pitch sweep** now modelled as the circuit behaves: the RC-discharge

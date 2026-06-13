@@ -80,6 +80,7 @@
   .prow { display:grid; grid-template-columns:96px 1fr 74px; gap:8px; align-items:center;
     margin-bottom:2px; }
   .prow .lb { font-size:12px; color:#cfcdc8; letter-spacing:.04em; }
+  .ext { color:var(--red); font-weight:800; }
   .prow .vl { text-align:right; font-size:12px; color:var(--red); font-weight:700;
     font-variant-numeric:tabular-nums; }
   .prow input[type=range] { -webkit-appearance:none; appearance:none;
@@ -147,6 +148,8 @@
         </div></div>
       <div class="prow"><span class="lb">TUNE</span>
         <input type="range" id="tune" min="0" max="1" step="0.001"><span class="vl" id="tuneV"></span></div>
+      <div class="prow"><span class="lb">ATTACK <span class="ext">+</span></span>
+        <input type="range" id="attack" min="0" max="1" step="0.001"><span class="vl" id="attackV"></span></div>
       <div class="prow"><span class="lb">TONE SUSTAIN</span>
         <input type="range" id="sustain" min="0" max="1" step="0.001"><span class="vl" id="sustainV"></span></div>
     </div>
@@ -173,6 +176,8 @@
         <input type="range" id="vibRate" min="0" max="1" step="0.001"><span class="vl" id="vibRateV"></span></div>
       <div class="prow"><span class="lb">DEPTH</span>
         <input type="range" id="vibDepth" min="0" max="1" step="0.01"><span class="vl" id="vibDepthV"></span></div>
+      <div class="prow"><span class="lb">DELAY <span class="ext">+</span></span>
+        <input type="range" id="vibDelay" min="0" max="1.5" step="0.01"><span class="vl" id="vibDelayV"></span></div>
     </div>
 
     <div class="sec">
@@ -187,6 +192,8 @@
 
     <div class="sec">
       <h3>OUTPUT</h3>
+      <div class="prow"><span class="lb">DRIVE <span class="ext">+</span></span>
+        <input type="range" id="drive" min="0.5" max="6" step="0.1"><span class="vl" id="driveV"></span></div>
       <div class="prow"><span class="lb">VOLUME</span>
         <input type="range" id="vol" min="0" max="1" step="0.01"><span class="vl" id="volV"></span></div>
     </div>
@@ -199,7 +206,9 @@
     Synth Drum 4 — a digital recreation of one Pollard Syndrum 478 channel.<br>
     RC-discharge envelopes · exponential-in-octaves pitch sweep · analog VCO
     drift · velocity drives level + sweep depth + sustain · vibrato to 250 Hz
-    (real FM) · 2-band snare noise.<br>
+    (real FM) · 2-band snare noise · attack / vib-delay / drive extensions.<br>
+    <span class="ext">+</span> = performance extension beyond the original 478 panel
+    (defaults reproduce the hardware).<br>
     Circuit notes: <code>docs/RESEARCH.md</code>
   </div>
 </div>
@@ -230,6 +239,7 @@ const P = {
   sens: 0.7,            // 0..1
   wave: "sine",         // sine | triangle | square
   tune: 75,             // Hz, 30..800
+  attack: 0.0015,       // s, 0.0002..0.08 (+ ext; hardware ≈ instant)
   sustain: 0.8,         // s, 0.05..20
   dir: "down",          // up | off | down
   range: 18,            // semitones, 0..36 (× velocity)
@@ -237,8 +247,10 @@ const P = {
   vibWave: "triangle",  // square | triangle | sawtooth(ramp)
   vibRate: 6,           // Hz, 0.5..250
   vibDepth: 0,          // 0..1
+  vibDelay: 0,          // s, 0..1.5 (+ ext; LFO fades in)
   snare: 0,             // 0 | 1 | 2
   snSustain: 0.3,       // s, 0.04..3
+  drive: 1.25,          // × pre-gain into the OTA-VCA tanh (+ ext)
   vol: 0.8,             // 0..1
 };
 
@@ -249,6 +261,7 @@ const expMap = (lo, hi) => ({
 });
 const MAPS = {
   tune:      expMap(30, 800),
+  attack:    expMap(0.0002, 0.08),
   sustain:   expMap(0.05, 20),
   sweepTime: expMap(0.03, 2),
   vibRate:   expMap(0.5, 250),
@@ -263,7 +276,7 @@ function ensureAC() {
   ac = new AC({ latencyHint: "interactive" });
 
   // master: gentle op-amp-style soft clip → volume → analyser → out
-  const drive = ac.createGain(); drive.gain.value = 1.25;
+  const drive = ac.createGain(); drive.gain.value = P.drive;
   const clip = ac.createWaveShaper();
   const N = 2048, curve = new Float32Array(N);
   for (let i = 0; i < N; i++) {
@@ -275,7 +288,7 @@ function ensureAC() {
   analyser = ac.createAnalyser(); analyser.fftSize = 2048;
   drive.connect(clip); clip.connect(vol); vol.connect(analyser);
   analyser.connect(ac.destination);
-  master = { in: drive, vol };
+  master = { in: drive, drive, vol };
 
   // function-generator sine: fundamental + H3 at −38 dB (≈1.3 % THD)
   const real = new Float32Array([0, 0, 0, 0, 0, 0]);
@@ -352,15 +365,22 @@ function trigger(rawVel) {
     lfo.type = P.vibWave;
     lfo.frequency.setValueAtTime(P.vibRate, t);
     const lg = ac.createGain();
-    lg.gain.value = P.vibDepth * f0 * 0.9;
+    const vibAmt = P.vibDepth * f0 * 0.9;
+    if (P.vibDelay > 0.01) {            // DELAY: LFO fades in after the hit
+      lg.gain.setValueAtTime(0, t);
+      lg.gain.linearRampToValueAtTime(vibAmt, t + P.vibDelay);
+    } else {
+      lg.gain.setValueAtTime(vibAmt, t);
+    }
     lfo.connect(lg); lg.connect(vco.frequency);
     lfo.start(t); voice.oscs.push(lfo);
   }
 
   const vca = ac.createGain();
+  const atk = P.attack;
   vca.gain.setValueAtTime(0, t);
-  vca.gain.linearRampToValueAtTime(ampPeak, t + 0.0015);  // hardware-fast attack
-  vca.gain.setTargetAtTime(0, t + 0.0015, sustEff / 6);   // RC discharge
+  vca.gain.linearRampToValueAtTime(ampPeak, t + atk);   // ATTACK (≈instant by default)
+  vca.gain.setTargetAtTime(0, t + atk, sustEff / 6);    // RC discharge
   vco.connect(vca); vca.connect(master.in);
   vco.start(t);
   voice.oscs.push(vco); voice.gains.push(vca);
@@ -415,17 +435,26 @@ function chokeVoice(voice, t) {
 /* ---------- presets ---------- */
 const PRESETS = {
   "DISCO DROP": { wave:"sine", tune:75, sustain:0.8, dir:"down", range:18, sweepTime:0.4,
-                  vibDepth:0, snare:0, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6, snSustain:0.3 },
+                  vibDepth:0, snare:0, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6, snSustain:0.3,
+                  attack:0.0015, vibDelay:0, drive:1.25 },
   "LASER UP":   { wave:"square", tune:160, sustain:0.45, dir:"up", range:30, sweepTime:0.22,
-                  vibDepth:0, snare:0, sens:0.75, vol:0.7, vibWave:"triangle", vibRate:6, snSustain:0.3 },
+                  vibDepth:0, snare:0, sens:0.75, vol:0.7, vibWave:"triangle", vibRate:6, snSustain:0.3,
+                  attack:0.0015, vibDelay:0, drive:1.7 },
   "SPACE SNARE":{ wave:"triangle", tune:190, sustain:0.22, dir:"down", range:9, sweepTime:0.12,
-                  vibDepth:0, snare:2, snSustain:0.35, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6 },
+                  vibDepth:0, snare:2, snSustain:0.35, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6,
+                  attack:0.0015, vibDelay:0, drive:1.3 },
   "SYN-TOM":    { wave:"triangle", tune:110, sustain:0.3, dir:"down", range:6, sweepTime:0.13,
-                  vibDepth:0, snare:0, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6, snSustain:0.3 },
+                  vibDepth:0, snare:0, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6, snSustain:0.3,
+                  attack:0.0015, vibDelay:0, drive:1.4 },
   "UFO":        { wave:"sine", tune:300, sustain:2.2, dir:"off", range:0, sweepTime:0.4,
-                  vibWave:"sawtooth", vibRate:42, vibDepth:0.8, snare:0, sens:0.7, vol:0.65, snSustain:0.3 },
+                  vibWave:"sawtooth", vibRate:42, vibDepth:0.8, snare:0, sens:0.7, vol:0.65, snSustain:0.3,
+                  attack:0.03, vibDelay:0.5, drive:1.1 },
+  "SOFT MALLET":{ wave:"sine", tune:130, sustain:1.0, dir:"down", range:5, sweepTime:0.5,
+                  vibDepth:0, snare:0, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6, snSustain:0.3,
+                  attack:0.045, vibDelay:0, drive:1.0 },
   "BUZZ RING":  { wave:"sine", tune:140, sustain:0.6, dir:"down", range:12, sweepTime:0.3,
-                  vibWave:"square", vibRate:180, vibDepth:0.55, snare:0, sens:0.7, vol:0.65, snSustain:0.3 },
+                  vibWave:"square", vibRate:180, vibDepth:0.55, snare:0, sens:0.7, vol:0.65, snSustain:0.3,
+                  attack:0.0015, vibDelay:0, drive:2.4 },
 };
 
 /* ---------- UI wiring ---------- */
@@ -451,12 +480,15 @@ audBtn.addEventListener("click", () => {
 const SLIDERS = [
   { id:"sens",      get:() => P.sens,      set:x => P.sens = +x,            fmt:v => Math.round(v*100)+" %" },
   { id:"tune",      map:MAPS.tune,      key:"tune",      fmt:fmtHz },
+  { id:"attack",    map:MAPS.attack,    key:"attack",    fmt:fmtS },
   { id:"sustain",   map:MAPS.sustain,   key:"sustain",   fmt:fmtS },
   { id:"range",     get:() => P.range,     set:x => P.range = +x,           fmt:v => v.toFixed(1)+" st" },
   { id:"sweepTime", map:MAPS.sweepTime, key:"sweepTime", fmt:fmtS },
   { id:"vibRate",   map:MAPS.vibRate,   key:"vibRate",   fmt:fmtHz },
   { id:"vibDepth",  get:() => P.vibDepth,  set:x => P.vibDepth = +x,        fmt:v => Math.round(v*100)+" %" },
+  { id:"vibDelay",  get:() => P.vibDelay,  set:x => P.vibDelay = +x,        fmt:fmtS },
   { id:"snSustain", map:MAPS.snSustain, key:"snSustain", fmt:fmtS },
+  { id:"drive",     get:() => P.drive,     set:x => { P.drive = +x; if (master) master.drive.gain.value = P.drive; }, fmt:v => v.toFixed(1)+"×" },
   { id:"vol",       get:() => P.vol,       set:x => { P.vol = +x; if (master) master.vol.gain.value = P.vol; }, fmt:v => Math.round(v*100)+" %" },
 ];
 
@@ -501,7 +533,7 @@ for (const name of Object.keys(PRESETS)) {
   b.textContent = name;
   b.addEventListener("click", () => {
     Object.assign(P, PRESETS[name]);
-    if (master) master.vol.gain.value = P.vol;
+    if (master) { master.vol.gain.value = P.vol; master.drive.gain.value = P.drive; }
     refreshAll();
     trigger(0.9);
   });
