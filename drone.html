@@ -462,6 +462,14 @@
     </section>
 
     <section class="panel">
+      <h2>PHRASE (ENO)</h2>
+      <div class="knob-grid cols-3" id="phraseKnobs"></div>
+      <div style="font-size:9px; color:var(--ink-dd); margin-top:6px; line-height:1.4;">
+        Cycle=0 でオフ。各ボイスが互いに素な周期で出入りし、組合せが反復しない (Music for Airports 方式)。Density=鳴っている割合。
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>OSC STACK</h2>
       <div class="knob-grid cols-3" id="oscKnobs"></div>
     </section>
@@ -785,6 +793,12 @@ const G = {
 
   // BUILD UP — voice entry stagger when starting from silence
   buildUp:   0,        // 0..600 seconds, spread over the chord's voices
+
+  // PHRASE (Eno / Music for Airports) — each voice cycles in and out on its
+  // own incommensurate period so the combined texture never repeats.
+  phraseCycle:   0,    // 0..600 s  average cycle length (0 = off / continuous)
+  phraseDensity: 55,   // 0..100 %  fraction of each cycle the voice is sounding
+  phraseFade:    8,    // 1..60 s   in/out ramp length per phrase edge
 
   // 3-band master EQ (low-shelf 220Hz / mid-peak / high-shelf 4500Hz)
   eqLowGain:  0,   // dB, -12..+12
@@ -1406,6 +1420,7 @@ function freeVoice(v, fadeTime){
     try{ v.gainOut.disconnect(); }catch(_){}
     try{ v.driftOut.disconnect(); }catch(_){}
     try{ v.breathGain && v.breathGain.disconnect(); }catch(_){}
+    try{ v.phraseGain && v.phraseGain.disconnect(); }catch(_){}
     try{ v.ampMod && v.ampMod.disconnect(); }catch(_){}
     try{ v.pan && v.pan.disconnect(); }catch(_){}
   };
@@ -1504,6 +1519,18 @@ function buildVoice(freq, idx, total, fadeIn){
     v.breathLfo.start(ctx.currentTime + srand() * 2);
     v.lfoList.push(v.breathLfo);
   }
+
+  // ----- PHRASE: Eno-style independent in/out cycling on an incommensurate
+  //       period so the combined texture never realigns -----
+  v.phraseGain = ctx.createGain();
+  v.phraseGain.gain.value = 1;
+  // Each voice's cycle is the global cycle times an irrational-ish factor; with
+  // distinct factors the least common multiple of all voices is astronomically
+  // large, so the ensemble never repeats (the Music for Airports trick).
+  v.phraseFactor = 0.61 + srand() * 1.07;   // ~0.61 .. 1.68
+  v.phrasePhase  = srand();                  // 0..1 starting point in the cycle
+  v.phraseOn     = true;
+  v.phraseNextAt = 0;
 
   // drift signal: sum of slow LFOs at slightly different rates per voice — seeded
   v.driftOut = ctx.createGain();
@@ -1630,9 +1657,10 @@ function buildVoice(freq, idx, total, fadeIn){
   v.oscSubMix.connect(v.voiceMix);
   v.grainSubMix.connect(v.voiceMix);
 
-  // chain: voiceMix -> gainOut -> breathGain -> ampMod -> pan -> preFilter
+  // chain: voiceMix -> gainOut -> breathGain -> phraseGain -> ampMod -> pan -> voicesBus
   v.voiceMix.connect(v.gainOut)
             .connect(v.breathGain)
+            .connect(v.phraseGain)
             .connect(v.ampMod)
             .connect(v.pan)
             .connect(G.voicesBus);
@@ -2039,6 +2067,70 @@ function walkTick(){
   }
 }
 setInterval(walkTick, 900);
+
+// ============================================================
+// PHRASE — Eno "Music for Airports" incommensurate in/out cycling.
+// Each voice fades in, sustains, fades out, and rests on its own period.
+// ============================================================
+let _phraseWasOn = false;
+function phraseTick(){
+  if(!G.ctx) return;
+  // disabled (cycle 0) or not playing — make sure gains are restored once
+  if(!G.playing || G.phraseCycle < 1){
+    if(_phraseWasOn){
+      const t = G.ctx.currentTime;
+      for(const v of G.voices){
+        if(v.phraseGain){
+          v.phraseGain.gain.cancelScheduledValues(t);
+          v.phraseGain.gain.setTargetAtTime(1, t, 0.5);
+        }
+        v.phraseNextAt = 0;
+      }
+      _phraseWasOn = false;
+    }
+    return;
+  }
+  _phraseWasOn = true;
+  const now = G.ctx.currentTime;
+  const density = clamp(G.phraseDensity/100, 0.05, 0.98);
+  for(const v of G.voices){
+    if(!v.phraseGain) continue;
+    const period  = Math.max(2, G.phraseCycle * v.phraseFactor);
+    const onTime  = period * density;
+    const offTime = period - onTime;
+    // fade can't exceed the shorter half of the window
+    const fade = Math.min(G.phraseFade, onTime*0.45, offTime*0.45, 30);
+
+    if(!v.phraseNextAt){
+      // initialise from the seeded phase so voices start out of step
+      const ph = (v.phrasePhase || 0) * period;
+      if(ph < onTime){
+        v.phraseOn = true;
+        v.phraseGain.gain.setValueAtTime(1, now);
+        v.phraseNextAt = now + (onTime - ph);
+      } else {
+        v.phraseOn = false;
+        v.phraseGain.gain.setValueAtTime(0.0001, now);
+        v.phraseNextAt = now + (period - ph);
+      }
+      continue;
+    }
+    if(now >= v.phraseNextAt){
+      if(v.phraseOn){
+        // sounding -> rest
+        rampEqualPower(v.phraseGain.gain, v.phraseGain.gain.value, 0.0001, now, fade);
+        v.phraseOn = false;
+        v.phraseNextAt = now + offTime;
+      } else {
+        // rest -> sounding
+        rampEqualPower(v.phraseGain.gain, v.phraseGain.gain.value, 1, now, fade);
+        v.phraseOn = true;
+        v.phraseNextAt = now + onTime;
+      }
+    }
+  }
+}
+setInterval(phraseTick, 500);
 
 function fireGrain(v, when){
   const ctx = G.ctx;
@@ -2638,6 +2730,26 @@ function buildAllKnobs(){
                         fmt:v=>v.toFixed(0)+" st", defaultValue:3,
                         onInput:v=>{ G.walkRange = v; }
                       }, "walkRange");
+
+  // PHRASE (Eno incommensurate in/out cycling)
+  addKnob("phraseKnobs", { label:"Cycle", min:0, max:600, value:G.phraseCycle,
+                          fmt:v=>{
+                            const t = Math.round(v);
+                            if(t < 1) return "off";
+                            if(t < 60) return t+" s";
+                            const m = Math.floor(t/60), s = t%60;
+                            return m+":"+(s<10?"0":"")+s;
+                          }, defaultValue:0,
+                          onInput:v=>{ G.phraseCycle = v; }
+                        }, "phraseCycle");
+  addKnob("phraseKnobs", { label:"Density", min:0, max:100, value:G.phraseDensity,
+                          fmt:v=>v.toFixed(0)+"%", defaultValue:55,
+                          onInput:v=>{ G.phraseDensity = v; }
+                        }, "phraseDensity");
+  addKnob("phraseKnobs", { label:"Fade", min:1, max:60, value:G.phraseFade,
+                          log:true, fmt:v=>v.toFixed(0)+" s", defaultValue:8,
+                          onInput:v=>{ G.phraseFade = v; }
+                        }, "phraseFade");
 
   // SPACE
   addKnob("spaceKnobs", { label:"Spread", min:0, max:100, value:G.spread,
@@ -3380,6 +3492,7 @@ const PATCH_KEYS = {
   rvg:"revGated", rvf:"revFreeze", rvm:"revMod", rvs:"revShimmer",
   so:"subOct", eb:"eqBass", mb:"monoBass", hp:"hpfHz", bs:"bassSat",
   bu:"buildUp",
+  pc:"phraseCycle", pd2:"phraseDensity", pf:"phraseFade",
 };
 
 // INPUT GRAIN params travel under their own short keys (saved alongside G)
