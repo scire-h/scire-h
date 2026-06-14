@@ -326,7 +326,7 @@ let matProfile = null;
    HFが痩せ・グリットが増える。終端でリードアウト溝→自動リキューで円環が閉じる */
 const SIDE_SECONDS = 300;       // 片面 5 分（アンビエント用に圧縮）
 const LEADOUT = { p: 0.03, a: 1, sign: 1, decay: 0.97, prob: 1 };  // 1周1回の「コトッ」
-let sidePos = 0, sideTimer = 0, runout = false, runoutRevs = 0;
+let sidePos = 0, sideTimer = 0, runout = false, runoutRevs = 0, recueTimer = 0;
 
 const $ = id => document.getElementById(id);
 const rotHz = () => rpm / 60;
@@ -493,6 +493,10 @@ function setEngine(name, v) {
 function setDefectsOnEngine(arr) {
   const e = nodes.engine;
   if (e.port) e.port.postMessage({ defects: arr }); else e.setDefects(arr);
+}
+// 現在の指紋をエンジンへ送る（リードアウト中はLEADOUT溝を維持）
+function pushDefects() {
+  if (ctx && nodes.engine) setDefectsOnEngine(runout ? defects.concat([LEADOUT]) : defects);
 }
 
 /* ============================================================
@@ -695,7 +699,7 @@ function wipeStatic() {
   updateDensities();
   // 新しい盤 = 新しい指紋（素材は維持）
   defects = makeDefects(defects.length || 6, matProfile);
-  if (ctx && nodes.engine) setDefectsOnEngine(defects);
+  pushDefects();
   const b = $('wipeBtn'); b.classList.add('on'); setTimeout(() => b.classList.remove('on'), 250);
 }
 
@@ -725,10 +729,11 @@ function recue() {
   const arm = $('arm');
   arm.style.transform = ''; arm.classList.remove('down');     // 針上げ
   nodes.pre.gain.setTargetAtTime(0, ctx.currentTime, 0.12);   // 無音（回転は続く）
-  setTimeout(() => {
+  clearTimeout(recueTimer);
+  recueTimer = setTimeout(() => {
     if (!intendPlaying) return;
-    sidePos = 0; runout = false;
-    setDefectsOnEngine(defects);
+    sidePos = 0; runout = false; runoutRevs = 0;
+    pushDefects();
     applyRadius();
     arm.classList.add('down');                                // 針落とし
     nodes.pre.gain.setTargetAtTime(1, ctx.currentTime, 0.25);
@@ -762,7 +767,7 @@ function applyMaterial(key) {
   setEngine('popDecay', d.popDecay);
   // 素材に応じた指紋を作り直す
   defects = makeDefects(defects.length || 6, matProfile);
-  setDefectsOnEngine(defects);
+  pushDefects();
   if ('mediaSession' in navigator && navigator.mediaSession.metadata) {
     try { navigator.mediaSession.metadata.album = d.label; } catch (e) {}
   }
@@ -781,7 +786,7 @@ function applyPreset(name) {
     $(k).value = p[k]; $(k+'-v').textContent = p[k];
   });
   defects = makeDefects(p.defects, matProfile);
-  if (ctx && nodes.engine) setDefectsOnEngine(defects);
+  pushDefects();
   applyUI();
   document.querySelectorAll('#presets button[data-p]').forEach(b =>
     b.classList.toggle('active', b.dataset.p === name));
@@ -840,6 +845,12 @@ async function start() {
   if (!started) { await build(); applyUI(); applyMaterial(currentMaterial); started = true; }
   intendPlaying = true;
   await ctx.resume();
+  // トランスポートを正常な再生状態へ正規化（recue途中でstopされても確実に復帰）
+  clearTimeout(recueTimer);
+  if (runout) { runout = false; sidePos = 0; }   // リードアウトで止めた場合は頭出し
+  runoutRevs = 0;
+  nodes.pre.gain.setTargetAtTime(1, ctx.currentTime, 0.1);
+  pushDefects();
   ensureSinkPlaying();
   setupMediaSession();
   nodes.master.gain.setTargetAtTime((+$('master').value/100) * 0.9, ctx.currentTime, 0.6);
