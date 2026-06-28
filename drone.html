@@ -470,6 +470,20 @@
     </section>
 
     <section class="panel">
+      <h2>TIDE (エナジーの波)</h2>
+      <div class="knob-grid cols-2" id="tideKnobs"></div>
+      <div class="row" style="margin-top:6px;"><label>Wave</label></div>
+      <div class="chips" id="tideWaveChips"></div>
+      <div class="row" style="margin-top:6px;"><label>Modulate</label></div>
+      <div class="chips" id="tideTargetChips"></div>
+      <div class="row" style="margin-top:8px;"><label>Energy</label><span class="val" id="tideEnergyLabel">—</span></div>
+      <div class="meter"><div class="fill" id="tideEnergyBar"></div></div>
+      <div style="font-size:9px; color:var(--ink-dd); margin-top:4px; line-height:1.4;">
+        Depth=0 でオフ。90分周期 (体内のウルトラディアン・リズム) で 低音⇄高音・空間 をゆっくり呼吸させる自動エナジー・アーク。
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>OSC STACK</h2>
       <div class="knob-grid cols-3" id="oscKnobs"></div>
     </section>
@@ -856,6 +870,19 @@ const VINYL = {
   pops:    20,  // 0..100  rate of bigger occasional pops
   rumble:  25,  // 0..100  low-frequency motor rumble
   tone:    50,  // 0..100  brightness of the noise (filter)
+};
+
+// TIDE — ultra-slow "energy arc" macro. One very low-frequency cycle breathes
+// the whole drone between a calm/dark/bass-forward state and a bright/treble-
+// forward state, the way a DJ set or playlist rises and falls. Default period
+// 90 min ≈ the ultradian (BRAC) human rest-activity cycle.
+const TIDE = {
+  period: 5400,   // seconds (default 90 min)
+  depth:  0,      // 0..100  (0 = off)
+  wave:   "sine", // "sine" | "tri" | "random"
+  modTone:  true, // breathe EQ tilt + BRIGHT
+  modSpace: true, // breathe reverb amount
+  energy: 0.5,    // live 0..1, updated by tideTick (for the UI readout)
 };
 
 const EVOLVE_PROGRESSIONS = [
@@ -2250,6 +2277,77 @@ function phraseTick(){
 }
 setInterval(phraseTick, 500);
 
+// ============================================================
+// TIDE — ultra-slow energy arc (the DJ "journey" / ultradian breath)
+// ============================================================
+let _tideWasOn = false;
+function tideEnergy(now){
+  const p = Math.max(30, TIDE.period);
+  const ph = (now / p) * 2 * Math.PI;
+  if(TIDE.wave === "tri"){
+    const frac = (now / p) % 1;
+    return frac < 0.5 ? (frac * 2) : (2 - frac * 2);    // 0..1..0 triangle
+  }
+  if(TIDE.wave === "random"){
+    // smooth wandering curve from two incommensurate sines — bounded, non-repeating
+    const a = Math.sin(ph);
+    const b = Math.sin(ph * 0.6180339 + 1.7);           // golden-ratio detune
+    return clamp(0.5 + (0.62*a + 0.38*b) * 0.5, 0, 1);
+  }
+  return 0.5 + 0.5 * Math.sin(ph - Math.PI/2);          // sine, starts at 0 (calm)
+}
+function tideTick(){
+  if(!G.ctx) return;
+  if(TIDE.depth < 0.5){
+    if(_tideWasOn){
+      // restore the user's base settings once when switched off
+      applyEQ(); applyFilter(); applyReverb();
+      _tideWasOn = false;
+      TIDE.energy = 0.5;
+      refreshTideUI();
+    }
+    return;
+  }
+  _tideWasOn = true;
+  const now = G.ctx.currentTime;
+  const e = tideEnergy(now);
+  TIDE.energy = e;
+  const tilt = (e - 0.5) * 2;        // -1 (bass/dark) .. +1 (treble/bright)
+  const d = TIDE.depth / 100;
+  const t = now;
+
+  if(TIDE.modTone){
+    // EQ tilt: treble up + bass down when energy high; reversed when low
+    if(G.eqHigh) G.eqHigh.gain.setTargetAtTime(clamp(G.eqHighGain + tilt * 9 * d, -15, 15), t, 2.0);
+    if(G.eqLow)  G.eqLow.gain.setTargetAtTime(clamp(G.eqLowGain  - tilt * 9 * d, -15, 15), t, 2.0);
+    // BRIGHT (master LPF) opens up at high energy, closes at low
+    if(G.postFilter){
+      const mul = Math.pow(2, tilt * 1.25 * d);
+      G.postFilter.frequency.setTargetAtTime(clamp(G.bright * mul, 80, 18000), t, 2.0);
+    }
+  }
+  if(TIDE.modSpace && G.dry && G.wet){
+    // more reverb when calm (low energy), drier at peak
+    const base = G.reverbMix / 100;
+    const wet = clamp(base + (0.5 - e) * 0.6 * d, 0, 1);
+    G.wet.gain.setTargetAtTime(wet, t, 2.0);
+    G.dry.gain.setTargetAtTime(1 - wet, t, 2.0);
+  }
+  refreshTideUI();
+}
+setInterval(tideTick, 1000);
+
+function refreshTideUI(){
+  const bar = $("tideEnergyBar");
+  if(bar) bar.style.width = (clamp(TIDE.energy,0,1)*100).toFixed(0) + "%";
+  const lbl = $("tideEnergyLabel");
+  if(lbl){
+    const e = TIDE.energy;
+    const mood = e < 0.34 ? "calm · bass" : e > 0.66 ? "peak · bright" : "mid";
+    lbl.textContent = (e*100).toFixed(0) + "% " + mood;
+  }
+}
+
 function fireGrain(v, when){
   const ctx = G.ctx;
   const buf = G.buffer;
@@ -2895,6 +2993,22 @@ function buildAllKnobs(){
                           onInput:v=>{ G.phraseFade = v; }
                         }, "phraseFade");
 
+  // TIDE (energy arc macro)
+  addKnob("tideKnobs", { label:"Period", min:60, max:7200, value:TIDE.period,
+                        log:true,
+                        fmt:v=>{
+                          const t = Math.round(v);
+                          const m = Math.floor(t/60), s = t%60;
+                          if(m === 0) return s+" s";
+                          return m+":"+(s<10?"0":"")+s;
+                        }, defaultValue:5400,
+                        onInput:v=>{ TIDE.period = v; }
+                      }, "tidePeriod");
+  addKnob("tideKnobs", { label:"Depth", min:0, max:100, value:TIDE.depth,
+                        fmt:v=>v<0.5?"off":v.toFixed(0)+"%", defaultValue:0,
+                        onInput:v=>{ TIDE.depth = v; }
+                      }, "tideDepth");
+
   // SPACE
   addKnob("spaceKnobs", { label:"Spread", min:0, max:100, value:G.spread,
                          fmt:v=>v.toFixed(0)+"%", defaultValue:60,
@@ -3126,6 +3240,41 @@ function buildReverbModeChips(){
     });
     box.appendChild(c);
   });
+}
+
+function buildTideChips(){
+  const wbox = $("tideWaveChips");
+  if(wbox){
+    wbox.innerHTML = "";
+    [{id:"sine",label:"Sine"},{id:"tri",label:"Tri"},{id:"random",label:"Random"}].forEach(w=>{
+      const c = document.createElement("div");
+      c.className = "chip" + (TIDE.wave === w.id ? " on" : "");
+      c.textContent = w.label;
+      c.addEventListener("click", ()=>{
+        TIDE.wave = w.id;
+        wbox.querySelectorAll(".chip").forEach(el=> el.classList.remove("on"));
+        c.classList.add("on");
+      });
+      wbox.appendChild(c);
+    });
+  }
+  const tbox = $("tideTargetChips");
+  if(tbox){
+    tbox.innerHTML = "";
+    [{id:"modTone",label:"Tone"},{id:"modSpace",label:"Space"}].forEach(tg=>{
+      const c = document.createElement("div");
+      c.className = "chip" + (TIDE[tg.id] ? " on" : "");
+      c.textContent = tg.label;
+      c.addEventListener("click", ()=>{
+        TIDE[tg.id] = !TIDE[tg.id];
+        c.classList.toggle("on", TIDE[tg.id]);
+        // restore base values for whichever axis was just turned off
+        if(!TIDE.modTone){ applyEQ(); applyFilter(); }
+        if(!TIDE.modSpace){ applyReverb(); }
+      });
+      tbox.appendChild(c);
+    });
+  }
 }
 
 function buildTransitionChips(){
@@ -3671,6 +3820,11 @@ function encodePatch(){
     if(typeof v === "number") v = +v.toFixed(3);
     p[short] = v;
   }
+  // TIDE
+  p.tdp = +TIDE.period.toFixed(1);
+  p.tdd = +TIDE.depth.toFixed(2);
+  p.tdw = TIDE.wave;
+  p.tdt = (TIDE.modTone?1:0) + (TIDE.modSpace?2:0);
   return btoa(JSON.stringify(p));
 }
 
@@ -3710,6 +3864,12 @@ function decodePatch(str){
     const knobKey = vinylKnobMap[k];
     if(knobKey && knobRefs[knobKey]) knobRefs[knobKey].setValue(p[short]);
   }
+  // TIDE
+  if(p.tdp !== undefined){ TIDE.period = p.tdp; if(knobRefs.tidePeriod) knobRefs.tidePeriod.setValue(p.tdp); }
+  if(p.tdd !== undefined){ TIDE.depth  = p.tdd; if(knobRefs.tideDepth)  knobRefs.tideDepth.setValue(p.tdd); }
+  if(p.tdw !== undefined) TIDE.wave = p.tdw;
+  if(p.tdt !== undefined){ TIDE.modTone = !!(p.tdt & 1); TIDE.modSpace = !!(p.tdt & 2); }
+  buildTideChips();
   if(G.ctx){ applyInputMix(); applyInputGrainAmount(); applyVinyl(); }
   return true;
 }
@@ -3726,6 +3886,7 @@ function loadPatchFromHash(){
   buildSrChips();
   buildTransitionChips();
   buildReverbModeChips();
+  buildTideChips();
   buildRecTrackChips();
   renderChordStrip();
   refreshRootWalkUI();
@@ -3813,6 +3974,7 @@ function applyPatchObj(data){
   buildSrChips();
   buildTransitionChips();
   buildReverbModeChips();
+  buildTideChips();
   buildRecTrackChips();
   renderChordStrip();
   refreshRootWalkUI();
@@ -4326,6 +4488,7 @@ function init(){
   buildSrChips();
   buildTransitionChips();
   buildReverbModeChips();
+  buildTideChips();
   buildRecTrackChips();
   renderChordStrip();
   refreshRootWalkUI();
