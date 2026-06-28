@@ -619,6 +619,14 @@
         </span>
       </div>
     </section>
+
+    <section class="panel">
+      <h2>VINYL</h2>
+      <div class="knob-grid cols-3" id="vinylKnobs"></div>
+      <div style="font-size:9px; color:var(--ink-dd); margin-top:6px; line-height:1.4;">
+        Mix=0 でオフ。Crackle=パチパチ密度 / Hiss=表面ノイズ / Pops=大きめのプチノイズ頻度 / Rumble=モーター低音 / Tone=明るさ
+      </div>
+    </section>
   </div>
 
 </main>
@@ -833,6 +841,21 @@ const INPUT = {
   pos:         0.5,      // 0..1 centre of read window
   posJit:      50,       // %
   pitch:       0,        // semitones jitter ±
+};
+
+// VINYL — analog record-surface noise layer, finely editable. Added in parallel
+// to the master so the whole drone sounds like it's pressed on a record.
+const VINYL = {
+  bus: null,
+  hissSrc: null, hissFilt: null, hissGain: null,
+  rumbleSrc: null, rumbleFilt: null, rumbleGain: null,
+  nextClick: 0,
+  mix:     0,   // 0..100  master amount (0 = off)
+  crackle: 40,  // 0..100  density of fine clicks (パチパチ)
+  hiss:    30,  // 0..100  continuous surface hiss
+  pops:    20,  // 0..100  rate of bigger occasional pops
+  rumble:  25,  // 0..100  low-frequency motor rumble
+  tone:    50,  // 0..100  brightness of the noise (filter)
 };
 
 const EVOLVE_PROGRESSIONS = [
@@ -1204,9 +1227,104 @@ async function ensureAudio(){
   INPUT.wetGain.connect(INPUT.mixGain);
   INPUT.mixGain.connect(G.preFilter);
 
+  // ----- VINYL noise layer (parallel to master, post-everything) -----
+  VINYL.bus = ctx.createGain();
+  VINYL.bus.gain.value = VINYL.mix / 100;
+  VINYL.bus.connect(G.master);   // shares comp + limiter with the drone
+  // continuous surface hiss
+  VINYL.hissSrc = ctx.createBufferSource();
+  VINYL.hissSrc.buffer = getNoiseBuf();
+  VINYL.hissSrc.loop = true;
+  VINYL.hissFilt = ctx.createBiquadFilter();
+  VINYL.hissFilt.type = "bandpass";
+  VINYL.hissFilt.frequency.value = 2000;
+  VINYL.hissFilt.Q.value = 0.5;
+  VINYL.hissGain = ctx.createGain();
+  VINYL.hissGain.gain.value = (VINYL.hiss/100) * 0.06;
+  VINYL.hissSrc.connect(VINYL.hissFilt).connect(VINYL.hissGain).connect(VINYL.bus);
+  VINYL.hissSrc.start();
+  // low-frequency motor rumble
+  VINYL.rumbleSrc = ctx.createBufferSource();
+  VINYL.rumbleSrc.buffer = getNoiseBuf();
+  VINYL.rumbleSrc.loop = true;
+  VINYL.rumbleSrc.playbackRate.value = 0.5;
+  VINYL.rumbleFilt = ctx.createBiquadFilter();
+  VINYL.rumbleFilt.type = "lowpass";
+  VINYL.rumbleFilt.frequency.value = 55;
+  VINYL.rumbleFilt.Q.value = 1.2;
+  VINYL.rumbleGain = ctx.createGain();
+  VINYL.rumbleGain.gain.value = (VINYL.rumble/100) * 0.25;
+  VINYL.rumbleSrc.connect(VINYL.rumbleFilt).connect(VINYL.rumbleGain).connect(VINYL.bus);
+  VINYL.rumbleSrc.start();
+  applyVinylTone();
+
   // generate initial grain buffer
   rebuildBuffer();
 }
+
+function applyVinylTone(){
+  if(!G.ctx || !VINYL.hissFilt) return;
+  const t = G.ctx.currentTime;
+  // tone 0..100 -> bandpass centre 600..6000 Hz
+  const hz = 600 + (VINYL.tone/100) * 5400;
+  VINYL.hissFilt.frequency.setTargetAtTime(hz, t, 0.1);
+}
+
+function applyVinyl(){
+  if(!G.ctx || !VINYL.bus) return;
+  const t = G.ctx.currentTime;
+  VINYL.bus.gain.setTargetAtTime(VINYL.mix/100, t, 0.1);
+  if(VINYL.hissGain)   VINYL.hissGain.gain.setTargetAtTime((VINYL.hiss/100)*0.06, t, 0.1);
+  if(VINYL.rumbleGain) VINYL.rumbleGain.gain.setTargetAtTime((VINYL.rumble/100)*0.25, t, 0.1);
+  applyVinylTone();
+}
+
+// fire one short enveloped click (crackle or pop)
+function fireVinylClick(when, amp, durMs, bright){
+  if(!VINYL.bus) return;
+  const ctx = G.ctx;
+  const dur = durMs/1000;
+  const src = ctx.createBufferSource();
+  src.buffer = getNoiseBuf();
+  src.playbackRate.value = 0.7 + Math.random()*0.6;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = bright * (0.7 + Math.random()*0.6);
+  bp.Q.value = 0.8;
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.0001, when);
+  env.gain.exponentialRampToValueAtTime(amp, when + 0.0006);
+  env.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  const pan = ctx.createStereoPanner();
+  pan.pan.value = Math.random()*2 - 1;
+  src.connect(bp).connect(env).connect(pan).connect(VINYL.bus);
+  const off = Math.random()*1.5;
+  src.start(when, off, dur + 0.02);
+  src.stop(when + dur + 0.03);
+}
+
+// scheduler: crackle (dense small clicks) + pops (sparse big clicks)
+function vinylClickScheduler(){
+  if(!G.ctx || !VINYL.bus) return;
+  if(VINYL.mix < 0.5) return;
+  const now = G.ctx.currentTime;
+  if(!VINYL.nextClick || VINYL.nextClick < now) VINYL.nextClick = now;
+  while(VINYL.nextClick < now + 0.15){
+    const when = VINYL.nextClick;
+    // crackle click
+    if(VINYL.crackle > 0.5){
+      fireVinylClick(when, 0.05 + (VINYL.crackle/100)*0.12, 2 + Math.random()*4, 2500);
+    }
+    // occasional pop (probability scaled by pops knob)
+    if(VINYL.pops > 0.5 && Math.random() < (VINYL.pops/100) * 0.08){
+      fireVinylClick(when + Math.random()*0.05, 0.25 + (VINYL.pops/100)*0.35, 8 + Math.random()*14, 1200);
+    }
+    // base inter-click interval shrinks as crackle density rises
+    const baseRate = 4 + (VINYL.crackle/100) * 90; // 4..94 clicks/sec
+    VINYL.nextClick += 1 / Math.max(1, baseRate) * (0.5 + Math.random());
+  }
+}
+setInterval(vinylClickScheduler, 60);
 
 function shimmerDepthDb(){ return (G.shimmer / 100) * 9; }
 
@@ -2627,6 +2745,32 @@ function buildAllKnobs(){
                         onInput:v=>{ G.bassSat = v; applyBass(); }
                       }, "bassSat");
 
+  // VINYL — analog record surface noise
+  addKnob("vinylKnobs", { label:"Mix",     min:0, max:100, value:VINYL.mix,
+                         fmt:v=>v<0.5?"off":v.toFixed(0)+"%", defaultValue:0,
+                         onInput:v=>{ VINYL.mix = v; applyVinyl(); }
+                       }, "vinylMix");
+  addKnob("vinylKnobs", { label:"Crackle", min:0, max:100, value:VINYL.crackle,
+                         fmt:v=>v.toFixed(0)+"%", defaultValue:40,
+                         onInput:v=>{ VINYL.crackle = v; }
+                       }, "vinylCrackle");
+  addKnob("vinylKnobs", { label:"Hiss",    min:0, max:100, value:VINYL.hiss,
+                         fmt:v=>v.toFixed(0)+"%", defaultValue:30,
+                         onInput:v=>{ VINYL.hiss = v; applyVinyl(); }
+                       }, "vinylHiss");
+  addKnob("vinylKnobs", { label:"Pops",    min:0, max:100, value:VINYL.pops,
+                         fmt:v=>v.toFixed(0)+"%", defaultValue:20,
+                         onInput:v=>{ VINYL.pops = v; }
+                       }, "vinylPops");
+  addKnob("vinylKnobs", { label:"Rumble",  min:0, max:100, value:VINYL.rumble,
+                         fmt:v=>v.toFixed(0)+"%", defaultValue:25,
+                         onInput:v=>{ VINYL.rumble = v; applyVinyl(); }
+                       }, "vinylRumble");
+  addKnob("vinylKnobs", { label:"Tone",    min:0, max:100, value:VINYL.tone,
+                         fmt:v=>v.toFixed(0)+"%", defaultValue:50,
+                         onInput:v=>{ VINYL.tone = v; applyVinylTone(); }
+                       }, "vinylTone");
+
   // ANALOG — Sequential-style vintage + Davachi-style breath
   addKnob("analogKnobs", { label:"Vintage", min:0, max:100, value:G.vintage,
                           fmt:v=>v.toFixed(0)+"%", defaultValue:0,
@@ -3502,6 +3646,10 @@ const INPUT_PATCH_KEYS = {
   ips:"pos", ipsj:"posJit", ipt:"pitch",
 };
 
+const VINYL_PATCH_KEYS = {
+  vmx:"mix", vck:"crackle", vhs:"hiss", vpp:"pops", vrb:"rumble", vtn:"tone",
+};
+
 function encodePatch(){
   const p = {};
   for(const short in PATCH_KEYS){
@@ -3514,6 +3662,12 @@ function encodePatch(){
   for(const short in INPUT_PATCH_KEYS){
     const k = INPUT_PATCH_KEYS[short];
     let v = INPUT[k];
+    if(typeof v === "number") v = +v.toFixed(3);
+    p[short] = v;
+  }
+  for(const short in VINYL_PATCH_KEYS){
+    const k = VINYL_PATCH_KEYS[short];
+    let v = VINYL[k];
     if(typeof v === "number") v = +v.toFixed(3);
     p[short] = v;
   }
@@ -3545,7 +3699,18 @@ function decodePatch(str){
     const knobKey = inputKnobMap[k];
     if(knobKey && knobRefs[knobKey]) knobRefs[knobKey].setValue(p[short]);
   }
-  if(G.ctx){ applyInputMix(); applyInputGrainAmount(); }
+  const vinylKnobMap = {
+    mix:"vinylMix", crackle:"vinylCrackle", hiss:"vinylHiss",
+    pops:"vinylPops", rumble:"vinylRumble", tone:"vinylTone",
+  };
+  for(const short in VINYL_PATCH_KEYS){
+    if(p[short] === undefined) continue;
+    const k = VINYL_PATCH_KEYS[short];
+    VINYL[k] = p[short];
+    const knobKey = vinylKnobMap[k];
+    if(knobKey && knobRefs[knobKey]) knobRefs[knobKey].setValue(p[short]);
+  }
+  if(G.ctx){ applyInputMix(); applyInputGrainAmount(); applyVinyl(); }
   return true;
 }
 
