@@ -323,14 +323,20 @@ function buildDSP(){
 
   /* -- reverb: Schroeder 8 comb + 2 allpass -- */
   verbIn=actx.createGain(); verbWet=actx.createGain(); verbWet.gain.value=0.18;
+  // High-pass the send so the drums' DC/subsonic (one-sided curve~ envelopes)
+  // can't accumulate in the comb feedback loops and rail the tail.
+  const verbHP=actx.createBiquadFilter(); verbHP.type='highpass'; verbHP.frequency.value=200; verbHP.Q.value=0.5;
+  verbIn.connect(verbHP);
   const combTimes=[0.0297,0.0371,0.0411,0.0437,0.0050,0.0170,0.0230,0.0263];
   const merge=actx.createGain();
   verbCombs=[];
   combTimes.forEach(t=>{
     const d=actx.createDelay(1.0); d.delayTime.value=t;
-    const fb=actx.createGain(); fb.gain.value=0.84;
-    const damp=actx.createBiquadFilter(); damp.type='lowpass'; damp.frequency.value=3600;
-    verbIn.connect(d); d.connect(damp); damp.connect(fb); fb.connect(d); d.connect(merge);
+    const fb=actx.createGain(); fb.gain.value=0.82;        // < 1 → bounded loop
+    // Q<=0.707 keeps the damping lowpass free of a resonant peak, so the comb
+    // loop gain stays fb*|H| <= fb < 1 at every frequency (no runaway).
+    const damp=actx.createBiquadFilter(); damp.type='lowpass'; damp.frequency.value=3600; damp.Q.value=0.5;
+    verbHP.connect(d); d.connect(damp); damp.connect(fb); fb.connect(d); d.connect(merge);
     verbCombs.push({d,fb,damp});
   });
   // Schroeder allpass:  w = x + g*z^-M(w);  y = -g*w + z^-M(w)
@@ -604,7 +610,7 @@ $('dist_tone').oninput=e=>{ if(distTone) distTone.frequency.value=+e.target.valu
 $('echo_div').onchange=e=>updateEcho();
 $('echo_fb').oninput=e=>{ if(echoFb) echoFb.gain.value=+e.target.value/100; };
 $('echo_mix').oninput=e=>{ if(echoWet) echoWet.gain.value=+e.target.value/100; };
-$('verb_size').oninput=e=>{ const f=0.7+ (+e.target.value/100)*0.29; verbCombs.forEach(c=>c.fb.gain.value=f); };
+$('verb_size').oninput=e=>{ const f=0.6+ (+e.target.value/100)*0.25; verbCombs.forEach(c=>c.fb.gain.value=f); }; // max 0.85
 $('verb_damp').oninput=e=>{ const f=6000-(+e.target.value/100)*5000; verbCombs.forEach(c=>c.damp.frequency.value=f); };
 $('verb_mix').oninput=e=>{ if(verbWet) verbWet.gain.value=+e.target.value/100; };
 $('lim_thr').oninput=e=>{ if(limNode) limNode.threshold.value=+e.target.value; };
