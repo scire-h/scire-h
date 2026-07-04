@@ -378,10 +378,10 @@ function buildDSP(){
 function setDist(a){ if(distShaper) distShaper.curve=makeShaper(a); }
 
 /* ---- voice synthesis (transcribed from p_etr_* graphs) -------------------- */
-function trig(vi, vel){
+function trig(vi, vel, when){
   if(!dspReady) return;
   const v=VOICES[vi]; if(v.accentRow) return;
-  const t=actx.currentTime;
+  const t = (when!=null) ? when : actx.currentTime;   // absolute AudioContext time → sample-accurate
   const out=actx.createGain();
   const pan=actx.createStereoPanner(); pan.pan.value=v.pan;
   out.connect(pan); pan.connect(window._voiceOut);
@@ -468,7 +468,7 @@ function scheduler(){
       if(cell>0 && !isMutedForPlay(vi)){
         let vel = cell===2 ? 1.15 : 0.85;
         if(accent) vel*=1.25;
-        trigAt(vi, Math.min(1.4,vel), when);
+        trig(vi, Math.min(1.4,vel), when);          // scheduled at absolute time — no setTimeout jitter
       }
     }
     scheduleUI(s, when);
@@ -476,15 +476,6 @@ function scheduler(){
     curStep=(curStep+1)%STEPS;
   }
   timer=setTimeout(scheduler, LOOKAHEAD*1000);
-}
-
-// schedule trig at absolute time by temporarily shifting currentTime reference
-function trigAt(vi, vel, when){
-  const delay=Math.max(0,(when-actx.currentTime));
-  // We synthesize relative to actx.currentTime inside trig(); to place precisely
-  // we schedule via setTimeout for the small lookahead window.
-  if(delay<0.001){ trig(vi,vel); }
-  else setTimeout(()=>trig(vi,vel), delay*1000);
 }
 
 function scheduleUI(s, when){
