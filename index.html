@@ -183,18 +183,32 @@
 <script>
 "use strict";
 /* =====================================================================
-   POKO — rebuilt from scratch.
+   POKO — faithful to the Syndrum-type schematic (ICL8038 VCO,
+   CA3080 OTA VCA, RC4136 quad op-amps).
 
-   Heart of the sound: real RC curves via setTargetAtTime.
+   What the circuit dictates, and this code now follows exactly:
 
-   Analog drum synths shape both pitch and amplitude with capacitor
-   discharge:   v(t) = target + (v0 - target) · e^(-t/τ)
-   Web Audio's setTargetAtTime() is exactly this curve. The previous
-   builds used linearRamp / exponentialRamp, which produce audibly
-   different trajectories — that mismatch was the core of the
-   "音色が違う" feedback. Pitch settles asymptotically into the base
-   frequency (fast drop, soft landing = "poko"), and the amplitude
-   tail is a true RC discharge.
+   · ONE envelope. The 4u7 / 1M-SUSTAIN RC drives BOTH the VCA
+     (via IC3-B → CA3080 control current) and the pitch SWEEP
+     (via the SWEEP RANGE pot into the VCO FREQ summing node).
+     Sweep time = amp decay time — it is the same capacitor
+     discharging into both destinations.
+   · SWEEP RANGE is a bipolar pot referenced to VREF: center = off,
+     clockwise sweeps DOWN onto the tuning, counter-clockwise UP.
+   · FM is LINEAR-in-Hz. ICL8038 frequency ∝ current into the timing
+     node; VCO FREQ, SWEEP and LFO all sum as currents there. Sweep
+     and LFO add Hz, not octaves — at low tunings the same sweep
+     setting is a proportionally huge bend. setTargetAtTime on
+     `frequency` is an RC discharge of a Hz value, which is exactly
+     this circuit's curve.
+   · LFO is FREE-RUNNING (never retriggered), shapes SQUARE /
+     TRIANGLE / SAW per the shape switch. No sine.
+   · SNARES = raw diode noise, NO band-pass, own RC envelope.
+     SNARE SWITCH: TYPE1 (loud, long decay) / TYPE2 (short, quieter)
+     / OFF.
+   · No attack knob, no click circuit: the diode charges the envelope
+     cap near-instantly and that instant rise through the VCA is the
+     attack transient you hear.
    ===================================================================== */
 
 const AC = window.AudioContext || window.webkitAudioContext;
@@ -278,23 +292,18 @@ function getNoise() {
 function mkCh(name, idx) {
   return {
     name, _idx: idx,
-    wave:     "sine",   // sine | triangle | square
-    tune:     100,      // settle frequency Hz (30..500, log)
-    attack:   1.5,      // amp attack time ms (0.5..120, log)
-    decay:    140,      // amp RC tau in ms (30..800, log)
-    sweepOct: 1.6,      // pitch sweep depth (0..6 oct, panel scale)
-    sweepDir: "down",   // "up" | "off" | "down"
-    sweepMs:  28,       // pitch RC tau in ms (5..200, log)
-    beatTune: 0,        // cents detune offset (0..50)
-    lfoOn:    false,    // LFO on/off
-    lfoWave:  "sine",   // sine | triangle | square (DS-4 "Pulse" LFO = square)
-    lfoRate:  6,        // Hz (0.3..30, log)
-    lfoDepth: 30,       // cents (0..200)
-    multi:    false,    // PULL: also fire the next channel
-    sense:    0.85,     // velocity sensitivity 0..1
-    noise:    0,        // 0..1 noise mix
-    click:    0.5,      // 0..1 attack click amount
-    level:    0.9,      // 0..1
+    /* one channel = one full copy of the schematic's circuit */
+    wave:      "sine",     // VCO SHAPE: square | triangle | sine
+    tune:      100,        // VCO FREQ, settle frequency Hz (30..500, log)
+    sustain:   140,        // SUSTAIN: the single RC tau in ms (20..1500, log)
+    sweep:     0.3,        // SWEEP RANGE: -1..+1 bipolar (+ = down, 0 = off)
+    lfoWave:   "square",   // LFO SHAPE: square | triangle | sawtooth
+    lfoRate:   6,          // Hz (0.2..25, log)
+    lfoDepth:  0,          // LFO RANGE in Hz added at the summing node (0..250)
+    snare:     "off",      // SNARE SWITCH: off | type1 | type2
+    snareSust: 180,        // snare envelope RC tau ms (30..800, log)
+    sense:     0.85,       // SENSITIVITY (trigger input pot)
+    level:     0.9,        // VOLUME (per-circuit output pot)
   };
 }
 const state = {
@@ -311,29 +320,47 @@ const state = {
 };
 
 /* ---------------------------------------------------------------
-   VOICE — one trigger. All curves are setTargetAtTime RC shapes.
+   VOICE — one trigger through one copy of the schematic.
    --------------------------------------------------------------- */
-function trigger(ch, vel = 1, when = null, cascadeFrom = null) {
+/* Full SWEEP RANGE pot ≈ this many Hz injected at the 8038's
+   current-summing node (both 100K resistors, comparable voltage
+   swings to the VCO FREQ pot, so the sweep current can exceed the
+   base tuning current — a low tom can start 800 Hz above itself). */
+const SWEEP_MAX_HZ = 800;
+
+/* The LFO in the schematic free-runs from power-on; retriggering it
+   per hit would be audibly wrong (every hit would catch the same
+   LFO phase). One persistent oscillator per channel, never stopped. */
+function ensureLfo(ch) {
+  if (!ch._lfoOsc) {
+    ch._lfoOsc = actx.createOscillator();
+    ch._lfoOsc.start();
+  }
+  ch._lfoOsc.type = ch.lfoWave;
+  ch._lfoOsc.frequency.value = ch.lfoRate;
+  return ch._lfoOsc;
+}
+
+function trigger(ch, vel = 1, when = null) {
   audioInit();
   if (actx.state === "suspended") actx.resume();
   const t = when ?? actx.currentTime;
 
-  /* SENSE LEVEL: per-channel velocity sensitivity (panel knob on DS-4) */
+  /* SENSITIVITY: trigger-input pot (1K + 5K trim on the piezo). */
   const senseVel = ch.sense + (1 - ch.sense) * vel;
   const peak = ch.level * senseVel;
   if (peak <= 0.001) return;
 
-  /* SWEEP DIRECTION: panel UP / OFF / DOWN */
-  const f1 = ch.tune;
-  let f0;
-  if (ch.sweepDir === "off")      f0 = f1;
-  else if (ch.sweepDir === "up")  f0 = f1 / Math.pow(2, ch.sweepOct);
-  else                            f0 = f1 * Math.pow(2, ch.sweepOct);    // down
-  const tauP = ch.sweepMs / 1000;
-  const tauA = ch.decay  / 1000;
-  const atkS = Math.max(0.0006, ch.attack / 1000);
+  /* ONE RC. The same 4u7/SUSTAIN discharge drives amp and sweep. */
+  const tau = ch.sustain / 1000;
 
-  /* ----- tone ----- */
+  /* SWEEP: bipolar pot adds Hz at the summing node. Envelope decays
+     to zero, so frequency lands on the tuning. Down = start high,
+     up = start low (clamped: a real 8038 just stalls near zero). */
+  const f1 = ch.tune;
+  const f0 = Math.max(0.5, f1 + ch.sweep * SWEEP_MAX_HZ);
+
+  /* ----- VCO ----- */
   const osc = actx.createOscillator();
   if (ch.wave === "sine") {
     const pw = getWarmSine();
@@ -343,8 +370,8 @@ function trigger(ch, vel = 1, when = null, cascadeFrom = null) {
     osc.type = ch.wave;
   }
 
-  /* per-hit drift ±4 cents + BEAT TUNE static detune */
-  osc.detune.value = (Math.random() - 0.5) * 8 + ch.beatTune;
+  /* per-hit drift ±4 cents (component tolerances, temperature) */
+  osc.detune.value = (Math.random() - 0.5) * 8;
 
   /* slow analog drift wobble */
   const driftLFO  = actx.createOscillator();
@@ -354,94 +381,54 @@ function trigger(ch, vel = 1, when = null, cascadeFrom = null) {
   driftAmp.gain.value = 2.0;
   driftLFO.connect(driftAmp).connect(osc.detune);
 
-  /* ----- LFO (panel section) ----- */
-  let lfo = null, lfoG = null;
-  if (ch.lfoOn && ch.lfoDepth > 0.1) {
-    lfo = actx.createOscillator();
-    /* Pollard / DS-4 "Pulse" LFO is a square -- the rhythmic stutter
-       you hear on classic late-70s synth drums comes from a square
-       LFO modulating VCO pitch fast. */
-    lfo.type = ch.lfoWave;          // "sine" | "triangle" | "square"
-    lfo.frequency.value = ch.lfoRate;
-    lfoG = actx.createGain();
-    lfoG.gain.value = ch.lfoDepth;  // depth is already in cents
-    lfo.connect(lfoG).connect(osc.detune);
+  /* ----- LFO → VCO FREQ summing node (linear Hz, free-running) ----- */
+  let lfoTap = null;
+  if (ch.lfoDepth > 0.5) {
+    lfoTap = actx.createGain();
+    lfoTap.gain.value = ch.lfoDepth;             // depth is Hz
+    ensureLfo(ch).connect(lfoTap);
+    lfoTap.connect(osc.frequency);               // sums with the sweep
   }
 
-  /* pitch RC sweep */
+  /* pitch: RC discharge of a Hz value — the 8038's linear FM node */
   osc.frequency.setValueAtTime(f0, t);
-  osc.frequency.setTargetAtTime(f1, t, tauP);
+  osc.frequency.setTargetAtTime(f1, t, tau);
 
-  /* amp envelope: linear ATTACK rise, then RC discharge */
+  /* amp: near-instant diode charge, then the same RC discharge */
   const vca = actx.createGain();
   vca.gain.setValueAtTime(0, t);
-  vca.gain.linearRampToValueAtTime(peak, t + atkS);
-  vca.gain.setTargetAtTime(0, t + atkS, tauA);
+  vca.gain.linearRampToValueAtTime(peak, t + 0.0008);
+  vca.gain.setTargetAtTime(0, t + 0.0008, tau);
 
-  /* OTA-style soft saturation */
+  /* CA3080 OTA soft saturation */
   const sat = actx.createWaveShaper();
   sat.curve = getVcaCurve();
   sat.oversample = "2x";
 
   osc.connect(vca).connect(sat).connect(master);
-  const stopAt = t + tauA * 8 + atkS + 0.15;
+  const stopAt = t + Math.min(12, tau * 8 + 0.2);
   osc.start(t);
   osc.stop(stopAt);
   driftLFO.start(t);
   driftLFO.stop(stopAt);
-  if (lfo) { lfo.start(t); lfo.stop(stopAt); }
+  /* free the shared LFO's tap once this voice dies, or it leaks */
+  osc.onended = () => { if (lfoTap) lfoTap.disconnect(); };
 
-  /* ----- noise layer (snare wires / hat sizzle) ----- */
-  if (ch.noise > 0.003) {
+  /* ----- SNARES: raw diode noise + own RC envelope, no band-pass.
+     TYPE1 = loud, long decay (4u7 path); TYPE2 = short, quieter
+     (220R path); OFF. Mixed straight into the output stage. ----- */
+  if (ch.snare !== "off") {
+    const type1 = ch.snare === "type1";
+    const tauN  = (ch.snareSust / 1000) * (type1 ? 1.0 : 0.32);
+    const gN    = peak * (type1 ? 0.85 : 0.40);
     const nz = actx.createBufferSource();
     nz.buffer = getNoise(); nz.loop = true;
-    const flt = actx.createBiquadFilter();
-    flt.type = "bandpass";
-    flt.frequency.setValueAtTime(Math.min(12000, f1 * 18), t);
-    flt.frequency.setTargetAtTime(Math.min(9000, f1 * 9), t, tauP * 2);
-    flt.Q.value = 0.9;
     const ng = actx.createGain();
     ng.gain.setValueAtTime(0, t);
-    ng.gain.linearRampToValueAtTime(peak * ch.noise * 0.8, t + 0.0006);
-    ng.gain.setTargetAtTime(0, t + 0.0006, tauA * 0.7);
-    nz.connect(flt).connect(ng).connect(master);
-    nz.start(t); nz.stop(stopAt);
-  }
-
-  /* ----- attack click (piezo / stick impact) -----
-     Pollard's signature attack 'thock' comes from the piezo trigger
-     pulse bleeding through the signal path. A short broadband
-     transient band-passed around 1.8 kHz gives that characteristic
-     wooden stick-on-drumhead colour. Resonant filter Q ≈ 4 adds the
-     mid-range ring that you hear on every Pollard Syndrum hit. */
-  if (ch.click > 0.003) {
-    const len = actx.sampleRate * 0.006 | 0;
-    const cb = actx.createBuffer(1, len, actx.sampleRate);
-    const cd = cb.getChannelData(0);
-    for (let i = 0; i < len; i++)
-      cd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (actx.sampleRate * 0.0010));
-    const ck = actx.createBufferSource(); ck.buffer = cb;
-    /* mid-band ringing filter for stick character (1.5-2.2 kHz) */
-    const ringHz = 1500 + Math.random() * 700;
-    const flt = actx.createBiquadFilter();
-    flt.type = "bandpass";
-    flt.frequency.value = ringHz;
-    flt.Q.value = 4.0;
-    const cg = actx.createGain();
-    cg.gain.value = peak * ch.click * 0.9;
-    ck.connect(flt).connect(cg).connect(master);
-    ck.start(t);
-  }
-
-  /* ----- MULTI VCO PULL (DS-4 cascade) -----
-     When PULL is engaged, triggering this channel also fires the
-     next one with slight pitch offset, like the panel cascade
-     trigger on the original instrument. cascadeFrom prevents
-     infinite loops. */
-  if (ch.multi && cascadeFrom !== ch._idx) {
-    const next = state.channels[(ch._idx + 1) % 4];
-    /* 4 ms stagger so you hear two separate transients */
-    trigger(next, vel * 0.85, t + 0.004, ch._idx);
+    ng.gain.linearRampToValueAtTime(gN, t + 0.0008);
+    ng.gain.setTargetAtTime(0, t + 0.0008, tauN);
+    nz.connect(ng).connect(master);
+    nz.start(t); nz.stop(t + tauN * 8 + 0.2);
   }
 }
 
@@ -586,11 +573,10 @@ function prow(label, get, set, fmtFn, map) {
   return row;
 }
 
-const mTune  = logMap(30, 500);
-const mDecay = logMap(30, 800);
-const mAtk   = logMap(0.5, 120);
-const mSwMs  = logMap(5, 200);
-const mLfo   = logMap(0.3, 30);
+const mTune   = logMap(30, 500);
+const mSust   = logMap(20, 1500);   // 4u7 × (1K..1M) spans ms..seconds
+const mSnSust = logMap(30, 800);
+const mLfo    = logMap(0.2, 25);
 
 /* generic segmented-button picker */
 function picker(values, labels, get, set, sideEffect) {
@@ -608,88 +594,62 @@ function picker(values, labels, get, set, sideEffect) {
   return seg;
 }
 
-function toggleRow(label, get, set, sideEffect) {
-  const row = el("div", "prow");
-  row.style.gridTemplateColumns = "78px 1fr";
-  row.appendChild(el("span", "lb", label));
-  const b = el("button", "", get() ? "ON" : "OFF");
-  b.style.cssText = "padding:10px 0; border-radius:8px; border:1px solid var(--line); font-weight:800; font-size:13px;"
-                  + (get() ? "background:var(--acc); color:#000; border-color:var(--acc);"
-                           : "background:var(--panel2); color:var(--dim);");
-  b.addEventListener("click", () => {
-    set(!get());
-    b.textContent = get() ? "ON" : "OFF";
-    b.style.cssText = "padding:10px 0; border-radius:8px; border:1px solid var(--line); font-weight:800; font-size:13px;"
-                    + (get() ? "background:var(--acc); color:#000; border-color:var(--acc);"
-                             : "background:var(--panel2); color:var(--dim);");
-    if (sideEffect) sideEffect();
-  });
-  row.appendChild(b);
-  return row;
-}
-
 function buildParams() {
   els.params.innerHTML = "";
   const ch = state.channels[state.activeCh];
   const ping = () => trigger(ch, 0.85);
 
-  /* ---------- TONE ---------- */
-  const tone = el("div", "sec");
-  tone.appendChild(el("h3", null, "TONE"));
-  tone.appendChild(picker(["sine","triangle","square"], ["SIN","TRI","SQR"],
-                          () => ch.wave, v => ch.wave = v, ping));
-  tone.appendChild(prow("Tune",   () => ch.tune,   v => ch.tune   = v, v => v.toFixed(0) + " Hz", mTune));
-  tone.appendChild(prow("Attack", () => ch.attack, v => ch.attack = v, v => v.toFixed(1) + " ms", mAtk));
-  tone.appendChild(prow("Decay",  () => ch.decay,  v => ch.decay  = v, v => v.toFixed(0) + " ms", mDecay));
-  els.params.appendChild(tone);
+  /* ---------- VCO ---------- */
+  const vco = el("div", "sec");
+  vco.appendChild(el("h3", null, "VCO — ICL8038"));
+  vco.appendChild(picker(["square","triangle","sine"], ["SQUARE","TRIANGLE","SINE"],
+                         () => ch.wave, v => ch.wave = v, ping));
+  vco.appendChild(prow("Freq", () => ch.tune, v => ch.tune = v, v => v.toFixed(0) + " Hz", mTune));
+  els.params.appendChild(vco);
 
-  /* ---------- PITCH SWEEP ---------- */
+  /* ---------- SWEEP + SUSTAIN (one envelope!) ---------- */
   const sw = el("div", "sec");
-  sw.appendChild(el("h3", null, "PITCH SWEEP"));
-  sw.appendChild(picker(["up","off","down"], ["UP","OFF","DOWN"],
-                        () => ch.sweepDir, v => ch.sweepDir = v, ping));
-  sw.appendChild(prow("Depth", () => ch.sweepOct, v => ch.sweepOct = v,
-                      v => v.toFixed(2) + " oct",
-                      { to01: v => v / 6, from01: p => p * 6 }));
-  sw.appendChild(prow("Speed", () => ch.sweepMs,  v => ch.sweepMs  = v, v => v.toFixed(0) + " ms", mSwMs));
+  sw.appendChild(el("h3", null, "SWEEP / SUSTAIN"));
+  sw.appendChild(prow("Sweep", () => ch.sweep, v => ch.sweep = v,
+                      v => Math.abs(v) < 0.02 ? "OFF"
+                         : (v > 0 ? "↓ " : "↑ ") + Math.round(Math.abs(v) * SWEEP_MAX_HZ) + " Hz",
+                      { to01: v => (v + 1) / 2, from01: p => p * 2 - 1 }));
+  sw.appendChild(prow("Sustain", () => ch.sustain, v => ch.sustain = v, v => v.toFixed(0) + " ms", mSust));
+  const swNote = el("div");
+  swNote.style.cssText = "font-size:11px; color:var(--dim); margin-top:4px; line-height:1.5;";
+  swNote.innerHTML = "回路上エンベロープは 1 本: SUSTAIN が音量とスイープ両方の RC。中央 = OFF / 右 = ↓ / 左 = ↑";
+  sw.appendChild(swNote);
   els.params.appendChild(sw);
 
-  /* ---------- LFO ----------
-     Pollard / DS-4 LFO modulates VCO pitch. SQR / "Pulse" LFO at a
-     few Hz gives the characteristic stutter on classic late-70s
-     synth drums. */
+  /* ---------- LFO (free-running, → VCO FREQ node) ---------- */
   const lfo = el("div", "sec");
-  lfo.appendChild(el("h3", null, "LFO (VCO MOD)"));
-  lfo.appendChild(toggleRow("Enable", () => ch.lfoOn, v => ch.lfoOn = v, ping));
-  lfo.appendChild(picker(["sine","triangle","square"], ["∿ SIN","△ TRI","⊓ PULSE"],
+  lfo.appendChild(el("h3", null, "LFO"));
+  lfo.appendChild(picker(["square","triangle","sawtooth"], ["SQUARE","TRIANGLE","SAW"],
                          () => ch.lfoWave, v => ch.lfoWave = v, ping));
-  lfo.appendChild(prow("Rate",  () => ch.lfoRate,  v => ch.lfoRate  = v, v => v.toFixed(1) + " Hz",  mLfo));
-  lfo.appendChild(prow("Depth", () => ch.lfoDepth, v => ch.lfoDepth = v,
-                       v => v.toFixed(0) + " ct",
-                       { to01: v => v / 200, from01: p => p * 200 }));
+  lfo.appendChild(prow("Rate",  () => ch.lfoRate, v => ch.lfoRate = v, v => v.toFixed(1) + " Hz", mLfo));
+  lfo.appendChild(prow("Range", () => ch.lfoDepth, v => ch.lfoDepth = v,
+                       v => v < 0.5 ? "OFF" : "±" + v.toFixed(0) + " Hz",
+                       { to01: v => v / 250, from01: p => p * 250 }));
   els.params.appendChild(lfo);
 
-  /* ---------- MIX ---------- */
-  const mix = el("div", "sec");
-  mix.appendChild(el("h3", null, "MIX"));
-  mix.appendChild(prow("Noise", () => ch.noise, v => ch.noise = v, v => Math.round(v*100) + "%"));
-  mix.appendChild(prow("Click", () => ch.click, v => ch.click = v, v => Math.round(v*100) + "%"));
-  mix.appendChild(prow("Level", () => ch.level, v => ch.level = v, v => Math.round(v*100) + "%"));
-  els.params.appendChild(mix);
+  /* ---------- SNARES ---------- */
+  const sn = el("div", "sec");
+  sn.appendChild(el("h3", null, "SNARES — noise burst"));
+  sn.appendChild(picker(["off","type1","type2"], ["OFF","TYPE 1","TYPE 2"],
+                        () => ch.snare, v => ch.snare = v, ping));
+  sn.appendChild(prow("Sustain", () => ch.snareSust, v => ch.snareSust = v, v => v.toFixed(0) + " ms", mSnSust));
+  const snNote = el("div");
+  snNote.style.cssText = "font-size:11px; color:var(--dim); margin-top:4px; line-height:1.5;";
+  snNote.innerHTML = "TYPE 1 = loud, long decay / TYPE 2 = short, quieter";
+  sn.appendChild(snNote);
+  els.params.appendChild(sn);
 
-  /* ---------- DS-4 EXTRAS ---------- */
-  const adv = el("div", "sec");
-  adv.appendChild(el("h3", null, "DS-4 EXTRAS"));
-  adv.appendChild(prow("Beat Tune", () => ch.beatTune, v => ch.beatTune = v,
-                       v => v.toFixed(0) + " ct",
-                       { to01: v => v / 50, from01: p => p * 50 }));
-  adv.appendChild(prow("Sense",     () => ch.sense,    v => ch.sense    = v, v => Math.round(v*100) + "%"));
-  adv.appendChild(toggleRow("Multi VCO", () => ch.multi, v => ch.multi = v, ping));
-  const note = el("div");
-  note.style.cssText = "font-size:11px; color:var(--dim); margin-top:4px; line-height:1.5;";
-  note.innerHTML = "Multi VCO = この ch を叩くと隣 ch も同時発火 (DS-4 PULL カスケード)";
-  adv.appendChild(note);
-  els.params.appendChild(adv);
+  /* ---------- TRIG / OUT ---------- */
+  const out = el("div", "sec");
+  out.appendChild(el("h3", null, "TRIG / OUT"));
+  out.appendChild(prow("Sensitivity", () => ch.sense, v => ch.sense = v, v => Math.round(v*100) + "%"));
+  out.appendChild(prow("Volume",      () => ch.level, v => ch.level = v, v => Math.round(v*100) + "%"));
+  els.params.appendChild(out);
 }
 
 /* ---------------------------------------------------------------
@@ -698,9 +658,10 @@ function buildParams() {
 /* helper to fill in default values for params the preset doesn't set */
 function chDefaults() {
   return {
-    attack:1.5, sweepDir:"down", beatTune:0,
-    lfoOn:false, lfoWave:"sine", lfoRate:6, lfoDepth:30,
-    multi:false, sense:0.85,
+    wave:"sine", tune:100, sustain:140, sweep:0.3,
+    lfoWave:"square", lfoRate:6, lfoDepth:0,
+    snare:"off", snareSust:180,
+    sense:0.85, level:0.9,
   };
 }
 function setCh(i, p) { Object.assign(state.channels[i], chDefaults(), p); }
@@ -708,11 +669,14 @@ function setCh(i, p) { Object.assign(state.channels[i], chDefaults(), p); }
 const PRESETS = {
   thousand: {
     name: "Thousand Knives ポコポコ",
+    /* Short SUSTAIN + moderate down-sweep. Because sweep and amp
+       share one RC, a short sustain makes the pitch drop land just
+       as the note dies — that is the "poko". */
     apply() {
-      setCh(0, { wave:"sine", tune:196, attack:0.6, decay:130, sweepOct:1.4, sweepMs:22, noise:0, click:0.55, level:0.88 });
-      setCh(1, { wave:"sine", tune:147, attack:0.6, decay:140, sweepOct:1.5, sweepMs:24, noise:0, click:0.55, level:0.90 });
-      setCh(2, { wave:"sine", tune:110, attack:0.7, decay:155, sweepOct:1.6, sweepMs:26, noise:0, click:0.50, level:0.92 });
-      setCh(3, { wave:"sine", tune: 73, attack:0.8, decay:180, sweepOct:1.8, sweepMs:30, noise:0, click:0.45, level:0.95 });
+      setCh(0, { tune:196, sustain:110, sweep:0.22, level:0.88 });
+      setCh(1, { tune:147, sustain:125, sweep:0.20, level:0.90 });
+      setCh(2, { tune:110, sustain:145, sweep:0.17, level:0.92 });
+      setCh(3, { tune: 73, sustain:185, sweep:0.14, level:0.95 });
       state.pattern = [
         [0,0,1,0, 0,0,0,0, 0,0,1,0, 0,1,0,0],
         [0,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0],
@@ -724,11 +688,13 @@ const PRESETS = {
   },
   syndrum: {
     name: "Syndrum Pew",
+    /* Long SUSTAIN + big down-sweep = the disco 'PEW!'. The whole
+       fall now takes as long as the note, per the circuit. */
     apply() {
-      setCh(0, { wave:"sine", tune:330, attack:0.5, decay:240, sweepOct:2.6, sweepMs:55, noise:0, click:0.4, level:0.85 });
-      setCh(1, { wave:"sine", tune:220, attack:0.5, decay:260, sweepOct:2.8, sweepMs:60, noise:0, click:0.4, level:0.88 });
-      setCh(2, { wave:"sine", tune:147, attack:0.5, decay:280, sweepOct:3.0, sweepMs:65, noise:0, click:0.4, level:0.90 });
-      setCh(3, { wave:"sine", tune: 98, attack:0.5, decay:300, sweepOct:3.2, sweepMs:70, noise:0, click:0.4, level:0.92 });
+      setCh(0, { tune:330, sustain:420, sweep:0.65, level:0.85 });
+      setCh(1, { tune:220, sustain:460, sweep:0.60, level:0.88 });
+      setCh(2, { tune:147, sustain:500, sweep:0.55, level:0.90 });
+      setCh(3, { tune: 98, sustain:550, sweep:0.50, level:0.92 });
       state.pattern = [
         [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
         [0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
@@ -740,11 +706,12 @@ const PRESETS = {
   },
   electro: {
     name: "Electro Kit",
+    /* SNARES switch showcase: TYPE2 hat, TYPE1 snare. */
     apply() {
-      setCh(0, { wave:"square",   tune:420, attack:0.5, decay: 60, sweepOct:0.4, sweepMs:10, noise:0.65, click:0.7, level:0.55 });
-      setCh(1, { wave:"triangle", tune:240, attack:0.5, decay:140, sweepOct:1.0, sweepMs:18, noise:0.45, click:0.6, level:0.75 });
-      setCh(2, { wave:"sine",     tune:130, attack:0.6, decay:170, sweepOct:1.4, sweepMs:24, noise:0,    click:0.4, level:0.85 });
-      setCh(3, { wave:"sine",     tune: 55, attack:0.8, decay:220, sweepOct:1.9, sweepMs:34, noise:0,    click:0.5, level:1.0  });
+      setCh(0, { wave:"square",   tune:420, sustain: 45, sweep:0,    snare:"type2", snareSust: 70, level:0.50 });
+      setCh(1, { wave:"triangle", tune:240, sustain:110, sweep:0.12, snare:"type1", snareSust:150, level:0.75 });
+      setCh(2, { tune:130, sustain:160, sweep:0.20, level:0.85 });
+      setCh(3, { tune: 55, sustain:210, sweep:0.15, level:1.0  });
       state.pattern = [
         [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,1],
         [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
@@ -754,20 +721,33 @@ const PRESETS = {
       state.bpm = 118;
     },
   },
-  pulseLfo: {
-    name: "Pulse LFO Stutter",
-    /* Showcase the square ("Pulse") LFO modulating VCO pitch -- this
-       gives the characteristic stuttering trill on classic late-70s
-       synth drums. Toggle Ch1's LFO off in the panel to A/B against
-       the un-modulated version. */
+  upBloop: {
+    name: "Up-Sweep Bloop",
+    /* Sweep pot turned the OTHER way: the VCO starts below the
+       tuning (clamped near stall) and rises onto it. */
     apply() {
-      setCh(0, { wave:"sine", tune:262, attack:0.5, decay:180, sweepOct:1.2, sweepMs:28, noise:0, click:0.4, level:0.85,
-                 lfoOn:true,  lfoWave:"square",   lfoRate:14, lfoDepth:120 }); // stutter trill
-      setCh(1, { wave:"sine", tune:165, attack:0.5, decay:200, sweepOct:1.3, sweepMs:30, noise:0, click:0.4, level:0.88,
-                 lfoOn:true,  lfoWave:"square",   lfoRate: 9, lfoDepth: 90 });
-      setCh(2, { wave:"sine", tune:131, attack:0.6, decay:220, sweepOct:1.5, sweepMs:32, noise:0, click:0.4, level:0.92,
-                 lfoOn:true,  lfoWave:"triangle", lfoRate: 5, lfoDepth: 60 }); // smooth vibrato
-      setCh(3, { wave:"sine", tune: 65, attack:0.8, decay:240, sweepOct:1.8, sweepMs:36, noise:0, click:0.5, level:1.0 });
+      setCh(0, { tune:392, sustain:250, sweep:-0.35, level:0.82 });
+      setCh(1, { tune:294, sustain:280, sweep:-0.30, level:0.85 });
+      setCh(2, { tune:220, sustain:300, sweep:-0.27, level:0.88 });
+      setCh(3, { tune:110, sustain:180, sweep: 0.18, level:0.95 });   // kick anchors down
+      state.pattern = [
+        [0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0],
+        [0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0],
+        [0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0],
+        [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+      ];
+      state.bpm = 108;
+    },
+  },
+  lfoStutter: {
+    name: "LFO Stutter",
+    /* Free-running square LFO into the VCO FREQ node — the classic
+       late-70s stutter trill. SAW LFO on ch3 gives repeating zaps. */
+    apply() {
+      setCh(0, { tune:262, sustain:260, sweep:0.10, lfoWave:"square",   lfoRate:13, lfoDepth:120, level:0.85 });
+      setCh(1, { tune:165, sustain:280, sweep:0.08, lfoWave:"square",   lfoRate: 8, lfoDepth: 80, level:0.88 });
+      setCh(2, { tune:131, sustain:300, sweep:0.08, lfoWave:"sawtooth", lfoRate: 5, lfoDepth: 70, level:0.92 });
+      setCh(3, { tune: 65, sustain:220, sweep:0.16, level:1.0 });
       state.pattern = [
         [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0],
         [0,0,1,0, 0,1,0,0, 0,0,1,0, 0,1,0,0],
@@ -775,29 +755,6 @@ const PRESETS = {
         [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
       ];
       state.bpm = 124;
-    },
-  },
-  beatTuneChord: {
-    name: "Beat Tune Chord",
-    /* MULTI VCO PULL with BEAT TUNE detune: hitting a single pad
-       chains to the next channel with a slight pitch offset, building
-       a chord-like cluster on each hit. */
-    apply() {
-      setCh(0, { wave:"sine", tune:262, attack:0.6, decay:260, sweepOct:0.6, sweepMs:25, noise:0, click:0.35, level:0.80,
-                 multi:true, beatTune:7 });
-      setCh(1, { wave:"sine", tune:330, attack:0.6, decay:260, sweepOct:0.6, sweepMs:25, noise:0, click:0.35, level:0.78,
-                 multi:true, beatTune:14 });
-      setCh(2, { wave:"sine", tune:392, attack:0.6, decay:260, sweepOct:0.6, sweepMs:25, noise:0, click:0.35, level:0.76,
-                 multi:true, beatTune:21 });
-      setCh(3, { wave:"sine", tune:494, attack:0.6, decay:260, sweepOct:0.6, sweepMs:25, noise:0, click:0.35, level:0.74,
-                 beatTune:28 });
-      state.pattern = [
-        [1,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
-        [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-      ];
-      state.bpm = 108;
     },
   },
   empty: {
