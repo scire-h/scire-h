@@ -6,8 +6,17 @@ a four-channel analog drum synthesiser in the Pollard Syndrum family.
 ```
 scire-h/
 ├── index.html        ← single-file HTML / Web Audio clone
-└── ds4-native/       ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
+├── ds4-native/       ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
+└── cyann-web/        ← Apple-Silicon rebuild of the cyan/n rhythm engine
 ```
+
+> **Also here:** [`cyann-web/`](cyann-web/) is a self-contained Web Audio
+> rebuild of the **cyan/n** ETR drum machine (Katsuhiro Chiba, Max/MSP,
+> 2003–2007). The original `cyann.app` is a PowerPC + 32-bit-Intel Max 4.6
+> standalone that **cannot run on Apple Silicon**; the rebuild reproduces its
+> voices and effects, decoded from the collective, so they run natively on M1
+> in the browser. See [`cyann-web/README.md`](cyann-web/README.md) and
+> [`cyann-web/EXTRACTION.md`](cyann-web/EXTRACTION.md).
 
 ## 1. HTML / Web Audio clone (`index.html`)
 
