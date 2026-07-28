@@ -1,6 +1,7 @@
 // Unit tests for LFOSchmitt.
 #include "../Source/LFOSchmitt.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>

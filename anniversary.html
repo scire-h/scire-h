@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>SCIRE — 11th Anniversary</title>
+
+    <!-- Cabin font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cabin:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            /* ===== 差し替えポイント ===== */
+            /* ロゴ画像URL（空のままならテキスト "SCIRE" が表示されます） */
+            /* 音楽URLは下部 <script> 内の CONFIG.audioURL を編集してください */
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000000;
+            height: 100%;
+            width: 100%;
+            font-family: 'Cabin', 'Courier New', sans-serif;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* ===== 中央のロゴ + アニバーサリー文字 ===== */
+        #center-stage {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            pointer-events: none;
+            width: min(80vw, 520px);
+
+            /* フェードイン初期状態 */
+            opacity: 0;
+            transition: opacity 2.4s ease;
+        }
+        #center-stage.visible {
+            opacity: 1;
+        }
+
+        #logo-img {
+            display: block;
+            width: min(60vw, 320px);
+            height: auto;
+            margin-bottom: 28px;
+            filter: drop-shadow(0 0 24px rgba(255,255,255,0.12));
+        }
+
+        /* ロゴ画像が無いときのテキストフォールバック */
+        #logo-text {
+            font-family: 'Cabin', sans-serif;
+            font-weight: 700;
+            color: #ffffff;
+            font-size: clamp(40px, 12vw, 92px);
+            letter-spacing: 0.18em;
+            margin: 0 0 18px 0;
+            text-shadow: 0 0 30px rgba(255,255,255,0.25);
+        }
+
+        #anniversary {
+            font-family: 'Cabin', sans-serif;
+            font-weight: 500;
+            color: #d8d8d8;
+            font-size: clamp(15px, 4.5vw, 24px);
+            letter-spacing: 0.42em;
+            text-transform: uppercase;
+            margin: 0;
+            padding-left: 0.42em; /* letter-spacing分の視覚的中央補正 */
+            text-shadow: 0 0 18px rgba(255,255,255,0.18);
+        }
+
+        /* ===== スタート用オーバーレイ（自動再生制限の回避） ===== */
+        #enter-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            cursor: pointer;
+            transition: opacity 1.2s ease;
+        }
+        #enter-overlay.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #enter-label {
+            font-family: 'Cabin', sans-serif;
+            font-weight: 500;
+            color: #888;
+            font-size: 13px;
+            letter-spacing: 0.55em;
+            text-transform: uppercase;
+            padding-left: 0.55em;
+            border: 1px solid #333;
+            padding: 16px 34px;
+            border-radius: 2px;
+            transition: all 0.4s ease;
+            animation: breathe 3s ease-in-out infinite;
+        }
+        #enter-label:hover {
+            color: #fff;
+            border-color: #fff;
+        }
+        @keyframes breathe {
+            0%, 100% { opacity: 0.5; }
+            50%      { opacity: 1; }
+        }
+    </style>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="center-stage">
+        <!-- ロゴ画像（src を設定すると表示、未設定ならテキストにフォールバック） -->
+        <img id="logo-img" alt="SCIRE" style="display:none;">
+        <div id="logo-text">SCIRE</div>
+        <p id="anniversary">11th Anniversary</p>
+    </div>
+
+    <div id="enter-overlay">
+        <div id="enter-label">Enter</div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import { BrightnessContrastShader } from 'three/addons/shaders/BrightnessContrastShader.js';
+
+        // ===================================================================
+        //  CONFIG — ここを編集してカスタマイズ
+        // ===================================================================
+        const CONFIG = {
+            // 【音楽】任意の音源URL（CORSを許可しているホストを推奨）。
+            // 空文字 "" にすると音声なしのビジュアルのみで動作します。
+            audioURL: "",
+
+            // 【ロゴ】任意のロゴ画像URL。空ならテキスト "SCIRE" を表示。
+            logoURL: "",
+
+            particleCount: 7000,
+            boundarySize: 800,
+
+            maxSpeed: 2,
+            minSpeed: 1,
+            jitterAmount: 1,
+            globalRotationSpeed: 0.0005,
+
+            baseLineOpacity: 0.1,
+            baseConnectDist: 500,
+            audioBoostDist: 550,
+            minConnectDistance: 100,
+            maxConnections: 300,
+            calcNeighbors: 80,
+
+            particleSize: 0.05,
+            particleOpacity: 0.01,
+            noiseIntensity: 0.1,
+
+            // ダークフィルター
+            filterBrightness: -0.3,
+            filterContrast: 0.1
+        };
+
+        let scene, camera, renderer, composer;
+        let pointCloud, linesMesh;
+        let particlesData = [];
+
+        let audioContext, analyser, dataArray, source;
+        let audioEl = null;
+        let isPlaying = false;
+        let currentVolume = 0;
+
+        // ---- ロゴのセットアップ ----
+        (function setupLogo() {
+            const img = document.getElementById('logo-img');
+            const txt = document.getElementById('logo-text');
+            if (CONFIG.logoURL) {
+                img.src = CONFIG.logoURL;
+                img.onload = () => {
+                    img.style.display = 'block';
+                    txt.style.display = 'none';
+                };
+                img.onerror = () => {
+                    img.style.display = 'none';
+                    txt.style.display = 'block';
+                };
+            }
+        })();
+
+        init();
+        animate();
+
+        // ---- ENTER オーバーレイ（クリックで音声再生開始） ----
+        const overlay = document.getElementById('enter-overlay');
+        const centerStage = document.getElementById('center-stage');
+        overlay.addEventListener('click', async () => {
+            overlay.classList.add('hide');
+            // ロゴをフェードイン
+            setTimeout(() => centerStage.classList.add('visible'), 200);
+            if (CONFIG.audioURL) {
+                try { await startAudio(); } catch (e) { console.error(e); }
+            }
+        }, { once: true });
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.0015);
+
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 4000);
+            camera.position.z = 500;
+
+            renderer = new THREE.WebGLRenderer({
+                antialias: false,
+                stencil: false,
+                depth: false
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            createBrownianNetwork();
+
+            const renderScene = new RenderPass(scene, camera);
+            const filmPass = new FilmPass(CONFIG.noiseIntensity, 0.0, 0, true);
+            const brightnessContrastPass = new ShaderPass(BrightnessContrastShader);
+            brightnessContrastPass.uniforms['brightness'].value = CONFIG.filterBrightness;
+            brightnessContrastPass.uniforms['contrast'].value = CONFIG.filterContrast;
+
+            composer = new EffectComposer(renderer);
+            composer.addPass(renderScene);
+            composer.addPass(filmPass);
+            composer.addPass(brightnessContrastPass);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createBrownianNetwork() {
+            const pGeometry = new THREE.BufferGeometry();
+            const pPositions = new Float32Array(CONFIG.particleCount * 3);
+            const range = CONFIG.boundarySize;
+
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                pPositions[i * 3]     = (Math.random() - 0.5) * range * 2;
+                pPositions[i * 3 + 1] = (Math.random() - 0.5) * range * 2;
+                pPositions[i * 3 + 2] = (Math.random() - 0.5) * range * 2;
+
+                particlesData.push({
+                    vx: (Math.random() - 0.5) * CONFIG.maxSpeed,
+                    vy: (Math.random() - 0.5) * CONFIG.maxSpeed,
+                    vz: (Math.random() - 0.5) * CONFIG.maxSpeed
+                });
+            }
+            pGeometry.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+
+            const pMaterial = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: CONFIG.particleSize,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                opacity: CONFIG.particleOpacity,
+                sizeAttenuation: false,
+                depthTest: false
+            });
+            pointCloud = new THREE.Points(pGeometry, pMaterial);
+            scene.add(pointCloud);
+
+            const lGeometry = new THREE.BufferGeometry();
+            const maxConnections = CONFIG.particleCount * CONFIG.maxConnections;
+            const lPositions = new Float32Array(maxConnections * 3);
+
+            lGeometry.setAttribute('position', new THREE.BufferAttribute(lPositions, 3).setUsage(THREE.DynamicDrawUsage));
+            lGeometry.setDrawRange(0, 0);
+
+            const lMaterial = new THREE.LineBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: CONFIG.baseLineOpacity,
+                blending: THREE.AdditiveBlending,
+                depthTest: false
+            });
+            linesMesh = new THREE.LineSegments(lGeometry, lMaterial);
+            scene.add(linesMesh);
+        }
+
+        // ---- 任意URLから音声を読み込み・再生 ----
+        async function startAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 512;
+            analyser.smoothingTimeConstant = 0.6;
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            // <audio> 要素でストリーミング再生（CORS対応・全体ロード不要）
+            audioEl = new Audio();
+            audioEl.crossOrigin = "anonymous";
+            audioEl.loop = true;
+            audioEl.src = CONFIG.audioURL;
+
+            source = audioContext.createMediaElementSource(audioEl);
+            source.connect(analyser);
+            analyser.connect(audioContext.destination);
+
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+            await audioEl.play();
+            isPlaying = true;
+        }
+
+        function getAudioData() {
+            if (!analyser) return 0;
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            const limit = Math.floor(dataArray.length * 0.5);
+            for (let i = 0; i < limit; i++) { sum += dataArray[i]; }
+            return sum / limit;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            let targetVolume = 0;
+            if (isPlaying) { targetVolume = getAudioData() / 255.0; }
+            currentVolume += (targetVolume - currentVolume) * 0.2;
+
+            updateNetwork(currentVolume);
+            composer.render();
+        }
+
+        function updateNetwork(volume) {
+            const pPositions = pointCloud.geometry.attributes.position.array;
+            const lPositions = linesMesh.geometry.attributes.position.array;
+            let lineVertexIndex = 0;
+            const pCount = CONFIG.particleCount;
+            const neighborLimit = CONFIG.calcNeighbors;
+
+            const boost = 1.0 + (volume * 1.5);
+            const bound = CONFIG.boundarySize;
+            const jitter = CONFIG.jitterAmount * boost;
+
+            for (let i = 0; i < pCount; i++) {
+                const idx = i * 3;
+                const data = particlesData[i];
+
+                data.vx += (Math.random() - 0.5) * jitter;
+                data.vy += (Math.random() - 0.5) * jitter;
+                data.vz += (Math.random() - 0.5) * jitter;
+
+                const currentSpeed = Math.sqrt(data.vx*data.vx + data.vy*data.vy + data.vz*data.vz);
+
+                if (currentSpeed > CONFIG.maxSpeed * boost) {
+                    const ratio = (CONFIG.maxSpeed * boost) / currentSpeed;
+                    data.vx *= ratio; data.vy *= ratio; data.vz *= ratio;
+                } else if (currentSpeed < CONFIG.minSpeed) {
+                    const ratio = CONFIG.minSpeed / (currentSpeed || 0.001);
+                    data.vx *= ratio; data.vy *= ratio; data.vz *= ratio;
+                }
+
+                let x = pPositions[idx] + data.vx;
+                let y = pPositions[idx + 1] + data.vy;
+                let z = pPositions[idx + 2] + data.vz;
+
+                if (x > bound) { x = bound; data.vx *= -1; }
+                else if (x < -bound) { x = -bound; data.vx *= -1; }
+                if (y > bound) { y = bound; data.vy *= -1; }
+                else if (y < -bound) { y = -bound; data.vy *= -1; }
+                if (z > bound) { z = bound; data.vz *= -1; }
+                else if (z < -bound) { z = -bound; data.vz *= -1; }
+
+                pPositions[idx] = x;
+                pPositions[idx + 1] = y;
+                pPositions[idx + 2] = z;
+            }
+            pointCloud.geometry.attributes.position.needsUpdate = true;
+
+            const rotSpeed = CONFIG.globalRotationSpeed * (1.0 + volume * 0.1);
+            pointCloud.rotation.y += rotSpeed;
+            linesMesh.rotation.y += rotSpeed;
+
+            const currentConnectDist = CONFIG.baseConnectDist + (volume * CONFIG.audioBoostDist);
+            const maxDistSq = currentConnectDist * currentConnectDist;
+            const minDistSq = CONFIG.minConnectDistance * CONFIG.minConnectDistance;
+
+            linesMesh.material.opacity = CONFIG.baseLineOpacity + (volume * 0.05);
+            const checkDist = currentConnectDist;
+
+            const connectionsCount = new Int32Array(pCount).fill(0);
+            const maxCon = CONFIG.maxConnections;
+
+            for (let i = 0; i < pCount; i++) {
+                if (connectionsCount[i] >= maxCon) continue;
+
+                for (let k = 1; k <= neighborLimit; k++) {
+                    let j = (i + k) % pCount;
+                    if (j === i) continue;
+                    if (connectionsCount[j] >= maxCon) continue;
+
+                    const ix = i * 3; const jx = j * 3;
+
+                    const dx = pPositions[ix] - pPositions[jx];
+                    if (Math.abs(dx) > checkDist) continue;
+                    const dy = pPositions[ix+1] - pPositions[jx+1];
+                    if (Math.abs(dy) > checkDist) continue;
+                    const dz = pPositions[ix+2] - pPositions[jx+2];
+                    if (Math.abs(dz) > checkDist) continue;
+
+                    const distSq = dx * dx + dy * dy + dz * dz;
+
+                    if (distSq < maxDistSq && distSq > minDistSq) {
+                        lPositions[lineVertexIndex++] = pPositions[ix];
+                        lPositions[lineVertexIndex++] = pPositions[ix+1];
+                        lPositions[lineVertexIndex++] = pPositions[ix+2];
+
+                        lPositions[lineVertexIndex++] = pPositions[jx];
+                        lPositions[lineVertexIndex++] = pPositions[jx+1];
+                        lPositions[lineVertexIndex++] = pPositions[jx+2];
+
+                        connectionsCount[i]++;
+                        connectionsCount[j]++;
+
+                        if (connectionsCount[i] >= maxCon) break;
+                    }
+                }
+            }
+
+            linesMesh.geometry.setDrawRange(0, lineVertexIndex);
+            linesMesh.geometry.attributes.position.needsUpdate = true;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
