@@ -427,6 +427,12 @@ function initAudio(){
   masterGain.gain.value = 0;
   comp.connect(masterGain).connect(ctx.destination);
 
+  anaNode = ctx.createAnalyser();
+  anaNode.fftSize = 1024;
+  anaNode.smoothingTimeConstant = 0;
+  masterGain.connect(anaNode);
+  anaBuf = new Float32Array(anaNode.fftSize);
+
   buildDrone();
   for(const sp of SPECIES) buildIndividuals(sp);
   applyGlobals();
@@ -1194,68 +1200,169 @@ function loadSaved(){
 }
 
 /* ---------------- the night canvas ----------------
-   Pure black. One hairline horizon, breathing with 地.
-   Every call is a single thin ring that opens and disappears —
-   sound made visible, nothing else. */
+   Pure black. Whenever the waveform moves, grains are thrown into a
+   perspective space; they arc, fall, and stay — forever. The floor
+   silts up under each singer. The screen slowly fills with the dust
+   of everything that has sounded. */
 const cv = $("#night");
 const cx2 = cv.getContext("2d");
-const HORIZON = 0.72;
-let W=0, H=0, DPR=1, ripples=[];
+let anaNode = null, anaBuf = null;
+let W=0, H=0, DPR=1;
+
+/* world: x lateral −1..1 · z depth 0(near)..1(far) · h height up */
+const YH = 0.58;                 // horizon
+const HX = 96, HZ = 24;          // heightmap resolution
+let heights = new Float32Array(HX*HZ);
+let grains = [];                 // airborne
+let emitters = [];               // active voices
+let sed = null, sedCtx = null;   // settled dust, baked once
+let lastTs = 0, settledCount = 0;
+
+function zEase(z){ return Math.pow(clamp(z,0,1), 0.85); }
+function zScale(z){ return lerp(1.0, 0.30, zEase(z)); }
+function groundY(z){ return H * lerp(0.90, YH + 0.02, zEase(z)); }
+function toScreen(x, z, h){
+  const s = zScale(z);
+  return [ W*0.5 + x*s*W*0.42, groundY(z) - h*s*H*0.5 ];
+}
+function cellOf(x, z){
+  const ix = clamp(Math.floor((x+1)/2*HX), 0, HX-1);
+  const iz = clamp(Math.floor(z*HZ), 0, HZ-1);
+  return iz*HX + ix;
+}
 
 function resizeCanvas(){
   DPR = Math.min(2, window.devicePixelRatio||1);
   W = cv.clientWidth; H = cv.clientHeight;
+  const old = sed;
   cv.width = W*DPR; cv.height = H*DPR;
   cx2.setTransform(DPR,0,0,DPR,0,0);
+  sed = document.createElement("canvas");
+  sed.width = W*DPR; sed.height = H*DPR;
+  sedCtx = sed.getContext("2d");
+  sedCtx.setTransform(DPR,0,0,DPR,0,0);
+  if(old && old.width) sedCtx.drawImage(old, 0, 0, W, H);
 }
 window.addEventListener("resize", resizeCanvas);
 
+/* a call registers an emitter; grains flow only while
+   the waveform actually moves */
 function addGlow(sp, ind, when, vel, dur){
   const delay = ctx ? Math.max(0, (when - ctx.currentTime)*1000) : 0;
   setTimeout(()=>{
     const d = indDist(sp, ind);
-    const scale = Math.min(W, H)/900;
-    ripples.push({
-      // sources sit on the ground plane — far voices near the horizon,
-      // with narrowed lateral spread (perspective)
-      x: 0.5 + ind.pan * lerp(0.44, 0.16, d),
-      y: HORIZON + 0.02 + (1-d)*0.15 + rand(-0.008, 0.008),
-      r0: 2,
-      r1: lerp(110, 26, d) * Math.max(0.5, scale),
-      lw: lerp(0.9, 0.5, d),
-      a0: lerp(0.34, 0.10, d) * Math.min(1, vel),
-      born: performance.now(),
-      life: 1800 + Math.min(dur, 2.5)*800,
+    emitters.push({
+      x: ind.pan*0.92, z: d,
+      s: Math.min(1, vel) * lerp(1.0, 0.4, d),
+      until: performance.now() + Math.max(300, Math.min(dur, 3.2)*1000) + 150,
     });
-    if(ripples.length > 80) ripples.shift();
+    if(emitters.length > 40) emitters.shift();
   }, delay);
 }
 
-function draw(){
+function spawnGrain(x, z, pow){
+  if(grains.length >= 900) return;
+  x = clamp(x + rand(-0.05, 0.05), -1, 1);
+  z = clamp(z + rand(-0.035, 0.035), 0, 1);
+  grains.push({
+    x, z,
+    h: heights[cellOf(x,z)] + 0.004,
+    vx: rand(-0.16, 0.16),
+    vz: rand(-0.09, 0.09),
+    vy: rand(0.45, 1.5) * (0.55 + pow*4),
+    c: 198 + Math.random()*36 | 0,
+  });
+}
+
+/* land: roll down the slope a little, raise the floor, bake the dot */
+function settleGrain(g){
+  let ci = cellOf(g.x, g.z);
+  for(let step=0; step<3; step++){
+    const ix = ci % HX, iz = (ci / HX) | 0;
+    let best = ci, bh = heights[ci];
+    for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx = ix+dx, nz = iz+dz;
+      if(nx<0||nx>=HX||nz<0||nz>=HZ) continue;
+      const ni = nz*HX + nx;
+      if(heights[ni] < bh - 0.014){ bh = heights[ni]; best = ni; }
+    }
+    if(best === ci) break;
+    ci = best;
+    g.x = ((ci % HX) + 0.5)/HX*2 - 1 + rand(-0.008, 0.008);
+    g.z = (((ci / HX) | 0) + 0.5)/HZ + rand(-0.015, 0.015);
+  }
+  const h = Math.min(0.5, heights[ci]);
+  const [sx, sy] = toScreen(g.x, g.z, h);
+  const s = zScale(g.z);
+  const size = 0.5 + s*0.9;
+  sedCtx.fillStyle = `rgba(${g.c},${g.c},${g.c+2},${lerp(0.42, 0.13, zEase(g.z))})`;
+  sedCtx.fillRect(sx, sy, size, size);
+  heights[ci] = Math.min(0.5, heights[ci] + 0.00015);
+  settledCount++;
+}
+
+function draw(ts){
   requestAnimationFrame(draw);
-  const now = performance.now();
+  const dt = clamp((ts - lastTs)/1000 || 0.016, 0.001, 0.05);
+  lastTs = ts;
+  const nowMs = performance.now();
+
+  // how much is the air actually moving right now
+  let amp = 0;
+  if(anaNode){
+    anaNode.getFloatTimeDomainData(anaBuf);
+    for(let i=0;i<anaBuf.length;i+=2){
+      const v = anaBuf[i]; if(v>amp) amp=v; else if(-v>amp) amp=-v;
+    }
+  }
+
+  // emit — grains only when the waveform does something
+  emitters = emitters.filter(e => e.until > nowMs);
+  if(amp > 0.004){
+    for(const e of emitters){
+      let k = Math.min(4, (amp * 130 * e.s) | 0);
+      while(k-- > 0) spawnGrain(e.x, e.z, amp*e.s);
+    }
+    // the drone sheds a thin universal dust
+    if(Math.random() < amp*6*S.drone)
+      spawnGrain(rand(-0.9, 0.9), rand(0.35, 1), amp*0.5);
+  }
+
+  // physics
+  for(let i=grains.length-1; i>=0; i--){
+    const g = grains[i];
+    g.vy -= 4.0*dt;
+    g.x = clamp(g.x + g.vx*dt, -1, 1);
+    g.z = clamp(g.z + g.vz*dt, 0, 1);
+    g.h += g.vy*dt;
+    if(g.vy < 0 && g.h <= heights[cellOf(g.x, g.z)]){
+      settleGrain(g);
+      grains[i] = grains[grains.length-1];
+      grains.pop();
+    }
+  }
+
+  // render
   cx2.fillStyle = "#000";
   cx2.fillRect(0,0,W,H);
 
   // horizon — breathes with 地
-  const hy = Math.round(H*HORIZON) + 0.5;
-  const ha = 0.035 + 0.055*S.drone*(0.5 + 0.5*Math.sin(now*0.00021));
+  const hy = Math.round(H*YH) + 0.5;
+  const ha = 0.035 + 0.055*S.drone*(0.5 + 0.5*Math.sin(nowMs*0.00021));
   cx2.strokeStyle = `rgba(214,215,216,${ha})`;
   cx2.lineWidth = 1;
   cx2.beginPath(); cx2.moveTo(0,hy); cx2.lineTo(W,hy); cx2.stroke();
 
-  // ripples — each voice, once
-  ripples = ripples.filter(r => now - r.born < r.life);
-  for(const rp of ripples){
-    const t = (now - rp.born)/rp.life;
-    const e = 1 - Math.pow(1-t, 3);              // opens fast, then slows
-    const a = rp.a0 * Math.pow(1-t, 1.7);        // and quietly disappears
-    if(a <= 0.004) continue;
-    cx2.strokeStyle = `rgba(221,222,223,${a})`;
-    cx2.lineWidth = rp.lw;
-    cx2.beginPath();
-    cx2.arc(rp.x*W, rp.y*H, rp.r0 + (rp.r1-rp.r0)*e, 0, Math.PI*2);
-    cx2.stroke();
+  // everything that has already fallen
+  if(sed) cx2.drawImage(sed, 0, 0, W, H);
+
+  // what is in the air right now
+  for(const g of grains){
+    const [sx, sy] = toScreen(g.x, g.z, g.h);
+    const s = zScale(g.z);
+    cx2.fillStyle = `rgba(${g.c},${g.c},${g.c+2},${lerp(0.6, 0.2, zEase(g.z))})`;
+    const size = 0.6 + s*1.0;
+    cx2.fillRect(sx, sy, size, size);
   }
 }
 
