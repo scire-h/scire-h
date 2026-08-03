@@ -1291,12 +1291,13 @@ function loadSaved(){
 
 /* ---------------- the night canvas ----------------
    Weightless space. A nameless ether drifts through it like smoke;
-   the space itself slowly inflates. Nothing sticks, nothing hardens:
-   while the sound moves, the dust aligns — streams, veils, brief
-   threads between near neighbours, constellations that assemble and
-   dissolve. When the sound rests, the order decays back into drift.
-   Every grain is born of the waveform and is the same size at any
-   distance — depth is told only by fog and parallax. */
+   the space itself slowly inflates. While the sound moves, every
+   grain tries to cast a thread toward another grain a little way
+   off — the thread is drawn slowly, takes hold, and tenses like
+   silk — so a complex web knots itself across space, in time with
+   the sound. Threads age, over-stretch, snap; in silence the web
+   stops growing and quietly comes apart. Every grain is the same
+   size at any distance — depth is fog and parallax alone. */
 const cv = $("#night");
 const cx2 = cv.getContext("2d");
 let anaNode = null, anaBuf = null;
@@ -1305,9 +1306,9 @@ let W=0, H=0, DPR=1;
 /* world: centered at the origin, roughly a sphere of radius ~2 */
 const CAM = 2.6;                  // camera distance
 let free = [];                    // the dust
+let webs = [];                    // silk threads between grains
 let wisps = [];                   // the ether
 let loci = [];                    // where voices sounded recently
-let links = [];                   // this frame's threads
 let burst = 0, ampEnv = 0, lastTs = 0, rotY = 0, frameN = 0;
 let blobSprite = null;
 
@@ -1386,7 +1387,34 @@ function spawnFree(){
     x, y, z,
     vx: gauss()*0.05, vy: gauss()*0.05, vz: gauss()*0.05,
     c: 192 + Math.random()*44 | 0,
+    links: 0, dead: false,
   });
+}
+
+/* one grain looks for a partner a little way off, and starts a thread */
+function tryStrand(nowMs){
+  if(webs.length >= 1500 || free.length < 8) return;
+  const a = free[(Math.random()*free.length)|0];
+  if(!a || a.links >= 5) return;
+  for(let tries=0; tries<7; tries++){
+    const b = free[(Math.random()*free.length)|0];
+    if(!b || b === a || b.links >= 5) continue;
+    const dx = b.x-a.x, dy = b.y-a.y, dz = b.z-a.z;
+    const d2 = dx*dx+dy*dy+dz*dz;
+    if(d2 > 0.0036 && d2 < 0.09){          // 0.06 .. 0.30 — a little far
+      const grow = rand(400, 1400);
+      webs.push({
+        a, b, born: nowMs, grow,
+        until: nowMs + grow + rand(6000, 16000),
+        rest: Math.sqrt(d2)*0.75,
+      });
+      a.links++; b.links++;
+      return;
+    }
+  }
+}
+function releaseStrand(w){
+  w.a.links--; w.b.links--;
 }
 
 function draw(ts){
@@ -1416,58 +1444,53 @@ function draw(ts){
   if(amp > 0.0035){
     let k = Math.min(22, Math.round((amp - 0.002) * 320 * (0.45 + burst)));
     while(k-- > 0) spawnFree();
+    // and every grain wants to cast silk while the air moves
+    let n = Math.min(30, Math.round(amp * 520 * (0.5 + burst)));
+    while(n-- > 0) tryStrand(nowMs);
   }
 
-  /* ---- the sound organizes the dust ----
-     While the waveform moves, neighbouring grains align their drift
-     (a murmuration in miniature); very close pairs thread together
-     for a moment. No sticking — release the sound and it all decays
-     back into loose drift. */
-  frameN++;
-  links.length = 0;
-  const kAlign  = (0.3 + ampEnv*5.0);               // order comes from sound
-  const kCohere = 0.10 + ampEnv*0.9;                // gentle gathering
-  const kApart  = 1.6;                              // but never a lump
-  const cell = 0.11;
-  const gox = Math.random()*cell, goy = Math.random()*cell, goz = Math.random()*cell;
-  const map = new Map();
-  for(let i=0;i<free.length;i++){
-    const g = free[i];
-    const key = (((g.x+gox)/cell)|0)*73856093
-              ^ (((g.y+goy)/cell)|0)*19349663
-              ^ (((g.z+goz)/cell)|0)*83492791;
-    let arr = map.get(key);
-    if(!arr){ arr = []; map.set(key, arr); }
-    if(arr.length < 14) arr.push(i);
+  // ---- threads: finish growing, tense like silk, age, snap ----
+  for(let i=webs.length-1; i>=0; i--){
+    const w = webs[i];
+    if(w.a.dead || w.b.dead || nowMs > w.until){
+      releaseStrand(w);
+      webs[i] = webs[webs.length-1]; webs.pop(); continue;
+    }
+    const dx = w.b.x-w.a.x, dy = w.b.y-w.a.y, dz = w.b.z-w.a.z;
+    const d = Math.hypot(dx, dy, dz);
+    if(d > 0.55){                                   // over-stretched: snaps
+      releaseStrand(w);
+      webs[i] = webs[webs.length-1]; webs.pop(); continue;
+    }
+    if(nowMs - w.born >= w.grow && d > w.rest){
+      // silk only pulls, never pushes
+      const f = 0.55*(d - w.rest)/Math.max(d, 1e-6)*dt;
+      w.a.vx += dx*f; w.a.vy += dy*f; w.a.vz += dz*f;
+      w.b.vx -= dx*f; w.b.vy -= dy*f; w.b.vz -= dz*f;
+    }
   }
-  for(const arr of map.values()){
-    const n = arr.length;
-    if(n < 2) continue;
-    // local mean drift and centre
-    let mvx=0, mvy=0, mvz=0, mx=0, my=0, mz=0;
-    for(const i of arr){
+
+  // ---- short-range separation: a web, never a lump ----
+  frameN++;
+  {
+    const cell = 0.05, map = new Map();
+    for(let i=0;i<free.length;i++){
       const g = free[i];
-      mvx+=g.vx; mvy+=g.vy; mvz+=g.vz; mx+=g.x; my+=g.y; mz+=g.z;
+      const key = ((g.x/cell)|0)*73856093 ^ ((g.y/cell)|0)*19349663 ^ ((g.z/cell)|0)*83492791;
+      let arr = map.get(key);
+      if(!arr){ arr = []; map.set(key, arr); }
+      if(arr.length < 8) arr.push(g);
     }
-    mvx/=n; mvy/=n; mvz/=n; mx/=n; my/=n; mz/=n;
-    for(const i of arr){
-      const g = free[i];
-      g.vx += (mvx-g.vx)*kAlign*dt + (mx-g.x)*kCohere*dt;
-      g.vy += (mvy-g.vy)*kAlign*dt + (my-g.y)*kCohere*dt;
-      g.vz += (mvz-g.vz)*kAlign*dt + (mz-g.z)*kCohere*dt;
-    }
-    // short-range: keep apart, and thread the truly near
-    for(let a=0;a<n;a++) for(let b=a+1;b<n;b++){
-      const g = free[arr[a]], h = free[arr[b]];
-      const dx = g.x-h.x, dy = g.y-h.y, dz = g.z-h.z;
-      const d2 = dx*dx+dy*dy+dz*dz;
-      if(d2 < 0.0025 && links.length < 480){
-        links.push([arr[a], arr[b]]);
-      }
-      if(d2 < 0.0009 && d2 > 1e-8){
-        const f = kApart*dt/Math.sqrt(d2);
-        g.vx += dx*f; g.vy += dy*f; g.vz += dz*f;
-        h.vx -= dx*f; h.vy -= dy*f; h.vz -= dz*f;
+    for(const arr of map.values()){
+      for(let a=0;a<arr.length;a++) for(let b=a+1;b<arr.length;b++){
+        const g = arr[a], h = arr[b];
+        const dx = g.x-h.x, dy = g.y-h.y, dz = g.z-h.z;
+        const d2 = dx*dx+dy*dy+dz*dz;
+        if(d2 < 0.0009 && d2 > 1e-8){
+          const f = 1.6*dt/Math.sqrt(d2);
+          g.vx += dx*f; g.vy += dy*f; g.vz += dz*f;
+          h.vx -= dx*f; h.vy -= dy*f; h.vz -= dz*f;
+        }
       }
     }
   }
@@ -1480,13 +1503,13 @@ function draw(ts){
       g.vy += (flowY(g.x,g.y,g.z,t)*stir - g.vy)*1.0*dt;
       g.vz += (flowZ(g.x,g.y,g.z,t)*stir - g.vz)*1.0*dt;
     }
-    // speed stays contemplative
     const sp2 = g.vx*g.vx + g.vy*g.vy + g.vz*g.vz;
     if(sp2 > 0.36){ const s = 0.6/Math.sqrt(sp2); g.vx*=s; g.vy*=s; g.vz*=s; }
     g.x += g.vx*dt + g.x*HBL*dt;
     g.y += g.vy*dt + g.y*HBL*dt;
     g.z += g.vz*dt + g.z*HBL*dt;
     if(g.x*g.x + g.y*g.y + g.z*g.z > 5.3){          // dispersed, gone
+      g.dead = true;
       free[i] = free[free.length-1]; free.pop();
     }
   }
@@ -1514,19 +1537,25 @@ function draw(ts){
   cx2.globalAlpha = 1;
   cx2.globalCompositeOperation = "source-over";
 
-  // threads — constellations that exist for one breath
+  // the web — every thread drawn from its caster toward its anchor
   cx2.lineWidth = 0.5;
-  for(const [i, j] of links){
-    const g = free[i], h = free[j];
-    if(!g || !h) continue;
-    const [x1, y1, k1, dz1] = project(g.x, g.y, g.z);
-    const [x2, y2, k2, dz2] = project(h.x, h.y, h.z);
-    const a = clamp(0.34*Math.pow(1.5/((dz1+dz2)/2), 1.6), 0.02, 0.34)
-              * (0.5 + ampEnv*1.6);
-    cx2.strokeStyle = `rgba(215,216,218,${a})`;
+  for(const w of webs){
+    const p = Math.min(1, (nowMs - w.born)/w.grow);
+    const e = 1 - Math.pow(1-p, 3);                 // cast quickly, land softly
+    const [x1, y1, k1, dz1] = project(w.a.x, w.a.y, w.a.z);
+    const [x2, y2, k2, dz2] = project(w.b.x, w.b.y, w.b.z);
+    const tx = x1 + (x2-x1)*e, ty = y1 + (y2-y1)*e;
+    const fade = clamp((w.until - nowMs)/900, 0, 1);
+    const a = clamp(0.36*Math.pow(1.5/((dz1+dz2)/2), 1.6), 0.02, 0.36)
+              * (0.45 + ampEnv*1.5) * fade * (0.45 + 0.55*p);
+    cx2.strokeStyle = `rgba(216,217,219,${a})`;
     cx2.beginPath();
-    cx2.moveTo(x1, y1); cx2.lineTo(x2, y2);
+    cx2.moveTo(x1, y1); cx2.lineTo(tx, ty);
     cx2.stroke();
+    if(p < 1){                                      // the reaching tip
+      cx2.fillStyle = `rgba(238,239,240,${Math.min(0.8, a*2.6)})`;
+      cx2.fillRect(tx, ty, 1, 1);
+    }
   }
 
   // the dust — the same size at any depth
