@@ -4,8 +4,12 @@ on:
   push:
     branches: ["**"]
     tags:     ["v*"]
+    paths:
+      - 'ds4-native/**'
   pull_request:
     branches: ["**"]
+    paths:
+      - 'ds4-native/**'
   workflow_dispatch: {}
 
 jobs:
