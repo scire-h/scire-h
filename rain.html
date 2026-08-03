@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#000000" />
+<title>雨の水面 — Rain on Water</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", sans-serif;
+    color: #cfcfcf;
+  }
+  #stage { position: fixed; inset: 0; display: block; background: #000; }
+
+  #gate {
+    position: fixed; inset: 0; z-index: 30; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; background: rgba(0,0,0,.92); cursor: pointer;
+    transition: opacity .6s ease;
+  }
+  #gate h1 { font-weight: 300; font-size: 22px; letter-spacing: .35em; margin: 0; color: #eee; }
+  #gate p  { font-size: 12px; letter-spacing: .2em; color: #777; margin: 0; }
+  #gate.hide { opacity: 0; pointer-events: none; }
+
+  #panel {
+    position: fixed; z-index: 20; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    padding: 12px 16px; border-radius: 14px;
+    background: rgba(14,14,16,.6); backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.07);
+    transition: opacity .8s ease; max-width: calc(100vw - 24px);
+  }
+  #panel.dim { opacity: 0; pointer-events: none; }
+  .ctl { display: flex; flex-direction: column; gap: 4px; }
+  .ctl label { font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: #8a8a8a; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 104px; height: 3px;
+    background: #3a3a3a; border-radius: 2px; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px;
+    border-radius: 50%; background: #e8e8e8; cursor: pointer; }
+  input[type=range]::-moz-range-thumb { width: 13px; height: 13px; border: none; border-radius: 50%;
+    background: #e8e8e8; cursor: pointer; }
+  select, button.tg {
+    background: #1b1b1e; color: #ddd; border: 1px solid rgba(255,255,255,.12);
+    border-radius: 8px; padding: 6px 9px; font-size: 12px; cursor: pointer;
+  }
+  button.tg.off { color: #777; }
+
+  /* pseudo-fullscreen fallback for browsers without the element Fullscreen API
+     (notably iPhone Safari): fill the dynamic viewport and sit above page chrome */
+  body.pseudo-fs #stage { width: 100vw; height: 100dvh; }
+  #toast {
+    position: fixed; z-index: 40; left: 50%; bottom: 84px; transform: translateX(-50%) translateY(8px);
+    padding: 8px 14px; border-radius: 10px; font-size: 12px; letter-spacing: .05em;
+    background: rgba(20,20,22,.86); color: #ddd; border: 1px solid rgba(255,255,255,.12);
+    opacity: 0; pointer-events: none; transition: opacity .35s ease, transform .35s ease;
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div id="panel" class="dim">
+  <div class="ctl">
+    <label>雨量 rate</label>
+    <input id="rate" type="range" min="1" max="60" step="1" value="10" />
+  </div>
+  <div class="ctl">
+    <label>揺らぎ jitter</label>
+    <input id="jit" type="range" min="0" max="100" step="1" value="40" />
+  </div>
+  <div class="ctl">
+    <label>減衰 decay</label>
+    <input id="dec" type="range" min="0" max="100" step="1" value="12" />
+  </div>
+  <div class="ctl">
+    <label>視点 tilt</label>
+    <input id="tilt" type="range" min="0" max="45" step="1" value="42" />
+  </div>
+  <div class="ctl">
+    <label>音量 vol</label>
+    <input id="vol" type="range" min="0" max="100" step="1" value="40" />
+  </div>
+  <div class="ctl">
+    <label>波形 osc</label>
+    <select id="osc">
+      <option value="sine">sine</option>
+      <option value="triangle">triangle</option>
+      <option value="sawtooth">saw</option>
+      <option value="square">square</option>
+      <option value="noise" selected>noise</option>
+    </select>
+  </div>
+  <button id="sound" class="tg">SOUND ON</button>
+  <button id="fs" class="tg">⛶ FULL</button>
+</div>
+
+<div id="gate">
+  <h1>雨 の 水 面</h1>
+  <p>TAP TO BEGIN</p>
+</div>
+
+<script>
+"use strict";
+/* ================================================================
+   雨の水面 — rain on a glossy black water surface.
+
+   One event drives everything: a raindrop impact.
+
+   VISUAL — the water is a height field h(x,y,t). Each drop launches an
+   expanding wave packet:
+
+       h_i = A·e^(-age/τ) · (r+r0)^(-1/2) · exp(-(s/σ)²) · sin(k·s)
+       s   = r - c·age          (distance from the moving front)
+
+   with mild dispersion (the packet stretches and its wavelength grows
+   as it travels). All packets are SUMMED, so ripples genuinely
+   interfere. A WebGL2 fragment shader evaluates h and its analytic
+   gradient per pixel, builds a surface normal, and lights it with a
+   two-lobe specular (a tight glint + a broad wet sheen) over black —
+   the surface itself glistens. A faint multi-directional swell keeps
+   calm water alive. A pinhole camera tilts the view from straight
+   down (真上) to ~45°, foreshortening rings toward a horizon.
+
+   AUDIO — impact times form a Poisson process (exponential inter-
+   arrival), drop sizes follow a Marshall-Palmer-like exponential law.
+   Each impact fires one grain: a broadband tick + a tonal "plip"
+   (selectable oscillator) sweeping up like the Minnaert resonance of
+   the entrained bubble. Pan follows the on-screen position, and when
+   the camera is tilted, far drops sound quieter and duller (distance
+   low-pass). Jitter humanises time, pitch and level; the decay knob
+   scales grain length. A soft tanh bus stops dense rain clipping.
+   ================================================================ */
+
+/* ---------------------------------------------------------------- */
+/* WebGL2 setup                                                     */
+/* ---------------------------------------------------------------- */
+const MAXN = 40;                       // max simultaneous ripples in the shader
+const cv = document.getElementById('stage');
+const gl = cv.getContext('webgl2', { antialias: false, alpha: false });
+
+let W = 0, H = 0;
+let mobile = matchMedia('(max-width: 720px)').matches;
+
+const VERT = `#version 300 es
+in vec2 aPos;
+void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+const FRAG = `#version 300 es
+precision highp float;
+out vec4 outColor;
+uniform vec2  uRes;             // canvas size (device px)
+uniform vec2  uWorld;           // water plane reference size (CSS px)
+uniform float uTilt;            // camera tilt from straight-down (radians)
+uniform float uTime;            // seconds since start
+uniform int   uCount;
+uniform vec4  uDrop[${MAXN}];   // x, y (world px), age (s), amplitude
+
+#define SPEED   150.0           // wavefront speed (px/s)
+#define LAMBDA  34.0            // base crest wavelength (px)
+#define SIGMA   78.0            // base packet width (px)
+#define DISP    0.18            // dispersion: packet/wavelength growth per second
+#define TAUD    3.6             // amplitude decay time (s) — gentle, long tail
+#define ATTEN   0.0014          // distance attenuation 1/px (energy lost as it travels)
+#define LEAD    0.62            // leading-edge tightness (crisp front)
+#define TRAIL   1.7             // trailing-edge length (lingering wake)
+#define R0      40.0            // softens 1/sqrt(r) at the impact point
+#define GAIN    7.0             // surface slope -> normal exaggeration
+
+void main(){
+  /* ---- pinhole camera: cast this pixel's ray onto the water plane ---- */
+  vec2  uv  = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;
+  float th  = tan(0.35);                                   // ~40° fov
+  vec3  T   = vec3(uWorld * 0.5, 0.0);                     // look-at: centre
+  float dst = (uWorld.y * 0.5) / th;                       // frames the view at tilt 0
+  vec3  C   = T + dst * vec3(0.0, -sin(uTilt), cos(uTilt));
+  vec3  fwd = normalize(T - C);
+  vec3  rgt = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+  vec3  upv = cross(rgt, fwd);
+  vec3  dir = normalize(fwd + uv.x * th * rgt + uv.y * th * upv);
+  if (dir.z > -1e-3){ outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  float sd = -C.z / dir.z;                                 // ray ∩ plane z=0
+  vec2  p  = (C + sd * dir).xy;
+
+  /* ---- sum every ripple's height and analytic gradient ---- */
+  float h = 0.0;
+  vec2  g = vec2(0.0);
+
+  for (int i = 0; i < uCount; i++){
+    vec4 d = uDrop[i];
+    vec2 rel = p - d.xy;
+    float r   = length(rel) + 1e-3;
+    float age = d.z;
+
+    float grow = 1.0 + DISP * age;          // dispersion stretches the packet
+    float sig  = SIGMA * grow;
+    float k    = 6.2831853 / (LAMBDA * grow);
+
+    float s   = r - SPEED * age;
+    // asymmetric packet: crisp leading edge, long lingering trailing wake,
+    // so the ripple trails off behind the front the way real water does
+    float sigSel = (s > 0.0 ? LEAD : TRAIL) * sig;
+    float sl  = s / sigSel;
+    float env = exp(-sl * sl);
+    if (env < 0.004) continue;
+    float sp  = inversesqrt(r + R0);
+    float att = exp(-r * ATTEN);            // energy lost with distance travelled
+    float A   = d.w * exp(-age / TAUD);
+
+    float ph = k * s;
+    float c  = cos(ph), sn = sin(ph);
+    float w  = A * sp * env * att;
+
+    h += w * sn;
+
+    // d/dr of [ w·sin(k·s) ] via the log-derivative of w  (ds/dr = 1)
+    float dlog = -0.5 / (r + R0) - 2.0 * sl / sigSel - ATTEN;
+    float dhdr = w * (dlog * sn + k * c);
+    g += dhdr * (rel / r);
+  }
+
+  /* ---- faint swell so calm water still reads as living water ----
+     (lighting only: three slow, long, crossing wavetrains)            */
+  vec2 gsw = vec2(0.0);
+  {
+    vec2 k1 = vec2( 0.013,  0.009);
+    vec2 k2 = vec2(-0.011,  0.014);
+    vec2 k3 = vec2( 0.006, -0.016);
+    gsw += 0.40 * cos(dot(k1, p) + uTime * 0.50) * k1;
+    gsw += 0.32 * cos(dot(k2, p) + uTime * 0.37) * k2;
+    gsw += 0.26 * cos(dot(k3, p) + uTime * 0.61) * k3;
+  }
+
+  /* ---- two-lobe glossy lighting over black ---- */
+  vec3 N = normalize(vec3(-(g.x + gsw.x) * GAIN, -(g.y + gsw.y) * GAIN, 1.0));
+  vec3 L = normalize(vec3(0.50, 0.60, 0.62));
+  vec3 Hh = normalize(L + vec3(0.0, 0.0, 1.0));
+  float dNH = max(dot(N, Hh), 0.0);
+
+  float glint = pow(dNH, 60.0);                            // tight sparkling glints
+  float sheen = max(pow(dNH, 7.0) - pow(Hh.z, 7.0), 0.0);  // broad wet sheen (flat water -> 0)
+  float relief = dot(N, L) - L.z;                          // signed 3-D flank shading
+
+  float lum = 0.016 + 2.6 * glint + 0.5 * sheen + 0.42 * relief
+            + 0.05 * clamp(h * 1.2, -1.0, 1.0);
+  lum = max(lum, 0.0);
+
+  /* recede to a horizon when tilted; settle the frame into black */
+  lum *= clamp(1.0 - sd / (dst * 9.0), 0.0, 1.0);
+  lum *= 1.0 - 0.18 * dot(uv, uv);
+
+  /* filmic-ish soft knee keeps glints bright without hard clipping */
+  float tone = 1.0 - exp(-lum * 1.7);
+  outColor = vec4(vec3(tone), 1.0);
+}`;
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const uRes   = gl.getUniformLocation(prog, 'uRes');
+const uWorld = gl.getUniformLocation(prog, 'uWorld');
+const uTilt  = gl.getUniformLocation(prog, 'uTilt');
+const uTime  = gl.getUniformLocation(prog, 'uTime');
+const uCount = gl.getUniformLocation(prog, 'uCount');
+const uDrop  = gl.getUniformLocation(prog, 'uDrop');
+const dropBuf = new Float32Array(MAXN * 4);
+
+function resize(){
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  mobile = W < 720;
+  const rs = Math.min(dpr, mobile ? 1.0 : 1.25);   // cap fill-rate cost
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  cv.width = Math.round(W * rs); cv.height = Math.round(H * rs);
+  gl.viewport(0, 0, cv.width, cv.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ---------------------------------------------------------------- */
+/* Controls                                                         */
+/* ---------------------------------------------------------------- */
+const elRate = document.getElementById('rate');
+const elJit  = document.getElementById('jit');
+const elDec  = document.getElementById('dec');
+const elTilt = document.getElementById('tilt');
+const elVol  = document.getElementById('vol');
+const elOsc  = document.getElementById('osc');
+const elSnd  = document.getElementById('sound');
+const panel  = document.getElementById('panel');
+
+const params = {
+  get rate()   { return +elRate.value; },
+  get jitter() { return +elJit.value / 100; },
+  get decay()  { return +elDec.value / 100; },
+  get tilt()   { return +elTilt.value * Math.PI / 180; },
+  get vol()    { return +elVol.value / 100; },
+  get osc()    { return elOsc.value; },
+  soundOn: true,
+};
+
+elSnd.addEventListener('click', () => {
+  params.soundOn = !params.soundOn;
+  elSnd.textContent = params.soundOn ? 'SOUND ON' : 'SOUND OFF';
+  elSnd.classList.toggle('off', !params.soundOn);
+  if (master) master.gain.setTargetAtTime(params.soundOn ? params.vol : 0, ac.currentTime, 0.05);
+});
+elVol.addEventListener('input', () => {
+  if (master && params.soundOn) master.gain.setTargetAtTime(params.vol, ac.currentTime, 0.03);
+});
+
+/* fullscreen toggle.
+   - Desktop Safari / Chrome / Firefox / iPad: native Fullscreen API
+     (webkit-prefixed fallbacks cover older Safari).
+   - iPhone Safari has NO element Fullscreen API, so fall back to a CSS
+     "pseudo-fullscreen" (immersive full-viewport via dvh) and, the first
+     time, hint that Add-to-Home-Screen gives a true fullscreen app. */
+const elFs = document.getElementById('fs');
+const docEl = document.documentElement;
+const canNativeFs = !!(docEl.requestFullscreen || docEl.webkitRequestFullscreen);
+const isStandalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let hintedFs = false;
+
+function nativeFsEl(){ return document.fullscreenElement || document.webkitFullscreenElement; }
+function pseudoOn(){ return document.body.classList.contains('pseudo-fs'); }
+function isFs(){ return !!nativeFsEl() || pseudoOn(); }
+
+function enterNative(){
+  const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+  try { const p = req.call(docEl); if (p && p.catch) p.catch(enterPseudo); }
+  catch (e) { enterPseudo(); }
+}
+function enterPseudo(){
+  document.body.classList.add('pseudo-fs');
+  window.scrollTo(0, 1);                 // nudge iOS to retract the toolbar
+  if (!isStandalone && !hintedFs){ hintedFs = true; showToast('全画面はホーム画面に追加でも可'); }
+  syncFs();
+}
+function exitFs(){
+  if (nativeFsEl()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  if (pseudoOn()){ document.body.classList.remove('pseudo-fs'); syncFs(); }
+}
+function toggleFullscreen(){
+  if (isFs()){ exitFs(); return; }
+  if (canNativeFs) enterNative(); else enterPseudo();
+}
+function syncFs(){ elFs.textContent = isFs() ? '⛶ EXIT' : '⛶ FULL'; }
+
+let toastT = null;
+function showToast(msg){
+  let t = document.getElementById('toast');
+  if (!t){ t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+elFs.addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', syncFs);
+document.addEventListener('webkitfullscreenchange', syncFs);
+
+/* controls vanish entirely when idle, return on any touch / movement */
+let dimTimer = null;
+function wake(){
+  panel.classList.remove('dim');
+  clearTimeout(dimTimer);
+  dimTimer = setTimeout(() => panel.classList.add('dim'), 2800);
+}
+['pointerdown', 'pointermove', 'touchstart', 'input'].forEach(e =>
+  window.addEventListener(e, wake, { passive: true }));
+
+/* ---------------------------------------------------------------- */
+/* Math helpers                                                     */
+/* ---------------------------------------------------------------- */
+const rnd = Math.random;
+function expVar(lambda){ return -Math.log(1 - rnd()) / lambda; }
+function clamp(x, a, b){ return x < a ? a : x > b ? b : x; }
+
+/* Cast a screen point (u in ±aspect, v in ±1) onto the water plane with the
+   same pinhole camera as the shader, so rain lands across exactly the visible
+   surface at any tilt. Returns [x, y] in world px, or null above the horizon. */
+function screenToWorld(u, v){
+  const th = Math.tan(0.35);
+  const Tx = W * 0.5, Ty = H * 0.5;
+  const dst = (H * 0.5) / th;
+  const t = params.tilt;
+  const Cy = Ty - dst * Math.sin(t), Cz = dst * Math.cos(t);
+  // fwd = normalize(T - C); the camera only pitches, so fwd.x = 0
+  let fy = Ty - Cy, fz = -Cz;
+  const fl = Math.hypot(fy, fz); fy /= fl; fz /= fl;
+  // rgt = normalize(cross(fwd, (0,1,0))) = (1, 0, 0) for this camera,
+  // upv = cross(rgt, fwd) = (0, -fz, fy)
+  let dx = u * th;
+  let dy = fy + v * th * (-fz);
+  let dz = fz + v * th * ( fy);
+  const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
+  if (dz > -1e-3) return null;
+  const s = -Cz / dz;
+  return [Tx + s * dx, Cy + s * dy];
+}
+
+/* ---------------------------------------------------------------- */
+/* Audio engine                                                     */
+/* ---------------------------------------------------------------- */
+let ac = null, master = null, analyser = null, noiseBuf = null, ambGain = null, started = false;
+
+function initAudio(){
+  if (ac) return;
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain();
+  master.gain.value = params.soundOn ? params.vol : 0;
+
+  const shaper = ac.createWaveShaper();          // soft bus saturation
+  const n = 1024, curve = new Float32Array(n);
+  for (let i = 0; i < n; i++){ const x = (i / (n - 1)) * 2 - 1; curve[i] = Math.tanh(x * 1.5); }
+  shaper.curve = curve;
+
+  analyser = ac.createAnalyser();
+  analyser.fftSize = 1024;
+  master.connect(shaper).connect(analyser).connect(ac.destination);
+
+  const len = ac.sampleRate * 2;
+  noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+  const ch = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) ch[i] = rnd() * 2 - 1;
+
+  // continuous faint rain hiss; its level follows the rate in the main loop
+  const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 700;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 0.5;
+  ambGain = ac.createGain(); ambGain.gain.value = 0.0;
+  src.connect(hp).connect(bp).connect(ambGain).connect(master);
+  src.start();
+
+  // RMS probe (used by the headless test harness to confirm audible output)
+  const td = new Float32Array(analyser.fftSize);
+  window.__rms = () => { analyser.getFloatTimeDomainData(td);
+    let s = 0; for (let i = 0; i < td.length; i++) s += td[i] * td[i];
+    return Math.sqrt(s / td.length); };
+}
+
+/* One raindrop grain.
+   size  0..1  Marshall-Palmer sample — big drops are lower, longer, louder.
+   panX -1..1  stereo position matching the screen.
+   far   0..1  distance up the tilted view — far drops get quieter and duller. */
+function playDrop(size, panX, far){
+  if (!ac || !params.soundOn) return;
+  const t = ac.currentTime, j = params.jitter;
+
+  const durScale = 0.25 + 1.3 * params.decay;
+  const dur = (0.08 + 0.26 * size) * durScale * (1 + (rnd() - 0.5) * 0.5 * j);
+  const wob = Math.pow(2, (rnd() - 0.5) * 0.9 * j);
+  const f0  = (240 + 1200 * Math.pow(1 - size, 1.6)) * wob;
+  const dim = 1 - 0.55 * far;                               // distance attenuation
+  const amp = (0.22 + 0.7 * size) * (0.75 + 0.5 * rnd()) * dim;
+
+  const lp = ac.createBiquadFilter();                        // distance dulling
+  lp.type = 'lowpass';
+  lp.frequency.value = 16000 - 13000 * far;
+  const pan = ac.createStereoPanner ? ac.createStereoPanner() : ac.createGain();
+  if (pan.pan) pan.pan.value = clamp(panX, -1, 1);
+  lp.connect(pan).connect(master);
+
+  const vca = ac.createGain();
+  vca.gain.setValueAtTime(0.0001, t);
+  vca.gain.exponentialRampToValueAtTime(amp, t + 0.004);
+  vca.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  vca.connect(lp);
+
+  let voice;
+  if (params.osc === 'noise'){
+    voice = ac.createBufferSource(); voice.buffer = noiseBuf; voice.loop = true;
+    voice.playbackRate.value = 0.6 + rnd() * 0.8;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 5 + 9 * size;
+    bp.frequency.setValueAtTime(f0, t);
+    bp.frequency.exponentialRampToValueAtTime(f0 * 1.6, t + dur);   // Minnaert up-chirp
+    voice.connect(bp).connect(vca);
+  } else {
+    voice = ac.createOscillator(); voice.type = params.osc;
+    voice.frequency.setValueAtTime(f0, t);
+    voice.frequency.exponentialRampToValueAtTime(f0 * 1.7, t + dur);
+    voice.connect(vca);
+  }
+  voice.start(t); voice.stop(t + dur + 0.03);
+
+  // broadband attack tick — the granular bite of each drop
+  const click = ac.createBufferSource(); click.buffer = noiseBuf; click.loop = true;
+  click.playbackRate.value = 1 + rnd();
+  const chp = ac.createBiquadFilter(); chp.type = 'highpass'; chp.frequency.value = 1200 + 1800 * size;
+  const cg = ac.createGain();
+  cg.gain.setValueAtTime(amp * 0.6, t);
+  cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.018 + 0.02 * size);
+  click.connect(chp).connect(cg).connect(lp);
+  click.start(t); click.stop(t + 0.09);
+}
+
+/* ---------------------------------------------------------------- */
+/* Drops + main loop                                                */
+/* ---------------------------------------------------------------- */
+const DECAY_TAU = 3.6;                       // must match TAUD in the shader
+const drops = [];
+const MAX_DROPS = mobile ? 20 : 28;
+
+let lastFrame = performance.now() / 1000;
+const t0 = lastFrame;
+let nextDropIn = 0;
+
+function frame(){
+  const now = performance.now() / 1000;
+  let dt = now - lastFrame; lastFrame = now;
+  if (dt > 0.1) dt = 0.1;
+
+  /* impacts arrive as a Poisson process across the visible water */
+  const lambda = params.rate;
+  const aspect = W / H;
+  nextDropIn -= dt;
+  let guard = 0;
+  while (nextDropIn <= 0 && guard++ < 40){
+    const size = clamp(1 - Math.exp(-expVar(2.4)), 0.04, 1);  // Marshall-Palmer-ish
+    let world = null, u = 0, v = 0, tries = 0;
+    do {
+      u = (rnd() * 2 - 1) * aspect * 1.1;
+      v = (rnd() * 2 - 1) * 1.05;
+      world = screenToWorld(u, v);
+    } while (!world && ++tries < 8);
+    if (world){
+      if (drops.length >= MAX_DROPS) drops.shift();
+      drops.push({ x: world[0], y: world[1], t0: now, amp: 0.7 + 0.9 * size });
+      if (started){
+        const far = clamp((v + 1) * 0.5, 0, 1) * (params.tilt / (Math.PI / 4));
+        playDrop(size, clamp(u / aspect, -1, 1), clamp(far, 0, 1));
+      }
+    }
+    nextDropIn += expVar(lambda);
+  }
+
+  if (ambGain) ambGain.gain.setTargetAtTime(0.005 + 0.014 * (lambda / 60), ac.currentTime, 0.2);
+
+  /* cull dead ripples, pack live ones for the shader */
+  let cnt = 0;
+  for (let i = drops.length - 1; i >= 0; i--){
+    const d = drops[i];
+    const age = now - d.t0;
+    if (Math.exp(-age / DECAY_TAU) < 0.03){ drops.splice(i, 1); continue; }
+    if (cnt < MAXN){
+      const o = cnt * 4;
+      dropBuf[o] = d.x; dropBuf[o + 1] = d.y;
+      dropBuf[o + 2] = age; dropBuf[o + 3] = d.amp;
+      cnt++;
+    }
+  }
+
+  gl.uniform2f(uRes, cv.width, cv.height);
+  gl.uniform2f(uWorld, W, H);
+  gl.uniform1f(uTilt, params.tilt);
+  gl.uniform1f(uTime, now - t0);
+  gl.uniform1i(uCount, cnt);
+  gl.uniform4fv(uDrop, dropBuf);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------------------------------------------------------------- */
+/* Start gate (audio requires a user gesture)                       */
+/* ---------------------------------------------------------------- */
+const gate = document.getElementById('gate');
+function begin(){
+  if (started) return;
+  started = true;
+  initAudio();
+  if (ac.state === 'suspended') ac.resume();
+  gate.classList.add('hide');
+  wake();
+}
+gate.addEventListener('click', begin);
+gate.addEventListener('touchstart', begin, { passive: true });
+</script>
+</body>
+</html>
