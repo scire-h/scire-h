@@ -1,0 +1,3475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tidal Score — A Sound Piece for the Tide</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0a0a0a;
+    --fg: #ececec;
+    --dim: rgba(236, 236, 236, 0.55);
+    --faint: rgba(236, 236, 236, 0.28);
+    --rule: rgba(236, 236, 236, 0.08);
+    /* ten insect dot colors — bright at top of pitch, darker as pitch drops */
+    --suzumushi:    #f6f6f6;
+    --kanetataki:   #efefef;
+    --matsumushi:   #e2e2e2;
+    --kusahibari:   #ededed;
+    --kantan:       #d6d6d6;
+    --aomatsumushi: #cecece;
+    --umaoi:        #c0c0c0;
+    --korogi:       #b6b6b6;
+    --higurashi:    #a4a4a4;
+    --enmakorogi:   #8e8e8e;
+    /* other voices */
+    --rasp:   #d8d8d8;
+    --scrape: #aaaaaa;
+    --wind:   #7e7e7e;
+    --drone:  #5a5a5a;
+  }
+  html, body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Helvetica Neue", Helvetica, "Arial", "Hiragino Kaku Gothic ProN",
+                 "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", sans-serif;
+    font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: 0.01em;
+    height: 100vh;
+    overflow: hidden;
+  }
+  body { font-feature-settings: "kern" 1, "tnum" 0; }
+  .num { font-feature-settings: "tnum" 1; }
+
+  /* ----- LAYOUT ----- */
+  .stage {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    height: 100vh;
+    padding: 32px 48px;
+    gap: 22px;
+  }
+
+  /* ----- HEADER ----- */
+  header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 40px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .title-block .opus { font-size: 10px; letter-spacing: 0.32em; color: var(--faint); text-transform: uppercase; margin-bottom: 8px; }
+  .title-block h1 {
+    font-size: 40px; font-weight: 200; letter-spacing: -0.025em; line-height: 1;
+  }
+  .title-block .sub {
+    font-size: 12px; color: var(--dim); margin-top: 12px; max-width: 56ch; line-height: 1.5;
+  }
+  .meta {
+    display: grid; grid-template-columns: auto repeat(3, auto); gap: 4px 28px;
+    align-items: end; text-align: right;
+  }
+  /* Play / Stop transport toggle in the meta strip */
+  .play-toggle {
+    align-self: end;
+    width: 44px; height: 44px;
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--rule);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    padding: 0;
+  }
+  .play-toggle:hover { border-color: var(--dim); }
+  .play-toggle.playing { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .meta .k { font-size: 9px; letter-spacing: 0.28em; color: var(--faint); text-transform: uppercase; }
+  .meta .v { font-size: 20px; font-weight: 200; font-feature-settings: "tnum" 1; line-height: 1.05; }
+
+  /* ----- MAIN ----- */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 36px;
+    min-height: 0;
+  }
+  .canvas-wrap {
+    position: relative; min-height: 0;
+    border: 1px solid var(--rule);
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  .scale-row {
+    position: absolute; left: 0; right: 0;
+    display: flex; justify-content: space-between;
+    pointer-events: none;
+  }
+  .scale-row.top { top: -1px; }
+  .scale-row.bot { bottom: -1px; }
+  .scale-row span {
+    font-size: 9px; letter-spacing: 0.2em; color: var(--faint); text-transform: uppercase;
+    padding: 4px 6px; background: var(--bg);
+  }
+
+  /* ----- CONTROL PANEL (aside) ----- */
+  aside {
+    min-height: 0; overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+  aside::-webkit-scrollbar { width: 6px; }
+  aside::-webkit-scrollbar-thumb { background: var(--rule); }
+
+  .ctl-group { padding: 14px 0 16px; border-bottom: 1px solid var(--rule); }
+  .ctl-group:first-child { padding-top: 0; }
+  .ctl-group:last-child { border-bottom: none; padding-bottom: 4px; }
+  .ctl-head {
+    display: grid; grid-template-columns: 14px 1fr auto; gap: 10px;
+    align-items: center; margin-bottom: 12px;
+  }
+  .ctl-head .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    transition: box-shadow 0.18s, transform 0.18s;
+  }
+  .ctl-head .dot.on { box-shadow: 0 0 0 4px rgba(255,255,255,0.07); transform: scale(1.3); }
+  .ctl-head .dot.idle { background: var(--faint); }
+  .ctl-head .name {
+    font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--fg);
+    font-weight: 400;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ctl-head .name .ja {
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic",
+                 "Noto Sans CJK JP", sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    margin-left: 7px;
+    opacity: 0.5;
+    text-transform: none;
+    font-weight: 300;
+  }
+  .ctl-head .cnt {
+    font-size: 10px; color: var(--faint); font-feature-settings: "tnum" 1;
+    letter-spacing: 0.04em;
+  }
+  /* in-header S / M / ▶ next to the count for every track section */
+  .ctl-cluster {
+    display: flex; align-items: center; gap: 5px;
+  }
+  .ctl-cluster .cnt {
+    margin-right: 4px;
+    min-width: 18px;
+    text-align: right;
+  }
+
+  /* ----- KNOBS ----- */
+  .knob-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 8px 4px;
+  }
+  .knob-row.cols-1 { grid-template-columns: 1fr; }
+  .knob-row.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .knob-row.cols-4 { grid-template-columns: repeat(4, 1fr); gap: 8px 2px; }
+  .knob-row.cols-5 { grid-template-columns: repeat(5, 1fr); gap: 8px 2px; }
+  .knob-row.cols-5 .knob .dial,
+  .knob-row.cols-4 .knob .dial { width: 32px; height: 32px; }
+  .knob-row.cols-5 .knob .dial::after,
+  .knob-row.cols-4 .knob .dial::after { height: 12px; }
+  .knob {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    user-select: none; -webkit-user-select: none;
+  }
+  .knob .dial {
+    width: 36px; height: 36px;
+    border: 1px solid var(--rule);
+    border-radius: 50%;
+    position: relative;
+    cursor: ns-resize;
+    touch-action: none;
+    transition: border-color 0.15s, background 0.15s;
+    background: rgba(255,255,255,0.005);
+  }
+  .knob .dial::after {
+    content: "";
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 1px; height: 14px;
+    background: var(--fg);
+    transform-origin: 50% 100%;
+    transform: translate(-50%, -100%) rotate(var(--angle, -135deg));
+  }
+  .knob .dial:hover, .knob .dial.dragging {
+    border-color: var(--dim);
+    background: rgba(255,255,255,0.015);
+  }
+  .knob .lbl {
+    font-size: 8px; letter-spacing: 0.22em; color: var(--faint); text-transform: uppercase;
+  }
+  .knob .val {
+    font-size: 10px; color: var(--fg);
+    font-feature-settings: "tnum" 1;
+    letter-spacing: 0.02em;
+  }
+
+  /* ----- MIX SECTION (Solo / Mute matrix) ----- */
+  .mix-list { display: flex; flex-direction: column; }
+  .mix-row {
+    display: grid;
+    grid-template-columns: 9px 1fr 22px 22px 22px 24px;
+    gap: 5px 5px;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .mix-row .mix-vol {
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mix-row .mix-vol .dial {
+    width: 24px; height: 24px;
+    border: 1px solid var(--rule);
+    border-radius: 50%;
+    position: relative;
+    cursor: ns-resize;
+    touch-action: none;
+    background: rgba(255,255,255,0.005);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .mix-row .mix-vol .dial::after {
+    content: "";
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 1px; height: 10px;
+    background: var(--fg);
+    transform-origin: 50% 100%;
+    transform: translate(-50%, -100%) rotate(var(--angle, -135deg));
+  }
+  .mix-row .mix-vol .dial:hover,
+  .mix-row .mix-vol .dial.dragging {
+    border-color: var(--dim);
+    background: rgba(255,255,255,0.015);
+  }
+  .mix-row:last-child { border-bottom: none; }
+  .mix-row .mix-dot {
+    width: 7px; height: 7px; border-radius: 50%; justify-self: center;
+    transition: box-shadow 0.18s, transform 0.18s;
+  }
+  .mix-row .mix-dot.on {
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.07);
+    transform: scale(1.3);
+  }
+  .mix-row .mix-name {
+    font-size: 10px; color: var(--fg);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .mix-row .mix-name .ja {
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic",
+                 "Noto Sans CJK JP", sans-serif;
+    font-size: 8.5px;
+    margin-left: 6px;
+    opacity: 0.45;
+    font-weight: 300;
+  }
+  .mix-row .mix-name.dim { opacity: 0.35; }
+  .mix-btn {
+    width: 22px; height: 22px;
+    border: 1px solid var(--rule);
+    background: transparent;
+    color: var(--faint);
+    font-size: 10px;
+    letter-spacing: 0;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit;
+    font-weight: 400;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    padding: 0;
+  }
+  .mix-btn:hover { border-color: var(--dim); color: var(--fg); }
+  .mix-btn.solo.on {
+    background: var(--fg); color: var(--bg); border-color: var(--fg);
+  }
+  .mix-btn.mute.on {
+    background: rgba(236,236,236,0.10);
+    color: var(--fg);
+    border-color: var(--dim);
+    text-decoration: line-through;
+  }
+  /* momentary trigger — no on-state, flashes on press */
+  .mix-btn.trig { font-size: 11px; line-height: 1; }
+  .mix-btn.trig.fire {
+    background: var(--fg); color: var(--bg); border-color: var(--fg);
+  }
+  .mix-clear {
+    margin-top: 10px; align-self: flex-start;
+    font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--faint);
+    background: transparent; border: 1px solid var(--rule);
+    padding: 5px 10px; cursor: pointer; font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .mix-clear:hover { color: var(--fg); border-color: var(--dim); }
+
+  /* ----- PRESET SECTION ----- */
+  .preset-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .preset-btn {
+    font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--fg);
+    background: transparent; border: 1px solid var(--rule);
+    padding: 8px 6px; cursor: pointer; font-family: inherit;
+    font-weight: 400;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .preset-btn:hover { border-color: var(--dim); background: rgba(236,236,236,0.04); }
+  .preset-btn:active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .preset-status {
+    margin-top: 10px;
+    font-size: 9px; color: var(--faint); letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-feature-settings: "tnum" 1;
+    min-height: 1.4em;
+  }
+  /* ----- SCORE SECTION (hand-drawn conductor curve) ----- */
+  .score-canvas {
+    display: block;
+    width: 100%;
+    height: 96px;
+    margin: 6px 0 8px;
+    background: rgba(255,255,255,0.012);
+    border: 1px solid var(--rule);
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .score-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+  }
+  .score-hint {
+    margin-top: 8px;
+    font-size: 9px; letter-spacing: 0.18em; color: var(--faint);
+    text-transform: uppercase;
+  }
+  /* ----- RECORD SECTION ----- */
+  .rec-btn {
+    width: 100%;
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--rule);
+    padding: 10px;
+    font-family: inherit;
+    font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .rec-btn:hover { border-color: var(--dim); background: rgba(236,236,236,0.04); }
+  .rec-btn::before {
+    content: "●";
+    margin-right: 10px;
+    color: #d35454;
+    font-size: 9px;
+    vertical-align: 1px;
+  }
+  .rec-btn.recording {
+    background: var(--fg);
+    color: var(--bg);
+    border-color: var(--fg);
+  }
+  .rec-btn.recording::before {
+    color: #d35454;
+    animation: rec-pulse 1.1s infinite ease-in-out;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.3; }
+  }
+  .rec-info {
+    margin-top: 8px;
+    font-size: 9px; letter-spacing: 0.18em; color: var(--faint);
+    text-transform: uppercase;
+    font-feature-settings: "tnum" 1;
+    min-height: 1.4em;
+    display: flex; justify-content: space-between;
+  }
+
+  /* ----- FOOTER ----- */
+  footer {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    align-items: center;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--faint);
+  }
+  footer .c { text-align: center; }
+  footer .r { text-align: right; }
+  footer .num { letter-spacing: 0.08em; }
+
+  /* ----- START OVERLAY ----- */
+  .start {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(10, 10, 10, 0.94);
+    cursor: pointer; z-index: 50;
+    transition: opacity 0.6s ease;
+    gap: 14px;
+  }
+  .start.hidden { opacity: 0; pointer-events: none; }
+  .start .label { font-size: 10px; letter-spacing: 0.4em; color: var(--dim); text-transform: uppercase; }
+  .start .play {
+    font-size: 13px; letter-spacing: 0.5em; padding: 18px 40px;
+    border: 1px solid var(--fg);
+    transition: background 0.2s, color 0.2s;
+  }
+  .start:hover .play { background: var(--fg); color: var(--bg); }
+  .start .note { font-size: 10px; color: var(--faint); letter-spacing: 0.05em; max-width: 40ch; text-align: center; line-height: 1.6; }
+
+  @media (max-width: 900px) {
+    html, body { overflow: auto; height: auto; }
+    .stage { height: auto; min-height: 100vh; padding: 20px; gap: 18px; }
+    main { grid-template-columns: 1fr; }
+    .canvas-wrap { min-height: 280px; }
+    aside { overflow: visible; }
+    .title-block h1 { font-size: 30px; }
+    header { grid-template-columns: 1fr; }
+    .meta { text-align: left; grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <header>
+    <div class="title-block">
+      <div class="opus">Op. 01 &nbsp;·&nbsp; for the tide</div>
+      <h1>Tidal&nbsp;Score</h1>
+      <div class="sub">
+        Ten night insects, each on its own dial, with scraping bodies and
+        the wind through a hollow stem — a quiet Japanese summer night,
+        conducted by a sine of the sea.
+      </div>
+    </div>
+    <div class="meta">
+      <button type="button" id="play-toggle" class="play-toggle" aria-label="Play / Stop">&#9654;</button>
+      <div>
+        <div class="k">Time</div>
+        <div class="v num" id="m-time">00:00:00</div>
+      </div>
+      <div>
+        <div class="k">Tide</div>
+        <div class="v num" id="m-level">+0.000</div>
+      </div>
+      <div>
+        <div class="k">Phase</div>
+        <div class="v" id="m-phase">—</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="canvas-wrap">
+      <canvas id="cv"></canvas>
+      <div class="scale-row top"><span>+1.0</span><span>flood</span><span>–</span></div>
+      <div class="scale-row bot"><span>−1.0</span><span>ebb</span><span>–</span></div>
+      <div id="start" class="start">
+        <div class="label">A Sound Piece</div>
+        <div class="play">START</div>
+        <div class="note">Headphones recommended. Audio begins on tap. Drag knobs vertically to shape the score.</div>
+      </div>
+    </div>
+
+    <aside id="ctl-panel"><!-- populated by JS --></aside>
+  </main>
+
+  <footer>
+    <div>Scire-H &nbsp;·&nbsp; Sound Art Series</div>
+    <div class="c"><span class="num">M2</span> &nbsp;cycle&nbsp; <span class="num" id="f-cycle">06:00</span></div>
+    <div class="r">MMXXVI</div>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ==================================================================
+   TIDAL SCORE
+   A Web Audio sound piece conducted by a tidal sine wave,
+   shaped by fifteen dials.
+   ================================================================== */
+
+const TWO_PI = Math.PI * 2;
+
+/* --- runtime state, driven by knobs --- */
+const SAMPLE_RATES       = [44100, 48000, 96000, 176400, 192000, 384000];
+const SAMPLE_RATE_LABELS = ["44.1k", "48k", "96k", "176.4k", "192k", "384k"];
+function pickedRate() { return SAMPLE_RATES[Math.round(params.master.rateIdx)] || 96000; }
+
+const params = {
+  master:       { vol: 0.7, cycleMin: 6.0, width: 1.0, revMix: 0.30, revSize: 2.8, chaos: 1.0, rateIdx: 2, breath: 0.3, temp: 22, bed: 0 },
+  eq:           { low: 0, mid: 0, high: 0 },  // dB, master 3-band
+  score:        { mix: 0 },                   // 0 = tide sine, 1 = hand-drawn curve
+  grain:        { send: 0.45, size: 5.0, sparkle: 0.6 }, // granular reverb aux for scrape + wind
+  drone:        { lvl: 1.0, pan: 0.0, key: 55, yuragi: 0, poly: 0 },
+  /* ten independently-controlled night insects (each gets a full synth) */
+  suzumushi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  matsumushi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.012, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  korogi:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  higurashi:    { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0,     shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  kanetataki:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.30, track:0, bend:0.008, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  kantan:       { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  umaoi:        { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0,     shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  kusahibari:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.15, track:0, bend:0.005, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  enmakorogi:   { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.25, track:0, bend:0.018, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  aomatsumushi: { density:1, lvl:1, pitch:1, pan:0, wave:0, cutoff:12000, decay:1, random:1, body:0.4, voices:1, detune:8, click:0.20, track:0, bend:0.005, shape:0, anti:0, depth:0, phrase:0, move:0, doppler:0, buzz:0 },
+  rasp:         { density: 1.0, lvl: 1.0, rate: 1.0,  pan: 0.0 },
+  scrape:       { density: 1.0, lvl: 1.0, grit: 1.0,  pan: 0.0, yuragi: 0.5, grainSend: 1.0 },
+  wind:         { density: 1.0, lvl: 1.0, tube: 1.0,  pan: 0.0, yuragi: 0.5, grainSend: 1.0 },
+};
+
+const INSECT_KINDS = [
+  "suzumushi", "matsumushi", "korogi", "higurashi", "kanetataki",
+  "kantan", "umaoi", "kusahibari", "enmakorogi", "aomatsumushi",
+];
+const ALL_KINDS = [...INSECT_KINDS, "rasp", "scrape", "wind"];
+
+/* Factory preset — applied on first load over knob defs.
+   `def` on each knob is the "neutral" double-click target; this overlay
+   defines the curated starting state. Save / Load lives in localStorage. */
+const FACTORY_PATCH = {
+  master:       { cycleMin: 1.0, width: 0.61, revMix: 0.13, revSize: 0.5 },
+  drone:        { lvl: 0.17, key: 45.5, yuragi: 0.67, poly: 0.44 },
+  suzumushi:    { lvl: 0.72, pitch: 1.49, pan: 0.11, cutoff: 1300, decay: 0.30, move: 0.24, doppler: 0.27 },
+  matsumushi:   { lvl: 1.97, pitch: 1.61, pan: 0.02, cutoff: 14000, decay: 1.35, random: 1.19 },
+  korogi:       { density: 3.00, lvl: 1.12, pitch: 1.81, pan: 0.00, cutoff: 2400, decay: 1.72, random: 0.97 },
+  higurashi:    { density: 3.00, pan: -0.62, wave: 5, decay: 0.37 },
+  kanetataki:   { density: 1.83, pitch: 1.86, pan: -0.02, wave: 3, decay: 0.64 },
+  kantan:       { pitch: 1.93, pan: 0.71, cutoff: 1500, decay: 0.62, random: 1.14 },
+  umaoi:        {},
+  kusahibari:   { pitch: 0.64, wave: 2, cutoff: 3900, decay: 1.52, random: 0.47 },
+  enmakorogi:   { lvl: 0.36, pitch: 2.00, pan: -0.84, cutoff: 1400, decay: 0.65,
+                  random: 2.00, body: 0.90, click: 0.47,
+                  anti: 0.38, depth: 0.32, phrase: 1, doppler: 0.36, buzz: 0.37 },
+  aomatsumushi: { lvl: 0.06 },
+  rasp:         { lvl: 0.07 },
+  scrape:       { lvl: 0.07, pan: 0.31, yuragi: 0.73, grainSend: 2.58 },
+  wind:         { lvl: 0.32, pan: -0.37, yuragi: 0.63, grainSend: 2.37 },
+};
+const FACTORY_MUTES = ["umaoi", "kusahibari", "aomatsumushi", "rasp"];
+const FACTORY_SOLOS = ["enmakorogi"];
+const PATCH_KEY    = "tidal-score-patch-v1";
+
+/* Hand-drawn graphic score — a Float32Array of length SCORE_SAMPLES
+   in [-1, +1], looping over one tide cycle. Null until the user
+   touches the score canvas. */
+const SCORE_SAMPLES = 512;
+let drawnCurve   = null;
+let scoreCanvas  = null;
+let scoreCtx     = null;
+let scoreDrawing = false;
+let scoreLastIdx = -1;
+let scoreLastVal = 0;
+/* every audible track, including the always-on drone */
+const TRACKS = ["drone", ...ALL_KINDS];
+
+/* per-track solo / mute state, toggled by the Mix panel */
+const muted  = {}; TRACKS.forEach(k => muted[k]  = false);
+const soloed = {}; TRACKS.forEach(k => soloed[k] = false);
+function anySolo() { for (const k of TRACKS) if (soloed[k]) return true; return false; }
+function isAudible(kind) {
+  if (muted[kind]) return false;
+  if (anySolo() && !soloed[kind]) return false;
+  return true;
+}
+
+/* seven selectable waveforms — four oscillator shapes + three noise colours */
+const WAVES = ["sine", "triangle", "square", "sawtooth", "white", "pink", "brown"];
+const WAVE_LABEL = {
+  sine: "SIN", triangle: "TRI", square: "SQR", sawtooth: "SAW",
+  white: "WHT", pink: "PNK", brown: "BRN",
+};
+function isNoiseWave(w) { return w === "white" || w === "pink" || w === "brown"; }
+
+let actx = null;
+let master = null;
+let limiter = null;      // exposed for the recorder tap
+let reverb = null;       // { convolver, wet }
+let eqNodes = null;      // { low, mid, high } biquads in series before lim
+let grainBus = null;     // { send, convolver, out } — granular reverb aux
+                         // bus tapped by scrape & wind voices
+let breathNodes = null;  // { gain, lfo, depth } — slow LFO modulating master
+                         // gain to suggest wind and field-recording motion
+let chorusBedNodes = null;  // { out } — distant ambient chorus layer
+let windBedNodes = null;    // continuous wind layer
+let scrapeBedNodes = null;  // continuous scrape layer
+let voiceSends = null;      // { wind, scrape } — per-voice grain-send gains
+let noiseBufs = null;    // { white, pink, brown }
+let droneNodes = null;
+let silentPrimer = null; // hidden <audio> looping silence so iOS/macOS
+                         // classifies this tab as "media playback" and
+                         // includes the AudioContext output in screen
+                         // recordings. The actual audio goes straight
+                         // out via actx.destination — no extra resampling.
+let running = false;
+
+/* recording state — ScriptProcessor tap + WAV encode on stop */
+let recNode      = null;
+let recChunks    = null;   // Array of [Float32Array left, Float32Array right]
+let recSilentSink= null;
+let recActive    = false;
+let recStartCtx  = 0;
+const T0 = performance.now() / 1000;
+const counts  = {}; ALL_KINDS.forEach(k => counts[k]  = 0);
+const nextDue = {}; ALL_KINDS.forEach(k => nextDue[k] = 0);
+const flash   = { drone: 0 }; ALL_KINDS.forEach(k => flash[k] = 0);
+const events  = [];
+
+/* ==================================================================
+   AUDIO ENGINE
+   ================================================================== */
+function initAudio() {
+  /* AudioContext sample rate from the Master Rate knob (44.1k → 384k).
+     If the browser rejects the request, actx.sampleRate just reports
+     the real rate; the recorder/UI follow that value. */
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  try {
+    actx = new Ctor({ sampleRate: pickedRate(), latencyHint: "interactive" });
+  } catch (e) {
+    actx = new Ctor();
+  }
+  master = actx.createGain();
+  master.gain.value = 0.0;
+  /* Transparent brick-wall limiter: only catches peaks at the very top,
+     so EQ boosts and Master Volume lifts colour the sound instead of
+     being squashed by an over-eager compressor. */
+  const lim = actx.createDynamicsCompressor();
+  lim.threshold.value = -3;
+  lim.knee.value = 0;
+  lim.ratio.value = 20;
+  lim.attack.value = 0.001;
+  lim.release.value = 0.08;
+  limiter = lim;
+
+  /* Breath / wind LFO — a slow sine (~0.12 Hz) modulates the gain of a
+     unity stage between master and EQ. Depth is params.master.breath
+     × 0.25 (so breath = 1 swings ±0.25 = roughly ±2.5 dB). */
+  const breathGain = actx.createGain();
+  breathGain.gain.value = 1;
+  master.connect(breathGain);
+  const breathLFO = actx.createOscillator();
+  breathLFO.type = "sine";
+  breathLFO.frequency.value = 0.12;
+  const breathDepth = actx.createGain();
+  breathDepth.gain.value = params.master.breath * 0.25;
+  breathLFO.connect(breathDepth).connect(breathGain.gain);
+  breathLFO.start();
+  breathNodes = { gain: breathGain, lfo: breathLFO, depth: breathDepth };
+
+  /* 3-band master EQ — tuned to where the insect chorus actually lives.
+     Sits between master and the dry/wet split so it shapes both reverb
+     send and direct output. Gains in dB live in params.eq.{low,mid,high}. */
+  const eqLow  = actx.createBiquadFilter();
+  eqLow.type   = "lowshelf";  eqLow.frequency.value  = 200;  eqLow.gain.value  = params.eq.low;
+  const eqMid  = actx.createBiquadFilter();
+  eqMid.type   = "peaking";   eqMid.frequency.value  = 1500; eqMid.Q.value = 0.7; eqMid.gain.value = params.eq.mid;
+  const eqHigh = actx.createBiquadFilter();
+  eqHigh.type  = "highshelf"; eqHigh.frequency.value = 5000; eqHigh.gain.value = params.eq.high;
+  breathGain.connect(eqLow).connect(eqMid).connect(eqHigh);
+  eqNodes = { low: eqLow, mid: eqMid, high: eqHigh };
+
+  /* dry path: EQ tail -> limiter -> destination */
+  eqHigh.connect(lim);
+  /* wet path: EQ tail -> convolver -> wet gain -> limiter */
+  const convolver = actx.createConvolver();
+  convolver.buffer = makeIR(params.master.revSize, 2.6);
+  const wet = actx.createGain();
+  wet.gain.value = params.master.revMix;
+  eqHigh.connect(convolver).connect(wet).connect(lim);
+  lim.connect(actx.destination);
+
+  reverb = { convolver, wet };
+
+  /* Granular aux bus — scrape & wind voices tap their envelopes
+     into grainBus.send; the convolver renders a long, sparkly
+     stereo IR; grainBus.out scales the result before it joins the
+     limiter alongside the dry and main-wet paths. */
+  const grSend = actx.createGain();
+  grSend.gain.value = 1.0;          // unity into the bus; loudness is grainBus.out
+  const grConv = actx.createConvolver();
+  grConv.buffer = makeGranularIR(params.grain.size, params.grain.sparkle);
+  const grOut  = actx.createGain();
+  grOut.gain.value = params.grain.send;
+  grSend.connect(grConv).connect(grOut).connect(lim);
+  grainBus = { send: grSend, convolver: grConv, out: grOut };
+
+  /* Per-voice grain-send gains for the voices that expose a Grain dial */
+  voiceSends = {};
+  for (const v of ["wind", "scrape"]) {
+    const sg = actx.createGain();
+    sg.gain.value = params[v] && params[v].grainSend !== undefined ? params[v].grainSend : 1.0;
+    sg.connect(grSend);
+    voiceSends[v] = sg;
+  }
+
+  master.gain.linearRampToValueAtTime(params.master.vol, actx.currentTime + 1.5);
+
+  noiseBufs = {
+    white: makeNoise(4.0, "white"),
+    pink:  makeNoise(4.0, "pink"),
+    brown: makeNoise(4.0, "brown"),
+  };
+  startDrone();
+  startChorusBed();
+  startWindBed();
+  startScrapeBed();
+}
+
+/* Algorithmic impulse response: exp-decaying white noise, stereo decorrelated.
+   The tail uses true exponential decay (matches the way a room actually
+   loses energy) and the last 10 % of the IR is windowed to zero with a
+   cosine fade so the convolution doesn't end on a non-zero sample —
+   without this, the reverb tail dropped suddenly to silence. */
+function makeIR(durationSec, decay) {
+  const sr = actx.sampleRate;
+  const len = Math.max(512, Math.floor(sr * Math.max(0.1, durationSec)));
+  const buf = actx.createBuffer(2, len, sr);
+  /* `decay` argument now acts as a softness scalar — higher values mean
+     a faster RT60, lower values mean a longer, more diffuse tail. */
+  const rt60Samples = len * 0.85 / Math.max(0.5, decay * 0.4);
+  const rate = Math.log(1000) / rt60Samples;   /* -60 dB at rt60Samples */
+  const fadeStart = Math.floor(len * 0.90);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    /* sparse early reflections in the first 60 ms */
+    const earlyLen = Math.min(len, Math.floor(sr * 0.06));
+    for (let i = 0; i < earlyLen; i++) d[i] = 0;
+    for (let k = 0; k < 4; k++) {
+      const i = Math.floor(Math.random() * earlyLen);
+      d[i] += (Math.random() * 2 - 1) * 0.4 * (1 - i / earlyLen);
+    }
+    /* exponentially-decaying diffuse tail */
+    for (let i = earlyLen; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-rate * (i - earlyLen));
+    }
+    /* cosine fade-out over the last 10 % so amplitude reaches 0 cleanly */
+    for (let i = fadeStart; i < len; i++) {
+      const phase = (i - fadeStart) / Math.max(1, len - fadeStart);
+      d[i] *= 0.5 + 0.5 * Math.cos(Math.PI * phase);
+    }
+  }
+  return buf;
+}
+
+/* Granular-character impulse response: an exponentially decaying noise
+   bed with a cloud of short sine grains scattered throughout. The
+   bed amplitude and each grain's amplitude share the same exponential
+   envelope so the tail recedes coherently into the distance instead of
+   stopping. A cosine fade-out over the last 10 % drives everything to
+   exactly zero at the IR's end. Stereo-decorrelated. */
+function makeGranularIR(durationSec, sparkle) {
+  const sr = actx.sampleRate;
+  const len = Math.max(2048, Math.floor(sr * Math.max(0.5, durationSec)));
+  const buf = actx.createBuffer(2, len, sr);
+  /* RT60 ≈ 80 % of the IR length — leaves room for the final fade */
+  const rt60Samples = len * 0.80;
+  const rate = Math.log(1000) / rt60Samples;
+  const fadeStart = Math.floor(len * 0.90);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    /* exponentially-decaying noise bed */
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-rate * i) * 0.08;
+    }
+    /* sparse early reflections in the first 60 ms */
+    const early = Math.min(len, Math.floor(sr * 0.06));
+    for (let k = 0; k < 5; k++) {
+      const i = Math.floor(Math.random() * early);
+      d[i] += (Math.random() * 2 - 1) * 0.35 * (1 - i / early);
+    }
+    /* granular cloud — Hann-windowed sine grains scattered through the
+       tail. Grain amplitude shares the bed's exponential envelope so
+       later grains naturally recede instead of cutting off. */
+    const grainCount = Math.floor(sr * 0.018 * Math.max(0.05, sparkle));
+    for (let g = 0; g < grainCount; g++) {
+      /* bias grain centre toward the head so density also tapers */
+      const centre = Math.floor(Math.pow(Math.random(), 0.75) * len);
+      const gLen   = Math.max(32, Math.floor(sr * (0.004 + Math.random() * 0.012)));
+      const env    = Math.exp(-rate * centre);
+      const freq   = 400 + Math.random() * 6800;
+      const amp    = (0.10 + 0.18 * Math.random()) * env * sparkle;
+      for (let i = 0; i < gLen; i++) {
+        const idx = centre + i - (gLen >> 1);
+        if (idx < 0 || idx >= len) continue;
+        const w = 0.5 - 0.5 * Math.cos((TWO_PI * i) / (gLen - 1)); // Hann
+        d[idx] += amp * w * Math.sin((TWO_PI * freq * i) / sr);
+      }
+    }
+    /* cosine fade-out over the last 10 % so the IR ends on zero */
+    for (let i = fadeStart; i < len; i++) {
+      const phase = (i - fadeStart) / Math.max(1, len - fadeStart);
+      d[i] *= 0.5 + 0.5 * Math.cos(Math.PI * phase);
+    }
+  }
+  return buf;
+}
+
+/* Per-event StereoPanner: per-voice center + random spread × global width */
+/* Build a hidden <audio> that loops one second of silence. Played
+   inside the user-gesture START handler, this convinces iOS / macOS
+   that the page is doing "media playback" so the system includes the
+   AudioContext speaker output in screen recordings. The element itself
+   adds no audible sound and no DSP load — it's just a session hint. */
+function ensureSilentPrimer() {
+  if (silentPrimer) return;
+  /* 1 s of unsigned 8-bit silence at 8 kHz = 8044 bytes (header + data) */
+  const sr = 8000, samples = sr;
+  const buf = new ArrayBuffer(44 + samples);
+  const view = new DataView(buf);
+  let p = 0;
+  const wStr = (s) => { for (let i = 0; i < s.length; i++) view.setUint8(p++, s.charCodeAt(i)); };
+  const w32 = (n) => { view.setUint32(p, n, true); p += 4; };
+  const w16 = (n) => { view.setUint16(p, n, true); p += 2; };
+  wStr("RIFF"); w32(36 + samples); wStr("WAVE");
+  wStr("fmt "); w32(16); w16(1); w16(1);
+  w32(sr); w32(sr); w16(1); w16(8);
+  wStr("data"); w32(samples);
+  for (let i = 0; i < samples; i++) view.setUint8(p++, 128);
+  const url = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  const el = document.createElement("audio");
+  el.src = url;
+  el.loop = true;
+  el.playsInline = true;
+  el.preload = "auto";
+  el.style.cssText =
+    "position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;";
+  document.body.appendChild(el);
+  silentPrimer = el;
+}
+
+function panNode(spread, center = 0) {
+  const p = actx.createStereoPanner();
+  const w = params.master.width;
+  let pan = center + (Math.random() * 2 - 1) * spread * w;
+  if (pan < -1) pan = -1; else if (pan > 1) pan = 1;
+  p.pan.value = pan;
+  p.connect(master);
+  return p;
+}
+
+function makeNoise(seconds, color) {
+  const len = Math.floor(actx.sampleRate * seconds);
+  const buf = actx.createBuffer(1, len, actx.sampleRate);
+  const d = buf.getChannelData(0);
+  if (color === "white") {
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.5;
+  } else if (color === "brown") {
+    /* integrated noise — rolls off ~6 dB/oct */
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      const w = (Math.random() * 2 - 1) * 0.1;
+      last = (last + w) * 0.985;
+      d[i] = last * 4.0;
+    }
+  } else {
+    /* pink (Paul Kellet) — ~3 dB/oct */
+    let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179;
+      b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.96900 * b2 + w * 0.1538520;
+      b3 = 0.86650 * b3 + w * 0.3104856;
+      b4 = 0.55000 * b4 + w * 0.5329522;
+      b5 = -0.7616 * b5 - w * 0.0168980;
+      d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+      b6 = w * 0.115926;
+    }
+  }
+  return buf;
+}
+
+/* unified source builder — oscillator OR band-passed noise. The returned
+   node exposes a .frequency AudioParam either way (osc.frequency or
+   biquad.frequency), so callers can ramp pitch uniformly. */
+function makeTone(waveType, freq, t, dur) {
+  if (isNoiseWave(waveType)) {
+    const src = actx.createBufferSource();
+    src.buffer = noiseBufs[waveType];
+    src.loop = true;
+    src.playbackRate.value = 0.7 + Math.random() * 0.6;
+    const bp = actx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = freq;
+    bp.Q.value = 18;
+    src.connect(bp);
+    src.start(t); src.stop(t + dur + 0.05);
+    return bp;
+  } else {
+    const osc = actx.createOscillator();
+    osc.type = waveType;
+    osc.frequency.value = freq;
+    osc.start(t); osc.stop(t + dur + 0.05);
+    return osc;
+  }
+}
+
+/* same, but with a linear frequency ramp from fStart to fEnd over dur */
+function makeToneRamp(waveType, fStart, fEnd, t, dur) {
+  if (isNoiseWave(waveType)) {
+    const src = actx.createBufferSource();
+    src.buffer = noiseBufs[waveType];
+    src.loop = true;
+    src.playbackRate.value = 0.7 + Math.random() * 0.6;
+    const bp = actx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(fStart, t);
+    bp.frequency.linearRampToValueAtTime(fEnd, t + dur);
+    bp.Q.value = 18;
+    src.connect(bp);
+    src.start(t); src.stop(t + dur + 0.05);
+    return bp;
+  } else {
+    const osc = actx.createOscillator();
+    osc.type = waveType;
+    osc.frequency.setValueAtTime(fStart, t);
+    osc.frequency.linearRampToValueAtTime(fEnd, t + dur);
+    osc.start(t); osc.stop(t + dur + 0.05);
+    return osc;
+  }
+}
+
+/* Per-pulse micro-bend: starts the carrier ~bend % above its target
+   then decays to the natural pitch over ~40 ms. Tracks both
+   OscillatorNode.frequency and the bandpass frequency of noise sources
+   (both expose .frequency). Zero-cost at bend = 0. */
+function applyBend(node, freq, bend, t, dur) {
+  if (!bend || bend <= 0 || !node || !node.frequency) return;
+  const ramp = Math.min(0.04, Math.max(0.004, dur * 0.4));
+  node.frequency.cancelScheduledValues(t);
+  node.frequency.setValueAtTime(freq * (1 + bend), t);
+  node.frequency.exponentialRampToValueAtTime(Math.max(20, freq), t + ramp);
+}
+
+/* Sharp band-passed white-noise transient added at the start of a
+   pulse — emulates the "tooth strike" instant of insect stridulation
+   before the resonant body rings. Zero-cost at amount=0. */
+function addClick(t, freq, peak, amount, dest) {
+  if (!amount || amount <= 0 || !noiseBufs || !noiseBufs.white) return;
+  const dur = 0.0028;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBufs.white;
+  src.loop = false;
+  const bp = actx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = Math.min(15000, Math.max(400, freq * 1.4));
+  bp.Q.value = 5;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(peak * 0.55 * amount, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp).connect(g).connect(dest);
+  src.start(t);
+  src.stop(t + dur + 0.001);
+}
+
+function makeLP(freq) {
+  const lp = actx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = freq;
+  return lp;
+}
+
+/* Body-cavity resonator — three cascaded peaking biquads at the
+   fundamental and two inharmonic multiples (1.0, 2.4, 4.7), with Q
+   and gain both rising with `amount`. Gives oscillator-based voices
+   a ring / cavity character that bare sines lack. Returns { in, out }. */
+function makeBody(baseFreq, amount) {
+  const a = Math.max(0, Math.min(1, amount));
+  const peaks = [
+    { mult: 1.0, gainDB: 10 * a, Q: 1.5 + 7 * a },
+    { mult: 2.4, gainDB:  6 * a, Q: 1.5 + 5 * a },
+    { mult: 4.7, gainDB:  3 * a, Q: 1.5 + 4 * a },
+  ];
+  const filters = peaks.map(p => {
+    const f = actx.createBiquadFilter();
+    f.type = "peaking";
+    f.frequency.value = Math.min(20000, Math.max(40, baseFreq * p.mult));
+    f.Q.value = p.Q;
+    f.gain.value = p.gainDB;
+    return f;
+  });
+  for (let i = 0; i < filters.length - 1; i++) filters[i].connect(filters[i + 1]);
+  return { in: filters[0], out: filters[filters.length - 1] };
+}
+
+/* pull a species's settings into a compact object.
+   Chaos amplifies the per-pulse yuragi (pitch / amp / timing wobble)
+   in addition to bumping trigger rates, so a denser chorus also feels
+   more agitated, not just busier.
+   Pitch-tracking lowpass: when Track > 0, the effective cutoff scales
+   with pitch^track. At track = 1 the filter slides exactly with the
+   carrier; at track = 0 it stays at the absolute cutoff knob value. */
+function readSpecies(sp) {
+  const p = params[sp];
+  const c = params.master.chaos;
+  const chaosWobble = c <= 1 ? 1 : 1 + (c - 1) * 0.35;
+  /* Per-event distance — rolls each time the species fires. Depth = 0
+     means always near (no effect); Depth = 1 means events range from
+     dead-on to fully distant. Distance darkens the cutoff and dims
+     the per-event intensity. */
+  const dist = Math.random() * (p.depth || 0);
+  const trackedCut = p.cutoff * Math.pow(Math.max(0.01, p.pitch), p.track || 0);
+  return {
+    p,
+    wave: WAVES[Math.round(p.wave)] || "sine",
+    cut:  Math.max(100, Math.min(20000, trackedCut * (1 - dist * 0.55))),
+    dim:  1 - dist * 0.5,
+    dm:   p.decay,
+    rm:   p.random * chaosWobble,
+  };
+}
+
+/* ---------- VOICES: SIX NIGHT INSECTS ----------
+ * Each species is its own bus with Density / Level / Pitch / Pan dials.
+ *   Suzumushi  (鈴虫)    bell, ~4.4 kHz, slow rin… rin… rin…
+ *   Matsumushi (松虫)    quick metallic, ~5.8 kHz
+ *   Korogi     (蟋蟀)    cricket, ~3.4 kHz trill
+ *   Higurashi  (ヒグラシ) descending flute "kana-kana-kana"
+ *   Kanetataki (カネタタキ) tiny high bell, ~7 kHz, sparse
+ *   Kantan     (カンタン)  soft rolling AM trill
+ */
+
+/* a single bell-like pulse with a faint upper harmonic for shimmer.
+   waveType selects sine/triangle/square/sawtooth or white/pink/brown noise.
+   `bend` (optional) starts the fundamental & harmonic above pitch and
+   settles into the natural carrier — a per-pulse micro-FM.
+   `shape` 0 = single peak, 1 = biphasic (peak → dip → second peak), 2 = plateau.
+   `buzz` 0…1: amount of fast square-wave AM applied after the envelope —
+   emulates the multi-tooth stridulation strikes inside a pulse. */
+function bellPulse(t, freq, dur, peak, harmonic, dest, waveType, bend, shape, buzz) {
+  const wt = waveType || "sine";
+  const src = makeTone(wt, freq, t, dur);
+  applyBend(src, freq, bend, t, dur);
+
+  const env = actx.createGain();
+  const sh = Math.round(shape || 0);
+  if (sh === 1) {
+    /* biphasic — attack, partial decay, second peak, then tail */
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.006);
+    env.gain.exponentialRampToValueAtTime(peak * 0.45, t + dur * 0.35);
+    env.gain.linearRampToValueAtTime(peak * 0.9, t + dur * 0.55);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+  } else if (sh === 2) {
+    /* plateau — attack, long hold, late release */
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.008);
+    env.gain.setValueAtTime(peak, t + dur * 0.80);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+  } else {
+    /* single peak (default) */
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.006);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+  }
+
+  src.connect(env);
+  if (harmonic) {
+    const sh2 = makeTone(wt, freq * harmonic.mult, t, dur);
+    applyBend(sh2, freq * harmonic.mult, bend, t, dur);
+    const g  = actx.createGain(); g.gain.value = harmonic.gain;
+    sh2.connect(g).connect(env);
+  }
+  /* Optional tooth-strike AM applied post-envelope so the whole pulse
+     (fundamental + harmonic) buzzes at ~250–350 Hz. */
+  if (buzz && buzz > 0) {
+    const tg = actx.createGain();
+    tg.gain.value = 1 - buzz * 0.5;
+    const tlfo = actx.createOscillator();
+    tlfo.type = "square";
+    tlfo.frequency.value = 250 + Math.random() * 110;
+    const td = actx.createGain(); td.gain.value = buzz * 0.5;
+    tlfo.connect(td).connect(tg.gain);
+    tlfo.start(t); tlfo.stop(t + dur + 0.05);
+    env.connect(tg).connect(dest);
+  } else {
+    env.connect(dest);
+  }
+}
+
+/* small helper for the boilerplate at the end of every insect voice */
+function finishInsect(kind) {
+  flash[kind] = 1;
+  registerEvent(kind);
+  counts[kind]++;
+}
+
+function playSuzumushi(intensity) {
+  const start = actx.currentTime;
+  const s = readSpecies("suzumushi");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const pulses = 3 + Math.floor(Math.random() * 6);
+    const baseF  = (4200 + Math.random() * 500) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < pulses; i++) {
+      const dop = dopplerScale(pulses === 1 ? 0 : i / (pulses - 1), s.p.doppler);
+      const freq = (baseF + (Math.random() - 0.5) * 30 * s.rm) * dop;
+      const dur  = (0.10 + Math.random() * 0.07 * s.rm) * s.dm;
+      const peak = 0.18 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.06 }, lp, s.wave, s.p.bend, s.p.shape, s.p.buzz);
+      addClick(t, freq, peak, s.p.click, lp);
+      const ph = pulses === 1 ? 0 : i / (pulses - 1);
+      t += dur + (0.15 + Math.random() * 0.18 * s.rm) * phraseTempo(ph, s.p.phrase);
+    }
+    automatePan(pan, s.p.pan, s.p.move, start, t);
+  }
+  finishInsect("suzumushi");
+}
+
+function playMatsumushi(intensity) {
+  const start = actx.currentTime;
+  const s = readSpecies("matsumushi");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const pulses = 5 + Math.floor(Math.random() * 8);
+    const baseF  = (5600 + Math.random() * 600) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < pulses; i++) {
+      const dop = dopplerScale(pulses === 1 ? 0 : i / (pulses - 1), s.p.doppler);
+      const freq = (baseF + (Math.random() - 0.5) * 50 * s.rm) * dop;
+      const dur  = (0.045 + Math.random() * 0.035 * s.rm) * s.dm;
+      const peak = 0.13 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.045 }, lp, s.wave, s.p.bend, s.p.shape, s.p.buzz);
+      addClick(t, freq, peak, s.p.click, lp);
+      const ph = pulses === 1 ? 0 : i / (pulses - 1);
+      t += dur + (0.05 + Math.random() * 0.08 * s.rm) * phraseTempo(ph, s.p.phrase);
+    }
+    automatePan(pan, s.p.pan, s.p.move, start, t);
+  }
+  finishInsect("matsumushi");
+}
+
+function playKorogi(intensity) {
+  const start = actx.currentTime;
+  const s = readSpecies("korogi");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const pulses = 4 + Math.floor(Math.random() * 5);
+    const baseF  = (3200 + Math.random() * 400) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < pulses; i++) {
+      const phase = pulses === 1 ? 0 : i / (pulses - 1);
+      const dop   = dopplerScale(phase, s.p.doppler);
+      const freq  = baseF * (1 + (Math.random() - 0.5) * 0.04 * s.rm) * dop;
+      const dur   = (0.035 + Math.random() * 0.025 * s.rm) * s.dm;
+      const peak  = 0.12 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.035 }, lp, s.wave, s.p.bend, s.p.shape, s.p.buzz);
+      addClick(t, freq, peak, s.p.click, lp);
+      const gap = (0.045 + 0.025 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.02 * s.rm) * phraseTempo(phase, s.p.phrase);
+      t += dur + gap;
+    }
+    automatePan(pan, s.p.pan, s.p.move, start, t);
+  }
+  finishInsect("korogi");
+}
+
+function playKanetataki(intensity) {
+  const start = actx.currentTime;
+  const s = readSpecies("kanetataki");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const strikes = 1 + Math.floor(Math.random() * 3);
+    const baseF   = (6700 + Math.random() * 700) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < strikes; i++) {
+      const dop  = dopplerScale(strikes === 1 ? 0 : i / (strikes - 1), s.p.doppler);
+      const freq = (baseF + (Math.random() - 0.5) * 80 * s.rm) * dop;
+      const dur  = (0.025 + Math.random() * 0.025 * s.rm) * s.dm;
+      const peak = 0.085 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 3, gain: 0.05 }, lp, s.wave, s.p.bend, s.p.shape, s.p.buzz);
+      addClick(t, freq, peak, s.p.click, lp);
+      const ph = strikes === 1 ? 0 : i / (strikes - 1);
+      t += dur + (0.18 + Math.random() * 0.32 * s.rm) * phraseTempo(ph, s.p.phrase);
+    }
+    automatePan(pan, s.p.pan, s.p.move, start, t);
+  }
+  finishInsect("kanetataki");
+}
+
+function playHigurashi(intensity) {
+  const start = actx.currentTime;
+  const s = readSpecies("higurashi");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const tones = 3 + Math.floor(Math.random() * 4);
+    const baseStart = (2400 + Math.random() * 200) * s.p.pitch * detune;
+    const baseEnd   = baseStart * 0.72;
+    /* body tracks the mid-phrase frequency for stability */
+    const body = makeBody((baseStart + baseEnd) * 0.5, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < tones; i++) {
+      const phase = tones === 1 ? 0 : i / (tones - 1);
+      const dop   = dopplerScale(phase, s.p.doppler);
+      const dur   = (0.13 + Math.random() * 0.06 * s.rm) * s.dm;
+      const fS    = (baseStart + (Math.random() - 0.5) * 60 * s.rm) * dop;
+      const fE    = (baseEnd   + (Math.random() - 0.5) * 50 * s.rm) * dop;
+      const peak  = 0.13 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+
+      const src = makeToneRamp(s.wave, fS, fE, t, dur);
+      const env = actx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(peak, t + 0.02);
+      env.gain.setValueAtTime(peak, t + dur - 0.04);
+      env.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      src.connect(env);
+      for (const h of [{m:2, g:0.10}, {m:3, g:0.04}]) {
+        const ho = makeToneRamp(s.wave, fS * h.m, fE * h.m, t, dur);
+        const g = actx.createGain(); g.gain.value = h.g;
+        ho.connect(g).connect(env);
+      }
+      env.connect(lp);
+      addClick(t, fS, peak, s.p.click, lp);
+
+      const gap = (0.06 + 0.10 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.04 * s.rm) * phraseTempo(phase, s.p.phrase);
+      t += dur + gap;
+    }
+    automatePan(pan, s.p.pan, s.p.move, start, t);
+  }
+  finishInsect("higurashi");
+}
+
+function playKantan(intensity) {
+  const start  = actx.currentTime;
+  const s      = readSpecies("kantan");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan    = panNode(0.9, s.p.pan);
+    const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const dur    = (1.0 + Math.random() * 1.5) * s.dm;
+    const baseF  = (3900 + Math.random() * 350) * s.p.pitch * detune;
+    const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp     = body.in;
+    const amRate = 22 + Math.random() * 8;
+    const peak   = 0.085 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+
+    const src  = makeTone(s.wave, baseF,     start, dur);
+    const src2 = makeTone(s.wave, baseF * 2, start, dur);
+    applyBend(src,  baseF,     s.p.bend, start, dur);
+    applyBend(src2, baseF * 2, s.p.bend, start, dur);
+    const g2 = actx.createGain(); g2.gain.value = 0.06;
+    src2.connect(g2);
+
+    const amOsc = actx.createOscillator();
+    amOsc.type = "sine"; amOsc.frequency.value = amRate;
+    const amDepth = actx.createGain(); amDepth.gain.value = 0.5;
+    amOsc.connect(amDepth);
+    const am = actx.createGain(); am.gain.value = 0.5;
+    amDepth.connect(am.gain);
+
+    const env = actx.createGain();
+    env.gain.setValueAtTime(0, start);
+    env.gain.linearRampToValueAtTime(peak, start + 0.15);
+    env.gain.setValueAtTime(peak, start + dur - 0.30);
+    env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
+
+    src.connect(am); g2.connect(am);
+    am.connect(env).connect(lp);
+    addClick(start, baseF, peak, s.p.click, lp);
+    amOsc.start(start); amOsc.stop(start + dur + 0.05);
+    automatePan(pan, s.p.pan, s.p.move, start, start + dur);
+  }
+  finishInsect("kantan");
+}
+
+/* ウマオイ — "sui-cho!" upglide + descending vibrato pair */
+function playUmaoi(intensity) {
+  const start = actx.currentTime;
+  const s = readSpecies("umaoi");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    /* body tracks the typical sui/cho centre — about 3 kHz × pitch */
+    const body = makeBody(3000 * s.p.pitch * detune, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    const pairs = Math.random() < 0.30 ? 2 : 1;
+    let t = start;
+    for (let pp = 0; pp < pairs; pp++) {
+      const suiF = (3200 + Math.random() * 200) * s.p.pitch * detune;
+      const suiDur = (0.075 + Math.random() * 0.025 * s.rm) * s.dm;
+      {
+        const src = makeToneRamp(s.wave, suiF, suiF * 1.06, t, suiDur);
+        const env = actx.createGain();
+        const peak = 0.11 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(peak, t + 0.012);
+        env.gain.exponentialRampToValueAtTime(0.0005, t + suiDur);
+        src.connect(env);
+        const h = makeToneRamp(s.wave, suiF * 2, suiF * 2 * 1.06, t, suiDur);
+        const hg = actx.createGain(); hg.gain.value = 0.06;
+        h.connect(hg).connect(env);
+        env.connect(lp);
+        addClick(t, suiF, peak, s.p.click, lp);
+      }
+      t += suiDur + 0.04;
+      const choF   = suiF * 0.92;
+      const choDur = (0.16 + Math.random() * 0.05 * s.rm) * s.dm;
+      {
+        const src = makeToneRamp(s.wave, choF, choF * 0.86, t, choDur);
+        const vib = actx.createOscillator();
+        vib.frequency.value = 12 + Math.random() * 4;
+        const vibG = actx.createGain(); vibG.gain.value = 9;
+        vib.connect(vibG).connect(src.frequency);
+        const env = actx.createGain();
+        const peak = 0.12 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(peak, t + 0.018);
+        env.gain.setValueAtTime(peak, t + choDur - 0.04);
+        env.gain.exponentialRampToValueAtTime(0.0005, t + choDur);
+        src.connect(env).connect(lp);
+        vib.start(t); vib.stop(t + choDur + 0.02);
+      }
+      t += choDur + 0.35 + Math.random() * 0.30 * s.rm;
+    }
+    automatePan(pan, s.p.pan, s.p.move, start, t);
+  }
+  finishInsect("umaoi");
+}
+
+
+/* クサヒバリ — grass-lark, tiny silvery continuous trill */
+function playKusahibari(intensity) {
+  const start  = actx.currentTime;
+  const s      = readSpecies("kusahibari");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan    = panNode(0.9, s.p.pan);
+    const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const dur    = (0.8 + Math.random() * 0.9) * s.dm;
+    const baseF  = (7200 + Math.random() * 500) * s.p.pitch * detune;
+    const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp     = body.in;
+    const amRate = 28 + Math.random() * 10;
+    const peak   = 0.06 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+
+    const src = makeTone(s.wave, baseF, start, dur);
+    applyBend(src, baseF, s.p.bend, start, dur);
+
+    const amOsc = actx.createOscillator();
+    amOsc.type = "sine"; amOsc.frequency.value = amRate;
+    const amDepth = actx.createGain(); amDepth.gain.value = 0.5;
+    amOsc.connect(amDepth);
+    const am = actx.createGain(); am.gain.value = 0.5;
+    amDepth.connect(am.gain);
+
+    const env = actx.createGain();
+    env.gain.setValueAtTime(0, start);
+    env.gain.linearRampToValueAtTime(peak, start + 0.10);
+    env.gain.setValueAtTime(peak, start + dur - 0.20);
+    env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
+
+    src.connect(am).connect(env).connect(lp);
+    addClick(start, baseF, peak, s.p.click, lp);
+    amOsc.start(start); amOsc.stop(start + dur + 0.05);
+    automatePan(pan, s.p.pan, s.p.move, start, start + dur);
+  }
+  finishInsect("kusahibari");
+}
+
+/* エンマコオロギ — large field cricket, deep "korokoro-rii" trill */
+function playEnmakorogi(intensity) {
+  const start = actx.currentTime;
+  const s = readSpecies("enmakorogi");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan = panNode(0.9, s.p.pan);
+    const filt = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const pulses = 5 + Math.floor(Math.random() * 5);
+    const baseF  = (2400 + Math.random() * 300) * s.p.pitch * detune;
+    const body = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp = body.in;
+    let t = start;
+    for (let i = 0; i < pulses; i++) {
+      const phase = pulses === 1 ? 0 : i / (pulses - 1);
+      const dop   = dopplerScale(phase, s.p.doppler);
+      const freq  = baseF * (1 + (Math.random() - 0.5) * 0.035 * s.rm) * dop;
+      const dur   = (0.055 + Math.random() * 0.030 * s.rm) * s.dm;
+      const peak  = 0.14 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+      bellPulse(t, freq, dur, peak, { mult: 2, gain: 0.055 }, lp, s.wave, s.p.bend, s.p.shape, s.p.buzz);
+      addClick(t, freq, peak, s.p.click, lp);
+      const gap = (0.060 + 0.040 * (1 - Math.sin(phase * Math.PI)) + Math.random() * 0.020 * s.rm) * phraseTempo(phase, s.p.phrase);
+      t += dur + gap;
+    }
+    automatePan(pan, s.p.pan, s.p.move, start, t);
+  }
+  finishInsect("enmakorogi");
+}
+
+/* アオマツムシ — green pine cricket, continuous "ri-ri-ri" trill */
+function playAomatsumushi(intensity) {
+  const start  = actx.currentTime;
+  const s      = readSpecies("aomatsumushi");
+  intensity *= s.dim;
+  const voices = Math.max(1, Math.round(s.p.voices));
+  const intScale = 1 / Math.sqrt(voices);
+  for (let v = 0; v < voices; v++) {
+    const detune = chorusDetune(s, voices);
+    const pan    = panNode(0.9, s.p.pan);
+    const filt   = makeLP(s.cut); filt.connect(pan); if (grainBus) filt.connect(grainBus.send);
+    const dur    = (1.2 + Math.random() * 1.6) * s.dm;
+    const baseF  = (4500 + Math.random() * 400) * s.p.pitch * detune;
+    const body   = makeBody(baseF, s.p.body); body.out.connect(filt);
+    const lp     = body.in;
+    const amRate = 13 + Math.random() * 4;
+    const peak   = 0.10 * intensity * intScale * s.p.lvl * (1 + (Math.random() - 0.5) * 0.30 * s.rm);
+
+    const src  = makeTone(s.wave, baseF,     start, dur);
+    const src2 = makeTone(s.wave, baseF * 2, start, dur);
+    applyBend(src,  baseF,     s.p.bend, start, dur);
+    applyBend(src2, baseF * 2, s.p.bend, start, dur);
+    const g2 = actx.createGain(); g2.gain.value = 0.05;
+    src2.connect(g2);
+
+    const amOsc = actx.createOscillator();
+    amOsc.type = "triangle"; amOsc.frequency.value = amRate;
+    const amDepth = actx.createGain(); amDepth.gain.value = 0.55;
+    amOsc.connect(amDepth);
+    const am = actx.createGain(); am.gain.value = 0.45;
+    amDepth.connect(am.gain);
+
+    const env = actx.createGain();
+    env.gain.setValueAtTime(0, start);
+    env.gain.linearRampToValueAtTime(peak, start + 0.18);
+    env.gain.setValueAtTime(peak, start + dur - 0.30);
+    env.gain.exponentialRampToValueAtTime(0.0005, start + dur);
+
+    src.connect(am); g2.connect(am);
+    am.connect(env).connect(lp);
+    addClick(start, baseF, peak, s.p.click, lp);
+    amOsc.start(start); amOsc.stop(start + dur + 0.05);
+    automatePan(pan, s.p.pan, s.p.move, start, start + dur);
+  }
+  finishInsect("aomatsumushi");
+}
+
+/* ---------- VOICE: RASP ---------- */
+/* short sine bursts in rapid sequence — leaf chewing / wing stridulation */
+function playRasp(intensity) {
+  const start = actx.currentTime;
+  const nTicks = 4 + Math.floor(Math.random() * 16);
+  const baseFreq = 1800 + Math.random() * 2800;
+  const drift = (Math.random() < 0.5 ? -1 : 1) * (0.10 + Math.random() * 0.30);
+  const pan = panNode(0.85, params.rasp.pan);
+  /* a shared tap so every tick feeds both the dry pan and the granular bus */
+  const tap = actx.createGain();
+  tap.gain.value = 1;
+  tap.connect(pan);
+  if (grainBus) tap.connect(grainBus.send);
+  const lvl  = params.rasp.lvl;
+  const rate = params.rasp.rate;
+
+  let t = start;
+  for (let i = 0; i < nTicks; i++) {
+    const phase = nTicks === 1 ? 0 : i / (nTicks - 1);
+    const freq  = baseFreq * (1 + drift * phase) + (Math.random() - 0.5) * 150;
+    const tickDur = 0.0025 + Math.random() * 0.006;
+
+    const osc = actx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = Math.max(80, freq);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.22 * intensity * lvl, t + 0.0008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tickDur);
+    osc.connect(g).connect(tap);
+    osc.start(t);
+    osc.stop(t + tickDur + 0.002);
+
+    /* spacing: jittery, accelerates mid-burst (parabolic dip) */
+    const accel = 1 - 0.45 * Math.sin(phase * Math.PI);
+    const spacing = (0.012 + 0.030 * Math.random()) * accel / rate;
+    t += spacing;
+  }
+
+  flash.rasp = 1;
+  registerEvent("rasp");
+  counts.rasp++;
+}
+
+/* ---------- VOICE: SCRAPING ---------- */
+function playScrape(intensity) {
+  const now = actx.currentTime;
+  const dur = 1.6 + Math.random() * 2.4;
+  const grit = params.scrape.grit;
+  const lvl  = params.scrape.lvl;
+
+  const src = actx.createBufferSource();
+  src.buffer = noiseBufs.pink;
+  src.loop = true;
+  src.playbackRate.value = 0.5 + Math.random() * 0.4;
+
+  const bp = actx.createBiquadFilter();
+  bp.type = "bandpass";
+  const fStart = 220 + Math.random() * 280;
+  const fEnd   = fStart * (0.6 + Math.random() * 0.8);
+  bp.frequency.setValueAtTime(fStart, now);
+  bp.frequency.linearRampToValueAtTime(fEnd, now + dur);
+  bp.Q.value = (9 + Math.random() * 6) * grit;
+
+  const lfo = actx.createOscillator();
+  lfo.type = "sawtooth";
+  lfo.frequency.value = (14 + Math.random() * 24) * grit;
+  const lfoG = actx.createGain();
+  lfoG.gain.value = 0.6;
+  lfo.connect(lfoG);
+  const grain = actx.createGain();
+  grain.gain.value = 0.7;
+  lfoG.connect(grain.gain);
+
+  const lp = actx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 2400;
+
+  const env = actx.createGain();
+  const peak = 0.18 * intensity * lvl;
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(peak, now + 0.4);
+  env.gain.setValueAtTime(peak, now + dur - 0.6);
+  env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
+
+  src.connect(bp).connect(grain).connect(lp).connect(env);
+  env.connect(panNode(0.7, params.scrape.pan));
+  const gtS = grainTarget("scrape");
+  if (gtS) env.connect(gtS);
+  src.start(now); lfo.start(now);
+  src.stop(now + dur + 0.05); lfo.stop(now + dur + 0.05);
+
+  flash.scrape = 1;
+  registerEvent("scrape");
+  counts.scrape++;
+}
+
+/* ---------- VOICE: TUBE WIND ---------- */
+function playTubeWind(intensity) {
+  const now = actx.currentTime;
+  const dur = 3.0 + Math.random() * 4.0;
+  const tube = params.wind.tube;
+  const lvl  = params.wind.lvl;
+  const fund = (180 + Math.random() * 220) * tube;
+
+  const src = actx.createBufferSource();
+  src.buffer = noiseBufs.pink;
+  src.loop = true;
+
+  const merge = actx.createGain();
+  merge.gain.value = 1.0;
+  const partials = [
+    { f: fund,     q: 24, g: 1.0  },
+    { f: fund * 3, q: 28, g: 0.55 },
+    { f: fund * 5, q: 30, g: 0.30 },
+  ];
+  partials.forEach(p => {
+    const bp = actx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = p.f;
+    bp.Q.value = p.q;
+    const g = actx.createGain();
+    g.gain.value = p.g;
+    src.connect(bp).connect(g).connect(merge);
+
+    const lfo = actx.createOscillator();
+    lfo.frequency.value = 0.2 + Math.random() * 0.4;
+    const lfoG = actx.createGain();
+    lfoG.gain.value = p.f * 0.012;
+    lfo.connect(lfoG).connect(bp.frequency);
+    lfo.start(now); lfo.stop(now + dur + 0.1);
+  });
+
+  const env = actx.createGain();
+  const peak = 0.32 * intensity * lvl;
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(peak, now + 0.8);
+  env.gain.setValueAtTime(peak, now + dur - 1.0);
+  env.gain.exponentialRampToValueAtTime(0.0005, now + dur);
+
+  merge.connect(env);
+  env.connect(panNode(0.55, params.wind.pan));
+  const gtW = grainTarget("wind");
+  if (gtW) env.connect(gtW);
+  src.start(now);
+  src.stop(now + dur + 0.05);
+
+  flash.wind = 1;
+  registerEvent("wind");
+  counts.wind++;
+}
+
+/* ---------- DRONE ---------- */
+function startDrone() {
+  const now = actx.currentTime;
+  const inner = actx.createGain();
+  inner.gain.value = 0.14;
+
+  const k = params.drone.key;
+  const a = actx.createOscillator(); a.type = "sine"; a.frequency.value = k;
+  const b = actx.createOscillator(); b.type = "sine"; b.frequency.value = k + 0.5;
+  const c = actx.createOscillator(); c.type = "sine"; c.frequency.value = k * 2 + 0.2;
+  const cg = actx.createGain(); cg.gain.value = 0.4;
+  c.connect(cg);
+
+  const swell = actx.createOscillator();
+  swell.frequency.value = 0.03;
+  const swellG = actx.createGain();
+  swellG.gain.value = 0.07;
+  swell.connect(swellG).connect(inner.gain);
+
+  a.connect(inner); b.connect(inner); cg.connect(inner);
+
+  /* outer gain + pan are knob-controlled */
+  const droneOut = actx.createGain();
+  droneOut.gain.value = params.drone.lvl;
+  const dronePan = actx.createStereoPanner();
+  dronePan.pan.value = params.drone.pan;
+  inner.connect(droneOut).connect(dronePan).connect(master);
+
+  /* Yuragi — three uncorrelated slow LFOs (~0.07 / 0.11 / 0.13 Hz)
+     gently wander each oscillator's pitch by a few cents. Depth is
+     params.drone.yuragi × per-osc weight. */
+  const yRates  = [0.07, 0.11, 0.13];
+  const yDepths = [0.6, 0.6, 1.0];   // c (twice-key) gets a bigger swing
+  const yOscs   = [a, b, c];
+  const yuragi = [];
+  for (let i = 0; i < 3; i++) {
+    const lfo = actx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = yRates[i];
+    const depth = actx.createGain();
+    depth.gain.value = params.drone.yuragi * yDepths[i];
+    lfo.connect(depth).connect(yOscs[i].frequency);
+    lfo.start(now);
+    yuragi.push({ lfo, depth, weight: yDepths[i] });
+  }
+
+  /* Polymodulation — cross-FM. osc_a's output drives osc_c's frequency,
+     and osc_c's drives osc_b's. Depth scales with params.drone.poly so
+     poly = 0 is silent / inert. */
+  const polyAC = actx.createGain();
+  polyAC.gain.value = params.drone.poly * 120;
+  a.connect(polyAC).connect(c.frequency);
+  const polyCB = actx.createGain();
+  polyCB.gain.value = params.drone.poly * 35;
+  c.connect(polyCB).connect(b.frequency);
+
+  a.start(now); b.start(now); c.start(now); swell.start(now);
+  droneNodes = { inner, droneOut, dronePan, a, b, c, yuragi, polyAC, polyCB };
+  flash.drone = 1;
+}
+
+/* Resolve a voice's granular-bus tap. Falls back to the shared
+   grainBus.send when the voice has no per-voice send knob. */
+function grainTarget(voiceName) {
+  if (!grainBus) return null;
+  return (voiceSends && voiceSends[voiceName]) ? voiceSends[voiceName] : grainBus.send;
+}
+
+/* Continuous scrape bed — brown noise through a band-pass that sits
+   in the low-mid range with a slow Yuragi LFO modulating the centre.
+   Quiet by default; the triggered playScrape() events still fire as
+   discrete strokes on top. */
+function startScrapeBed() {
+  const now = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBufs.brown;
+  src.loop = true;
+  src.playbackRate.value = 0.4 + Math.random() * 0.3;
+
+  const hp = actx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 90;
+
+  const bp = actx.createBiquadFilter();
+  bp.type = "bandpass";
+  const baseF = 280 * params.scrape.grit;
+  bp.frequency.value = baseF;
+  bp.Q.value = 7;
+
+  const lp = actx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 2200;
+
+  const bedG = actx.createGain();
+  bedG.gain.value = params.scrape.lvl * 0.08;
+  const bedPan = actx.createStereoPanner();
+  bedPan.pan.value = params.scrape.pan;
+
+  src.connect(hp).connect(bp).connect(lp).connect(bedG).connect(bedPan).connect(master);
+  const gt = grainTarget("scrape");
+  if (gt) bedG.connect(gt);
+
+  const yLFO = actx.createOscillator();
+  yLFO.type = "sine"; yLFO.frequency.value = 0.09;
+  const yDepth = actx.createGain();
+  yDepth.gain.value = params.scrape.yuragi * baseF * 0.5;
+  yLFO.connect(yDepth).connect(bp.frequency);
+
+  src.start(now); yLFO.start(now);
+  scrapeBedNodes = { src, hp, bp, lp, bedG, bedPan, yLFO, yDepth };
+}
+
+/* Continuous wind bed — pink noise through a high-pass and two
+   uncorrelated resonant band-passes tracking the Tube fundamental
+   and its 3rd partial. Two slow LFOs modulate the band-pass centres
+   so the timbre is constantly moving; depth = params.wind.yuragi.
+   The triggered playTubeWind() events still sound on top as gusts. */
+function startWindBed() {
+  const now = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBufs.pink;
+  src.loop = true;
+  src.playbackRate.value = 0.5 + Math.random() * 0.5;
+
+  const hp = actx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 80;
+
+  const fund = 230 * params.wind.tube;
+
+  const bp1 = actx.createBiquadFilter();
+  bp1.type = "bandpass";
+  bp1.frequency.value = fund;
+  bp1.Q.value = 12;
+
+  const bp2 = actx.createBiquadFilter();
+  bp2.type = "bandpass";
+  bp2.frequency.value = fund * 3;
+  bp2.Q.value = 16;
+
+  const g1 = actx.createGain(); g1.gain.value = 1.0;
+  const g2 = actx.createGain(); g2.gain.value = 0.45;
+
+  const mix = actx.createGain(); mix.gain.value = 1.0;
+  const bedG = actx.createGain();
+  bedG.gain.value = params.wind.lvl * 0.16;
+  const bedPan = actx.createStereoPanner();
+  bedPan.pan.value = params.wind.pan;
+
+  /* one source fans out to two parallel filter paths */
+  src.connect(hp);
+  hp.connect(bp1).connect(g1).connect(mix);
+  hp.connect(bp2).connect(g2).connect(mix);
+  mix.connect(bedG).connect(bedPan).connect(master);
+  const gtWB = grainTarget("wind");
+  if (gtWB) bedG.connect(gtWB);
+
+  /* Yuragi LFOs on the band-pass centres */
+  const yLFO1 = actx.createOscillator();
+  yLFO1.type = "sine"; yLFO1.frequency.value = 0.13;
+  const yDepth1 = actx.createGain();
+  yDepth1.gain.value = params.wind.yuragi * fund * 0.35;
+  yLFO1.connect(yDepth1).connect(bp1.frequency);
+
+  const yLFO2 = actx.createOscillator();
+  yLFO2.type = "sine"; yLFO2.frequency.value = 0.19;
+  const yDepth2 = actx.createGain();
+  yDepth2.gain.value = params.wind.yuragi * fund * 3 * 0.35;
+  yLFO2.connect(yDepth2).connect(bp2.frequency);
+
+  src.start(now); yLFO1.start(now); yLFO2.start(now);
+  windBedNodes = { src, hp, bp1, bp2, g1, g2, mix, bedG, bedPan, yLFO1, yLFO2, yDepth1, yDepth2 };
+}
+
+/* Distant chorus bed — a continuous ambient layer of slowly-drifting
+   high sines, sent into both master (faintly) and the granular bus
+   (heavily) for a deep-distance shimmer. Master Bed dial controls
+   loudness; at Bed = 0 nothing is heard. */
+function startChorusBed() {
+  const now = actx.currentTime;
+  const out = actx.createGain();
+  out.gain.value = params.master.bed * 0.25;
+
+  const lp = actx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 6500;
+
+  for (let i = 0; i < 5; i++) {
+    const baseFreq = 3000 + Math.random() * 4500;
+    const osc = actx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = baseFreq;
+
+    /* slow random frequency drift */
+    const drift = actx.createOscillator();
+    drift.type = "sine";
+    drift.frequency.value = 0.04 + Math.random() * 0.10;
+    const driftG = actx.createGain();
+    driftG.gain.value = baseFreq * 0.018;
+    drift.connect(driftG).connect(osc.frequency);
+
+    /* slow amplitude wave per voice */
+    const g = actx.createGain();
+    g.gain.value = 0.03 + Math.random() * 0.02;
+    const lfo = actx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.02 + Math.random() * 0.08;
+    const lfoG = actx.createGain();
+    lfoG.gain.value = 0.018;
+    lfo.connect(lfoG).connect(g.gain);
+
+    osc.connect(g).connect(lp);
+    osc.start(now); drift.start(now); lfo.start(now);
+  }
+
+  lp.connect(out);
+  out.connect(master);
+  if (grainBus) out.connect(grainBus.send);
+
+  chorusBedNodes = { out };
+}
+
+/* ==================================================================
+   TIDAL CONDUCTOR
+   ================================================================== */
+function cycleSeconds() { return params.master.cycleMin * 60; }
+
+function tideLevel(tSec) {
+  const C = cycleSeconds();
+  const m2 = Math.sin(TWO_PI * tSec / C);
+  const s2 = 0.18 * Math.sin(TWO_PI * tSec / (C * 2.7) + 1.1);
+  return Math.max(-1, Math.min(1, m2 + s2));
+}
+function tideDerivative(tSec) {
+  const e = Math.max(0.2, cycleSeconds() * 0.001);
+  return (tideLevel(tSec + e) - tideLevel(tSec - e)) / (2 * e);
+}
+
+function phaseLabel(level, deriv) {
+  if (level > 0.75) return "HIGH";
+  if (level < -0.75) return "LOW";
+  return deriv > 0 ? "FLOOD" : "EBB";
+}
+
+function rates(level, deriv) {
+  const rising  = Math.max(0, deriv);
+  const falling = Math.max(0, -deriv);
+  /* a shared bias curve: zero at very low tide, peaks past +0.5 */
+  const night = Math.max(0, level + 0.20);
+  /* Global Chaos multiplier — lifts every trigger rate uniformly so
+     1.0 = the curated default and e.g. 4.0 = four-times-denser chorus. */
+  const c = params.master.chaos;
+  /* Dolbear-style Temperature scaling — at 22 °C the factor is 1.0;
+     it drops toward 0 near 5 °C (silent cold) and reaches ~1.76 at
+     35 °C (peak summer activity). */
+  const tf = Math.max(0, (params.master.temp - 5) / 17);
+  const k = c * tf;
+  return {
+    suzumushi:    k * (0.012 + 0.135 * night) * params.suzumushi.density,
+    matsumushi:   k * (0.006 + 0.070 * night) * params.matsumushi.density,
+    korogi:       k * (0.006 + 0.070 * night) * params.korogi.density,
+    higurashi:    k * (0.004 + 0.045 * Math.max(0, 1 - Math.abs(level))) * params.higurashi.density,
+    kanetataki:   k * (0.007 + 0.080 * night) * params.kanetataki.density,
+    kantan:       k * (0.003 + 0.035 * night) * params.kantan.density,
+    umaoi:        k * (0.003 + 0.030 * night) * params.umaoi.density,
+    kusahibari:   k * (0.005 + 0.050 * night) * params.kusahibari.density,
+    enmakorogi:   k * (0.004 + 0.050 * night) * params.enmakorogi.density,
+    aomatsumushi: k * (0.005 + 0.060 * night) * params.aomatsumushi.density,
+    rasp:   k * (0.10 + 1.0 * Math.max(0, level + 0.25) ** 1.1) * params.rasp.density,
+    scrape: k * (0.05 + 0.9 * Math.max(0, -level) ** 1.4 + 0.4 * falling) * params.scrape.density,
+    wind:   k * (0.03 + 0.9 * rising * Math.sqrt(Math.max(0, 1 - level * level))) * params.wind.density,
+  };
+}
+
+const VOICE_FN = {
+  suzumushi:    playSuzumushi,
+  matsumushi:   playMatsumushi,
+  korogi:       playKorogi,
+  higurashi:    playHigurashi,
+  kanetataki:   playKanetataki,
+  kantan:       playKantan,
+  umaoi:        playUmaoi,
+  kusahibari:   playKusahibari,
+  enmakorogi:   playEnmakorogi,
+  aomatsumushi: playAomatsumushi,
+  rasp:         playRasp,
+  scrape:       playScrape,
+  wind:         playTubeWind,
+};
+
+function maybeTrigger(now) {
+  if (!running) return;
+  const t = now - T0;
+  const lvl = conductorLevel(t);
+  const der = conductorDerivative(t);
+  const r = rates(lvl, der);
+  for (const kind of ALL_KINDS) {
+    if (now >= nextDue[kind]) {
+      const rate = Math.max(0.0005, r[kind]);
+      const intensity = 0.6 + Math.min(1.2, rate * 1.5) * 0.4;
+      /* still advance the schedule when muted/soloed-out, so unmuting
+         doesn't release a burst of pent-up events */
+      if (isAudible(kind)) VOICE_FN[kind](intensity);
+      /* Antiphony: with probability `anti`, fire the next event as a
+         tight 250-500 ms response rather than waiting the natural
+         Poisson gap. Creates pair-call / call-and-response patterns. */
+      const anti = (params[kind] && params[kind].anti) || 0;
+      let wait;
+      if (anti > 0 && Math.random() < anti) {
+        wait = 0.25 + Math.random() * 0.25;
+      } else {
+        wait = -Math.log(1 - Math.random()) / rate;
+      }
+      nextDue[kind] = now + Math.max(0.1, wait);
+    }
+  }
+}
+
+/* ==================================================================
+   VISUAL
+   ================================================================== */
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  W = Math.max(100, Math.floor(r.width));
+  H = Math.max(100, Math.floor(r.height));
+  cv.width = W * DPR; cv.height = H * DPR;
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+
+function draw(nowMs) {
+  const t = nowMs / 1000 - T0;
+  ctx.clearRect(0, 0, W, H);
+
+  const lvl = conductorLevel(t);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  const top = Math.max(0, lvl);
+  g.addColorStop(0, `rgba(255,255,255,${0.012 + 0.02 * top})`);
+  g.addColorStop(1, `rgba(255,255,255,0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, H/2); ctx.lineTo(W, H/2);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.025)";
+  for (const y of [0.25, 0.75]) {
+    const yy = H * y;
+    ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke();
+  }
+
+  const span = cycleSeconds();
+  const t0 = t - span / 2;
+
+  ctx.strokeStyle = "rgba(255,255,255,0.04)";
+  for (let i = 0; i <= 12; i++) {
+    const tt = t0 + (i / 12) * span;
+    const x = (tt - t0) / span * W;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+
+  ctx.strokeStyle = "rgba(236,236,236,0.85)";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  const steps = W;
+  for (let i = 0; i <= steps; i++) {
+    const tt = t0 + (i / steps) * span;
+    const y = H/2 - conductorLevel(tt) * (H * 0.42);
+    if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
+  }
+  ctx.stroke();
+
+  const cutoff = t0;
+  while (events.length && events[0].t < cutoff) events.shift();
+  /* colors for canvas markers — kept in sync with the CSS dot colors */
+  const colorOf = {
+    suzumushi:    "rgba(246,246,246,",
+    kanetataki:   "rgba(239,239,239,",
+    matsumushi:   "rgba(226,226,226,",
+    kusahibari:   "rgba(237,237,237,",
+    kantan:       "rgba(214,214,214,",
+    aomatsumushi: "rgba(206,206,206,",
+    umaoi:        "rgba(192,192,192,",
+    korogi:       "rgba(182,182,182,",
+    higurashi:    "rgba(164,164,164,",
+    enmakorogi:   "rgba(142,142,142,",
+    rasp:         "rgba(216,216,216,",
+    scrape:       "rgba(170,170,170,",
+    wind:         "rgba(126,126,126,",
+  };
+  for (const e of events) {
+    const x = (e.t - t0) / span * W;
+    const ev_lvl = tideLevel(e.t);
+    const y = H/2 - ev_lvl * (H * 0.42);
+    const age = (t - e.t) / span;
+    const alpha = Math.max(0, 0.9 - age * 0.9);
+    ctx.fillStyle = (colorOf[e.kind] || "rgba(200,200,200,") + alpha + ")";
+    ctx.beginPath();
+    const r = e.kind === "wind" ? 5 : e.kind === "scrape" ? 3.5 : e.kind === "rasp" ? 2.2 : 2;
+    ctx.arc(x, y, r, 0, TWO_PI);
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = "rgba(236,236,236,0.55)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const xn = W / 2;
+  ctx.moveTo(xn, 0); ctx.lineTo(xn, H); ctx.stroke();
+  const yn = H/2 - lvl * (H * 0.42);
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(xn, yn, 3.5, 0, TWO_PI); ctx.fill();
+  ctx.fillStyle = "rgba(236,236,236,0.55)";
+  ctx.font = "9px Helvetica Neue, Helvetica, Arial, sans-serif";
+  ctx.fillText("NOW", xn + 6, 14);
+}
+
+/* ==================================================================
+   CONTROL PANEL — build & bind 15 knobs
+   ================================================================== */
+const fmt2 = v => v.toFixed(2);
+const fmtPan = v => Math.abs(v) < 0.005 ? "  C" : (v < 0 ? "L" + Math.round(-v * 100) : "R" + Math.round(v * 100));
+
+const fmtHz = v => v >= 1000 ? (v/1000).toFixed(1) + "k" : Math.round(v) + "";
+const fmtWave = v => WAVE_LABEL[WAVES[Math.round(v)]] || "—";
+const fmtDB = v => v <= 0.0005 ? "−∞" : ((v >= 1 ? "+" : "") + (20 * Math.log10(v)).toFixed(1));
+
+/* one insect species knob set — 11 dials, laid out in a 3-column grid */
+function insectKnobs() {
+  return [
+    { id:"density", lbl:"Density", min:0,   max:3,     def:1.0,   fmt: fmt2 },
+    { id:"lvl",     lbl:"Level",   min:0,   max:2,     def:1.0,   fmt: fmt2 },
+    { id:"pitch",   lbl:"Pitch",   min:0.5, max:2,     def:1.0,   fmt: fmt2 },
+    { id:"pan",     lbl:"Pan",     min:-1,  max:1,     def:0.0,   fmt: fmtPan },
+    { id:"wave",    lbl:"Wave",    min:0,   max:6,     def:0,     step:1, fmt: fmtWave },
+    { id:"cutoff",  lbl:"Cut",     min:200, max:14000, def:12000, step:50, fmt: fmtHz },
+    { id:"decay",   lbl:"Decay",   min:0.3, max:3,     def:1.0,   fmt: fmt2 },
+    { id:"random",  lbl:"Random",  min:0,   max:2,     def:1.0,   fmt: fmt2 },
+    { id:"body",    lbl:"Body",    min:0,   max:1,     def:0.4,   fmt: fmt2 },
+    { id:"voices",  lbl:"Voices",  min:1,   max:6,     def:1,     step:1, fmt: v => Math.round(v) + "" },
+    { id:"detune",  lbl:"Detune",  min:0,   max:60,    def:8,     fmt: v => v.toFixed(0) + "c" },
+    { id:"click",   lbl:"Click",   min:0,   max:1,     def:0.25,  fmt: fmt2 },
+    { id:"track",   lbl:"Track",   min:0,   max:1,     def:0,     fmt: fmt2 },
+    { id:"bend",    lbl:"Bend",    min:0,   max:0.05,  def:0.012, fmt: v => (v*100).toFixed(1) + "%" },
+    { id:"shape",   lbl:"Shape",   min:0,   max:2,     def:0,     step:1, fmt: v => ["1pk","2pk","plat"][Math.round(v)] || "?" },
+    { id:"anti",    lbl:"Anti",    min:0,   max:1,     def:0,     fmt: fmt2 },
+    { id:"depth",   lbl:"Depth",   min:0,   max:1,     def:0,     fmt: fmt2 },
+    { id:"phrase",  lbl:"Phrase",  min:0,   max:4,     def:0,     step:1,
+      fmt: v => ["even","acc","dec","arch","dip"][Math.round(v)] || "?" },
+    { id:"move",    lbl:"Move",    min:0,   max:1,     def:0,     fmt: fmt2 },
+    { id:"doppler", lbl:"Doppler", min:0,   max:1,     def:0,     fmt: fmt2 },
+    { id:"buzz",    lbl:"Buzz",    min:0,   max:1,     def:0,     fmt: fmt2 },
+  ];
+}
+
+/* Doppler-style per-phrase pitch glide. Amount = 0 → 1.0 (no shift).
+   At amount = 1 the pitch starts +2 % above the carrier, settles
+   through it mid-phrase, and finishes 2 % below — a quick fly-by. */
+function dopplerScale(phase, amount) {
+  if (!amount || amount <= 0) return 1;
+  const a = Math.max(0, Math.min(1, amount));
+  const profile = 1 - 2 * Math.max(0, Math.min(1, phase));
+  return 1 + a * 0.02 * profile;
+}
+
+/* Schedule a linear pan sweep across a phrase. At move = 0 nothing
+   moves. At move = 1 the pan rolls up to ±0.7 from the species's
+   base pan position, drifting across the full phrase. */
+function automatePan(pan, basePan, move, tStart, tEnd) {
+  if (!move || move <= 0 || !pan || !pan.pan) return;
+  const range = move * 0.7;
+  const a = Math.max(-1, Math.min(1, basePan + (Math.random() - 0.5) * range));
+  const b = Math.max(-1, Math.min(1, a + (Math.random() - 0.5) * range * 2));
+  const end = Math.max(tStart + 0.1, tEnd);
+  pan.pan.cancelScheduledValues(tStart);
+  pan.pan.setValueAtTime(a, tStart);
+  pan.pan.linearRampToValueAtTime(b, end);
+}
+
+/* Phrase tempo curve — multiplier on inter-pulse spacing as phase
+   moves through a phrase (0…1). Lets a species speed up, slow down,
+   arch into the middle or dip in the middle while keeping the same
+   total pulse count and base spacing. */
+function phraseTempo(phase, shape) {
+  const sh = Math.round(shape || 0);
+  switch (sh) {
+    case 1: return 1.5 - phase * 0.9;                           // accelerando
+    case 2: return 0.6 + phase * 0.9;                           // ritardando
+    case 3: return 1.5 - 0.9 * Math.sin(phase * Math.PI);       // arch (slow-fast-slow)
+    case 4: return 0.6 + 0.9 * Math.sin(phase * Math.PI);       // dip (fast-slow-fast)
+    default: return 1.0;
+  }
+}
+
+/* For chorus: returns a per-voice pitch multiplier. voiceCount=1 → 1.0
+   (exact same behaviour as before the chorus was added). */
+function chorusDetune(species, voiceCount) {
+  if (voiceCount <= 1) return 1;
+  const cents = (Math.random() - 0.5) * 2 * species.p.detune;
+  return Math.pow(2, cents / 1200);
+}
+
+const SECTIONS = [
+  { id: "master", name: "Master", color: "var(--fg)",
+    knobs: [
+      { id:"vol",      lbl:"Volume", min:0,   max:4,    def:0.7,  fmt: fmtDB },
+      { id:"cycleMin", lbl:"Cycle",  min:1,   max:30,   def:6.0,  step:0.5, fmt: v => v.toFixed(1)+"m" },
+      { id:"width",    lbl:"Width",  min:0,   max:1,    def:1.0,  fmt: fmt2 },
+      { id:"revMix",   lbl:"Reverb", min:0,   max:1,    def:0.30, fmt: fmt2 },
+      { id:"revSize",  lbl:"Size",   min:0.3, max:6,    def:2.8,  fmt: v => v.toFixed(1)+"s" },
+      { id:"chaos",    lbl:"Chaos",  min:0,   max:6,    def:1.0,  fmt: fmt2 },
+      { id:"rateIdx",  lbl:"Rate",   min:0,   max:SAMPLE_RATES.length - 1,
+        def:2, step:1, fmt: v => SAMPLE_RATE_LABELS[Math.round(v)] || "?" },
+      { id:"breath",   lbl:"Breath", min:0,   max:1,    def:0.3,  fmt: fmt2 },
+      { id:"temp",     lbl:"Temp",   min:5,   max:35,   def:22,   step:0.5, fmt: v => v.toFixed(1) + "°C" },
+      { id:"bed",      lbl:"Bed",    min:0,   max:1,    def:0,    fmt: fmt2 },
+    ] },
+  { id: "eq", name: "EQ", color: "var(--fg)",
+    knobs: [
+      { id:"low",  lbl:"Low 200",   min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
+      { id:"mid",  lbl:"Mid 1.5k",  min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
+      { id:"high", lbl:"High 5k",   min:-24, max:24, def:0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) },
+    ] },
+  { id: "grain", name: "Grain", color: "var(--scrape)",
+    knobs: [
+      { id:"send",    lbl:"Send",    min:0,   max:1.5, def:0.45, fmt: fmt2 },
+      { id:"size",    lbl:"Size",    min:1,   max:10,  def:5.0,  fmt: v => v.toFixed(1)+"s" },
+      { id:"sparkle", lbl:"Sparkle", min:0,   max:2,   def:0.6,  fmt: fmt2 },
+    ] },
+  { id: "score", type: "score", name: "Score", color: "var(--fg)" },
+  { id: "preset", type: "preset", name: "Preset", color: "var(--fg)" },
+  { id: "record", type: "record", name: "Record", color: "var(--fg)" },
+  { id: "mix",    type: "mix",    name: "Mix",    color: "var(--fg)" },
+
+  { id: "drone",  name: "Drone",   color: "var(--drone)",
+    knobs: [
+      { id:"lvl",    lbl:"Level",  min:0,    max:1.5, def:1.0, fmt: fmt2 },
+      { id:"pan",    lbl:"Pan",    min:-1,   max:1,   def:0.0, fmt: fmtPan },
+      { id:"key",    lbl:"Key",    min:30,   max:200, def:55,  step:0.5, fmt: v => v.toFixed(1) + "Hz" },
+      { id:"yuragi", lbl:"Yuragi", min:0,    max:1,   def:0,   fmt: fmt2 },
+      { id:"poly",   lbl:"Poly",   min:0,    max:1,   def:0,   fmt: fmt2 },
+    ] },
+
+  /* --- ten night insects --- */
+  { id: "suzumushi",    name: "Suzumushi",    nameJa: "鈴虫",         color: "var(--suzumushi)",    knobs: insectKnobs() },
+  { id: "matsumushi",   name: "Matsumushi",   nameJa: "松虫",         color: "var(--matsumushi)",   knobs: insectKnobs() },
+  { id: "korogi",       name: "Korogi",       nameJa: "コオロギ",     color: "var(--korogi)",       knobs: insectKnobs() },
+  { id: "higurashi",    name: "Higurashi",    nameJa: "ヒグラシ",     color: "var(--higurashi)",    knobs: insectKnobs() },
+  { id: "kanetataki",   name: "Kanetataki",   nameJa: "カネタタキ",   color: "var(--kanetataki)",   knobs: insectKnobs() },
+  { id: "kantan",       name: "Kantan",       nameJa: "カンタン",     color: "var(--kantan)",       knobs: insectKnobs() },
+  { id: "umaoi",        name: "Umaoi",        nameJa: "ウマオイ",     color: "var(--umaoi)",        knobs: insectKnobs() },
+  { id: "kusahibari",   name: "Kusahibari",   nameJa: "クサヒバリ",   color: "var(--kusahibari)",   knobs: insectKnobs() },
+  { id: "enmakorogi",   name: "Enma-korogi",  nameJa: "エンマコオロギ", color: "var(--enmakorogi)", knobs: insectKnobs() },
+  { id: "aomatsumushi", name: "Aomatsumushi", nameJa: "アオマツムシ", color: "var(--aomatsumushi)", knobs: insectKnobs() },
+
+  { id: "rasp",   name: "Rasp",    color: "var(--rasp)",
+    knobs: [
+      { id:"density", lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
+      { id:"lvl",     lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
+      { id:"rate",    lbl:"Rate",    min:0.5, max:2,   def:1.0, fmt: fmt2 },
+      { id:"pan",     lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
+    ] },
+  { id: "scrape", name: "Scrape",  color: "var(--scrape)",
+    knobs: [
+      { id:"density",   lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
+      { id:"lvl",       lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
+      { id:"grit",      lbl:"Grit",    min:0.3, max:2,   def:1.0, fmt: fmt2 },
+      { id:"pan",       lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
+      { id:"yuragi",    lbl:"Yuragi",  min:0,   max:1,   def:0.5, fmt: fmt2 },
+      { id:"grainSend", lbl:"Grain",   min:0,   max:3,   def:1.0, fmt: fmt2 },
+    ] },
+  { id: "wind",   name: "Wind",    color: "var(--wind)",
+    knobs: [
+      { id:"density",   lbl:"Density", min:0,   max:3,   def:1.0, fmt: fmt2 },
+      { id:"lvl",       lbl:"Level",   min:0,   max:2,   def:1.0, fmt: fmt2 },
+      { id:"tube",      lbl:"Tube",    min:0.4, max:2,   def:1.0, fmt: fmt2 },
+      { id:"pan",       lbl:"Pan",     min:-1,  max:1,   def:0.0, fmt: fmtPan },
+      { id:"yuragi",    lbl:"Yuragi",  min:0,   max:1,   def:0.5, fmt: fmt2 },
+      { id:"grainSend", lbl:"Grain",   min:0,   max:3,   def:1.0, fmt: fmt2 },
+    ] },
+];
+
+const SECTION_BY_ID = {};
+SECTIONS.forEach(s => { SECTION_BY_ID[s.id] = s; });
+
+const knobRefs   = {};  // section -> id -> { el, render }
+const dotEls     = {};  // section -> header dot element
+const cntEls     = {};  // section -> count element
+const mixDotEls  = {};  // track id -> mix-row dot element
+const headBtnEls = {};  // track id -> { solo, mute, trig } in section header
+
+function buildPanel() {
+  const root = document.getElementById("ctl-panel");
+  for (const sec of SECTIONS) {
+    if (sec.type === "mix")    { buildMixSection(root, sec);    continue; }
+    if (sec.type === "preset") { buildPresetSection(root, sec); continue; }
+    if (sec.type === "record") { buildRecordSection(root, sec); continue; }
+    if (sec.type === "score")  { buildScoreSection(root, sec);  continue; }
+    const group = document.createElement("div");
+    group.className = "ctl-group";
+
+    const head = document.createElement("div");
+    head.className = "ctl-head";
+    const ja = sec.nameJa ? `<span class="ja">${sec.nameJa}</span>` : "";
+    head.innerHTML = `
+      <div class="dot" style="background:${sec.color}"></div>
+      <div class="name">${sec.name}${ja}</div>
+      <div class="cnt num" data-cnt="${sec.id}">${sec.id === "master" || sec.id === "drone" ? "" : "0"}</div>
+    `;
+    group.appendChild(head);
+    dotEls[sec.id] = head.querySelector(".dot");
+    cntEls[sec.id] = head.querySelector(".cnt");
+
+    /* every audible track gets S / M / ▶ buttons next to its name */
+    if (TRACKS.includes(sec.id)) addTrackControls(head, sec);
+
+    const row = document.createElement("div");
+    const n = sec.knobs.length;
+    const cols = n === 1 ? 1 : n === 2 ? 2 : n === 4 ? 4 : n === 5 ? 5 : 3;
+    row.className = "knob-row cols-" + cols;
+    for (const k of sec.knobs) {
+      const knobEl = document.createElement("div");
+      knobEl.className = "knob";
+      knobEl.innerHTML = `
+        <div class="dial" role="slider" aria-label="${sec.name} ${k.lbl}"></div>
+        <div class="lbl">${k.lbl}</div>
+        <div class="val">—</div>
+      `;
+      row.appendChild(knobEl);
+      const ref = bindKnob(knobEl, sec.id, k);
+      knobRefs[sec.id] = knobRefs[sec.id] || {};
+      knobRefs[sec.id][k.id] = ref;
+    }
+    group.appendChild(row);
+    root.appendChild(group);
+  }
+}
+
+/* wrap the section header's count + S / M / ▶ buttons into a cluster
+   sitting in the head's right-hand "auto" grid cell. Reuses the same
+   styles, state and handlers as the Mix panel rows. */
+function addTrackControls(head, sec) {
+  const id = sec.id;
+  const cnt = head.querySelector(".cnt");
+  if (!cnt) return;
+  const cluster = document.createElement("div");
+  cluster.className = "ctl-cluster";
+  cnt.parentNode.replaceChild(cluster, cnt);
+  cluster.appendChild(cnt);
+
+  const mk = (cls, label, aria, html) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "mix-btn " + cls;
+    if (html) b.innerHTML = html; else b.textContent = label;
+    b.setAttribute("aria-label", aria);
+    return b;
+  };
+  const sName = sec.name + (sec.nameJa ? " " + sec.nameJa : "");
+  const solo = mk("solo", "S", "Solo " + sName);
+  const mute = mk("mute", "M", "Mute " + sName);
+  const trig = mk("trig", "",  "Trigger " + sName, "&#9654;");
+
+  solo.addEventListener("click", () => toggleSolo(id));
+  mute.addEventListener("click", () => toggleMute(id));
+  trig.addEventListener("click", () => {
+    manualTrigger(id);
+    trig.classList.add("fire");
+    setTimeout(() => trig.classList.remove("fire"), 120);
+  });
+
+  cluster.appendChild(solo);
+  cluster.appendChild(mute);
+  cluster.appendChild(trig);
+  headBtnEls[id] = { solo, mute, trig };
+}
+
+const linkedKnobs = {};  // "secId.knobId" -> array of refs
+
+function bindKnob(el, secId, def, opts) {
+  const ANG_MIN = -135, ANG_MAX = 135;
+  const dial = el.querySelector(".dial");
+  const valEl = el.querySelector(".val");
+  const skipDefault = opts && opts.skipDefault;
+
+  function get() { return params[secId][def.id]; }
+  function set(v) {
+    if (def.step) v = Math.round(v / def.step) * def.step;
+    v = Math.max(def.min, Math.min(def.max, v));
+    params[secId][def.id] = v;
+    applyParam(secId, def.id);
+    /* re-render every linked knob so duplicates (e.g. section + Mix
+       row volume) stay in lockstep when either one is dragged. */
+    const linked = linkedKnobs[secId + "." + def.id];
+    if (linked) for (const r of linked) r.render();
+  }
+  function render() {
+    const v = get();
+    const norm = (v - def.min) / (def.max - def.min);
+    const angle = ANG_MIN + norm * (ANG_MAX - ANG_MIN);
+    dial.style.setProperty("--angle", angle + "deg");
+    if (valEl) valEl.textContent = def.fmt(v);
+  }
+
+  /* Only the first binding for a given param writes the default
+     into params — secondary bindings (Mix row volume) just attach. */
+  if (!skipDefault) params[secId][def.id] = def.def;
+  render();
+
+  let dragging = false, startY = 0, startV = 0;
+  dial.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    dial.classList.add("dragging");
+    startY = e.clientY;
+    startV = get();
+    try { dial.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+  });
+  dial.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const dy = startY - e.clientY;
+    const fine = e.shiftKey ? 0.2 : 1;
+    const range = def.max - def.min;
+    let v = startV + (dy / 200) * range * fine;
+    set(v);
+    render();
+  });
+  function endDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    dial.classList.remove("dragging");
+    try { if (dial.hasPointerCapture(e.pointerId)) dial.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+  dial.addEventListener("pointerup", endDrag);
+  dial.addEventListener("pointercancel", endDrag);
+  dial.addEventListener("lostpointercapture", endDrag);
+  dial.addEventListener("dblclick", () => { set(def.def); render(); });
+  /* wheel for desktop fine-tuning */
+  dial.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const range = def.max - def.min;
+    const step = range * (e.shiftKey ? 0.005 : 0.02);
+    set(get() - Math.sign(e.deltaY) * step);
+    render();
+  }, { passive: false });
+
+  const ref = { render, get, set };
+  const key = secId + "." + def.id;
+  if (!linkedKnobs[key]) linkedKnobs[key] = [];
+  linkedKnobs[key].push(ref);
+  return ref;
+}
+
+/* ==================================================================
+   MIX PANEL — solo & mute matrix across all tracks
+   ================================================================== */
+function buildMixSection(root, sec) {
+  const group = document.createElement("div");
+  group.className = "ctl-group";
+
+  const head = document.createElement("div");
+  head.className = "ctl-head";
+  head.innerHTML = `
+    <div class="dot" style="background:${sec.color}"></div>
+    <div class="name">${sec.name}</div>
+    <div class="cnt num"></div>
+  `;
+  group.appendChild(head);
+
+  const list = document.createElement("div");
+  list.className = "mix-list";
+  for (const trackId of TRACKS) {
+    const s = SECTION_BY_ID[trackId];
+    const name = s?.name || trackId;
+    const ja = s?.nameJa ? `<span class="ja">${s.nameJa}</span>` : "";
+    const color = s?.color || "var(--fg)";
+    const row = document.createElement("div");
+    row.className = "mix-row";
+    row.dataset.track = trackId;
+    row.innerHTML = `
+      <div class="mix-dot" style="background:${color}"></div>
+      <div class="mix-name">${name}${ja}</div>
+      <button class="mix-btn solo" type="button" aria-label="Solo ${name}">S</button>
+      <button class="mix-btn mute" type="button" aria-label="Mute ${name}">M</button>
+      <button class="mix-btn trig" type="button" aria-label="Trigger ${name}">&#9654;</button>
+      <div class="mix-vol" aria-label="Volume ${name}"><div class="dial"></div></div>
+    `;
+    list.appendChild(row);
+    mixDotEls[trackId] = row.querySelector(".mix-dot");
+    row.querySelector(".solo").addEventListener("click", () => toggleSolo(trackId));
+    row.querySelector(".mute").addEventListener("click", () => toggleMute(trackId));
+    const trigBtn = row.querySelector(".trig");
+    trigBtn.addEventListener("click", () => {
+      manualTrigger(trackId);
+      trigBtn.classList.add("fire");
+      setTimeout(() => trigBtn.classList.remove("fire"), 120);
+    });
+    /* Volume mini-knob, linked to the same params.<track>.lvl as the
+       section's full-size Level knob. skipDefault keeps the section
+       binding's def value intact. */
+    const trackSec = SECTION_BY_ID[trackId];
+    const lvlDef = trackSec && trackSec.knobs && trackSec.knobs.find(k => k.id === "lvl");
+    const volEl = row.querySelector(".mix-vol");
+    if (lvlDef && volEl) bindKnob(volEl, trackId, lvlDef, { skipDefault: true });
+  }
+  group.appendChild(list);
+
+  const clear = document.createElement("button");
+  clear.className = "mix-clear";
+  clear.type = "button";
+  clear.textContent = "Clear all";
+  clear.addEventListener("click", clearMix);
+  group.appendChild(clear);
+
+  root.appendChild(group);
+  updateMixUI();
+}
+
+/* ==================================================================
+   PRESET PANEL — save / reset / share + URL fragment + localStorage
+   ================================================================== */
+let presetStatusEl = null;
+
+function buildPresetSection(root, sec) {
+  const group = document.createElement("div");
+  group.className = "ctl-group";
+
+  const head = document.createElement("div");
+  head.className = "ctl-head";
+  head.innerHTML = `
+    <div class="dot" style="background:${sec.color}"></div>
+    <div class="name">${sec.name}</div>
+    <div class="cnt num"></div>
+  `;
+  group.appendChild(head);
+
+  const row = document.createElement("div");
+  row.className = "preset-row";
+  const mk = (label, handler) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "preset-btn";
+    b.textContent = label;
+    b.addEventListener("click", handler);
+    return b;
+  };
+  /* row 1: in-browser persistence */
+  row.appendChild(mk("Save",   savePatch));
+  row.appendChild(mk("Load",   loadPatchAction));
+  row.appendChild(mk("Reset",  resetPatch));
+  /* row 2: portable, cross-device */
+  row.appendChild(mk("Export", exportPatch));
+  row.appendChild(mk("Import", importPatch));
+  row.appendChild(mk("Share",  copyShareURL));
+  group.appendChild(row);
+
+  const status = document.createElement("div");
+  status.className = "preset-status";
+  status.id = "preset-status";
+  status.textContent = "";
+  group.appendChild(status);
+  presetStatusEl = status;
+
+  root.appendChild(group);
+}
+
+function setStatus(msg) {
+  if (presetStatusEl) presetStatusEl.textContent = msg;
+}
+function fmtClock() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+}
+
+function snapshotPatch() {
+  return {
+    v: 2,
+    params: JSON.parse(JSON.stringify(params)),
+    mute: TRACKS.filter(t => muted[t]),
+    solo: TRACKS.filter(t => soloed[t]),
+    /* The hand-drawn graphic score, if any. Stored as a plain array of
+       Float32 values so it survives JSON.stringify round-tripping. */
+    score: drawnCurve ? Array.from(drawnCurve) : null,
+  };
+}
+
+/* Overlay a patch onto current state, re-render the panel, push values
+   to live audio nodes. Missing fields fall through to existing values. */
+function applyPatchObject(patch) {
+  if (!patch) return false;
+  if (patch.params) {
+    for (const sec of Object.keys(patch.params)) {
+      if (!params[sec]) continue;
+      for (const k of Object.keys(patch.params[sec])) {
+        if (k in params[sec]) params[sec][k] = patch.params[sec][k];
+      }
+    }
+  }
+  if (Array.isArray(patch.mute)) {
+    for (const t of TRACKS) muted[t] = patch.mute.indexOf(t) >= 0;
+  }
+  if (Array.isArray(patch.solo)) {
+    for (const t of TRACKS) soloed[t] = patch.solo.indexOf(t) >= 0;
+  }
+  /* restore the hand-drawn score curve if the patch carried one */
+  if (patch.score === null || patch.score === undefined) {
+    /* leave drawnCurve alone — explicit null in v2 patches; older
+       v1 patches omit the field entirely */
+    if (patch.score === null) drawnCurve = null;
+  } else if (Array.isArray(patch.score) && patch.score.length === SCORE_SAMPLES) {
+    drawnCurve = new Float32Array(patch.score);
+  }
+  /* re-render each bound knob from the new params; applyParam pushes
+     live values into the audio graph for the ones that need it. */
+  for (const sec of Object.keys(knobRefs)) {
+    for (const k of Object.keys(knobRefs[sec])) {
+      knobRefs[sec][k].render();
+      applyParam(sec, k);
+    }
+  }
+  updateMixUI();
+  applyDroneAudibility();
+  applyWindBedAudibility();
+  applyScrapeBedAudibility();
+  return true;
+}
+
+/* Construct the factory-default state and apply it. */
+function applyFactoryPatch() {
+  const fp = {};
+  for (const sec of SECTIONS) {
+    if (!sec.knobs) continue;
+    fp[sec.id] = {};
+    for (const k of sec.knobs) fp[sec.id][k.id] = k.def;
+  }
+  for (const sec of Object.keys(FACTORY_PATCH)) {
+    if (!fp[sec]) fp[sec] = {};
+    Object.assign(fp[sec], FACTORY_PATCH[sec]);
+  }
+  applyPatchObject({ v: 1, params: fp, mute: FACTORY_MUTES.slice(), solo: FACTORY_SOLOS.slice() });
+}
+
+function savePatch() {
+  try {
+    localStorage.setItem(PATCH_KEY, JSON.stringify(snapshotPatch()));
+    setStatus("Saved " + fmtClock());
+  } catch (e) {
+    setStatus("Save failed");
+  }
+}
+
+function loadPatchFromStorage() {
+  try {
+    const raw = localStorage.getItem(PATCH_KEY);
+    if (!raw) return false;
+    applyPatchObject(JSON.parse(raw));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* Load button: explicitly restore the localStorage save right now. */
+function loadPatchAction() {
+  if (loadPatchFromStorage()) setStatus("Loaded " + fmtClock());
+  else setStatus("No save found");
+}
+
+function resetPatch() {
+  applyFactoryPatch();
+  setStatus("Factory");
+}
+
+/* Download the current patch as a JSON file so it survives across
+   devices, browsers and history-clears. */
+function exportPatch() {
+  try {
+    const json = JSON.stringify(snapshotPatch(), null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.href = url;
+    a.download = "tidal-score-" + ts + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    setStatus("Exported");
+  } catch (e) {
+    setStatus("Export failed");
+  }
+}
+
+/* Open a file picker, load JSON, apply the patch. */
+function importPatch() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json,.json";
+  input.style.display = "none";
+  document.body.appendChild(input);
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    if (!f) { document.body.removeChild(input); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const patch = JSON.parse(reader.result);
+        applyPatchObject(patch);
+        setStatus("Imported");
+      } catch (e) {
+        setStatus("Invalid file");
+      }
+      document.body.removeChild(input);
+    };
+    reader.onerror = () => {
+      setStatus("Read failed");
+      document.body.removeChild(input);
+    };
+    reader.readAsText(f);
+  });
+  input.click();
+}
+
+async function copyShareURL() {
+  try {
+    const json = JSON.stringify(snapshotPatch());
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    const url = location.origin + location.pathname + location.search + "#p=" + b64;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(url);
+      setStatus("URL copied");
+    } else {
+      /* fallback: drop the URL into history so the user can copy from the bar */
+      history.replaceState(null, "", url);
+      setStatus("URL in address bar");
+    }
+  } catch (e) {
+    setStatus("Share failed");
+  }
+}
+
+/* ==================================================================
+   SCORE PANEL — hand-drawn conductor curve (a graphic score)
+   ================================================================== */
+function buildScoreSection(root, sec) {
+  const group = document.createElement("div");
+  group.className = "ctl-group";
+
+  const head = document.createElement("div");
+  head.className = "ctl-head";
+  head.innerHTML = `
+    <div class="dot" style="background:${sec.color}"></div>
+    <div class="name">${sec.name}</div>
+    <div class="cnt num"></div>
+  `;
+  group.appendChild(head);
+
+  const cv = document.createElement("canvas");
+  cv.className = "score-canvas";
+  cv.setAttribute("aria-label", "Hand-drawn conductor score");
+  group.appendChild(cv);
+  scoreCanvas = cv;
+  scoreCtx = cv.getContext("2d");
+  cv.addEventListener("pointerdown",   scoreDown);
+  cv.addEventListener("pointermove",   scoreMove);
+  cv.addEventListener("pointerup",     scoreUp);
+  cv.addEventListener("pointercancel", scoreUp);
+  cv.addEventListener("lostpointercapture", scoreUp);
+
+  /* Mix knob + Clear button */
+  const row = document.createElement("div");
+  row.className = "score-row";
+
+  const knobEl = document.createElement("div");
+  knobEl.className = "knob";
+  knobEl.innerHTML = `<div class="dial"></div><div class="lbl">Mix</div><div class="val">—</div>`;
+  row.appendChild(knobEl);
+  const ref = bindKnob(knobEl, "score", {
+    id:"mix", lbl:"Mix", min:0, max:1, def:0, fmt: v => v.toFixed(2),
+  });
+  knobRefs.score = { mix: ref };
+
+  const clear = document.createElement("button");
+  clear.type = "button"; clear.className = "preset-btn";
+  clear.textContent = "Clear";
+  clear.addEventListener("click", clearScore);
+  row.appendChild(clear);
+
+  group.appendChild(row);
+
+  const hint = document.createElement("div");
+  hint.className = "score-hint";
+  hint.textContent = "drag inside the box · 0 = tide · 1 = score";
+  group.appendChild(hint);
+
+  root.appendChild(group);
+  /* paint once so the empty box still shows the tide reference */
+  requestAnimationFrame(() => drawScoreCanvas());
+}
+
+/* pointer → curve index / [-1,1] value */
+function _scoreXY(e) {
+  const r = scoreCanvas.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  const idx = Math.max(0, Math.min(SCORE_SAMPLES - 1, Math.floor(x / r.width * SCORE_SAMPLES)));
+  const v   = 1 - 2 * Math.max(0, Math.min(1, y / r.height));
+  return { idx, v };
+}
+function _writeRange(fromIdx, fromV, toIdx, toV) {
+  if (!drawnCurve) drawnCurve = new Float32Array(SCORE_SAMPLES);
+  if (toIdx === fromIdx) { drawnCurve[toIdx] = toV; return; }
+  const step = (toV - fromV) / (toIdx - fromIdx);
+  if (toIdx > fromIdx) {
+    for (let x = fromIdx; x <= toIdx; x++) drawnCurve[x] = fromV + (x - fromIdx) * step;
+  } else {
+    for (let x = fromIdx; x >= toIdx; x--) drawnCurve[x] = fromV + (x - fromIdx) * step;
+  }
+}
+function scoreDown(e) {
+  const { idx, v } = _scoreXY(e);
+  if (!drawnCurve) drawnCurve = new Float32Array(SCORE_SAMPLES);
+  drawnCurve[idx] = v;
+  scoreDrawing = true;
+  scoreLastIdx = idx;
+  scoreLastVal = v;
+  try { scoreCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+  e.preventDefault();
+  /* if Mix is still zero, lift it so the user hears their drawing */
+  if (params.score.mix < 0.001 && knobRefs.score && knobRefs.score.mix) {
+    knobRefs.score.mix.set(1.0); knobRefs.score.mix.render();
+  }
+}
+function scoreMove(e) {
+  if (!scoreDrawing) return;
+  const { idx, v } = _scoreXY(e);
+  _writeRange(scoreLastIdx, scoreLastVal, idx, v);
+  scoreLastIdx = idx;
+  scoreLastVal = v;
+}
+function scoreUp(e) {
+  scoreDrawing = false;
+  scoreLastIdx = -1;
+  try { if (scoreCanvas.hasPointerCapture(e.pointerId)) scoreCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+}
+function clearScore() {
+  drawnCurve = null;
+}
+
+function drawScoreCanvas() {
+  if (!scoreCtx || !scoreCanvas) return;
+  const rect = scoreCanvas.getBoundingClientRect();
+  const W = Math.max(40, Math.floor(rect.width));
+  const H = Math.max(40, Math.floor(rect.height));
+  const dpr = window.devicePixelRatio || 1;
+  if (scoreCanvas.width !== W * dpr || scoreCanvas.height !== H * dpr) {
+    scoreCanvas.width = W * dpr; scoreCanvas.height = H * dpr;
+    scoreCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  const c = scoreCtx;
+  c.clearRect(0, 0, W, H);
+
+  /* mid line */
+  c.strokeStyle = "rgba(255,255,255,0.05)";
+  c.lineWidth = 1;
+  c.beginPath(); c.moveTo(0, H/2); c.lineTo(W, H/2); c.stroke();
+
+  /* dim tide sine over one full cycle (reference) */
+  c.strokeStyle = "rgba(236,236,236,0.18)";
+  c.beginPath();
+  for (let x = 0; x <= W; x++) {
+    const v = Math.sin((x / W) * TWO_PI);
+    const y = H/2 - v * (H * 0.40);
+    if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+  }
+  c.stroke();
+
+  /* drawn curve, bright */
+  if (drawnCurve) {
+    c.strokeStyle = "rgba(236,236,236,0.92)";
+    c.lineWidth = 1.4;
+    c.beginPath();
+    for (let x = 0; x < W; x++) {
+      const i = Math.floor((x / W) * SCORE_SAMPLES);
+      const v = drawnCurve[i];
+      const y = H/2 - v * (H * 0.40);
+      if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+    }
+    c.stroke();
+  }
+
+  /* sweeping time cursor */
+  if (actx) {
+    const t = performance.now() / 1000 - T0;
+    const cyc = cycleSeconds();
+    const phase = ((t % cyc) + cyc) % cyc;
+    const cx = phase / cyc * W;
+    c.strokeStyle = "rgba(236,236,236,0.55)";
+    c.lineWidth = 1;
+    c.beginPath(); c.moveTo(cx, 0); c.lineTo(cx, H); c.stroke();
+    /* dot at current conductor value */
+    const cy = H/2 - conductorLevel(t) * (H * 0.40);
+    c.fillStyle = "#fff";
+    c.beginPath(); c.arc(cx, cy, 2.6, 0, TWO_PI); c.fill();
+  }
+}
+
+/* The conductor — what actually drives the trigger rates and the
+   main canvas curve. Blend of the tide sine and the hand-drawn score
+   according to params.score.mix. */
+function conductorLevel(tSec) {
+  if (!drawnCurve || params.score.mix < 0.001) return tideLevel(tSec);
+  const cyc = cycleSeconds();
+  const phase = ((tSec % cyc) + cyc) % cyc;
+  const fp = (phase / cyc) * SCORE_SAMPLES;
+  const i0 = Math.floor(fp) % SCORE_SAMPLES;
+  const i1 = (i0 + 1) % SCORE_SAMPLES;
+  const frac = fp - Math.floor(fp);
+  const drawn = drawnCurve[i0] * (1 - frac) + drawnCurve[i1] * frac;
+  const m = params.score.mix;
+  if (m >= 0.999) return drawn;
+  return tideLevel(tSec) * (1 - m) + drawn * m;
+}
+function conductorDerivative(tSec) {
+  const e = Math.max(0.2, cycleSeconds() * 0.001);
+  return (conductorLevel(tSec + e) - conductorLevel(tSec - e)) / (2 * e);
+}
+
+/* ==================================================================
+   RECORD PANEL — capture limiter output to a hi-res WAV download
+   ================================================================== */
+let recBtnEl    = null;
+let recInfoEl   = null;
+let recStatusEl = null;
+
+function buildRecordSection(root, sec) {
+  const group = document.createElement("div");
+  group.className = "ctl-group";
+
+  const head = document.createElement("div");
+  head.className = "ctl-head";
+  head.innerHTML = `
+    <div class="dot" style="background:${sec.color}"></div>
+    <div class="name">${sec.name}</div>
+    <div class="cnt num"></div>
+  `;
+  group.appendChild(head);
+
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.className = "rec-btn";
+  btn.textContent = "Rec";
+  btn.addEventListener("click", onRecToggle);
+  group.appendChild(btn);
+  recBtnEl = btn;
+
+  const info = document.createElement("div");
+  info.className = "rec-info";
+  info.innerHTML = `<span class="time">00:00:00</span><span class="rate">—</span>`;
+  group.appendChild(info);
+  recInfoEl = info;
+
+  const st = document.createElement("div");
+  st.className = "preset-status";
+  st.textContent = "Ready";
+  group.appendChild(st);
+  recStatusEl = st;
+
+  root.appendChild(group);
+}
+
+function setRecStatus(msg) { if (recStatusEl) recStatusEl.textContent = msg; }
+function fmtHMS(seconds) {
+  seconds = Math.max(0, seconds);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+}
+function updateRecBtn() {
+  if (!recBtnEl) return;
+  recBtnEl.classList.toggle("recording", recActive);
+  recBtnEl.textContent = recActive ? "Stop" : "Rec";
+}
+function updateRecInfo() {
+  if (!recInfoEl) return;
+  const timeEl = recInfoEl.querySelector(".time");
+  const rateEl = recInfoEl.querySelector(".rate");
+  if (rateEl) rateEl.textContent = actx ? ((actx.sampleRate/1000).toFixed(1) + " kHz / 32-bit float") : "—";
+  if (timeEl) {
+    const t = (recActive && actx) ? actx.currentTime - recStartCtx : 0;
+    timeEl.textContent = fmtHMS(t);
+  }
+}
+
+async function onRecToggle() {
+  if (recActive) {
+    stopRecording();
+  } else {
+    /* the AudioContext must exist for the recorder tap, and the
+       click is a valid user gesture for resuming it */
+    await startAudio();
+    startRecording();
+  }
+}
+
+function startRecording() {
+  if (!actx || !limiter || recActive) return;
+  try {
+    recChunks = [];
+    /* 4096-sample stereo buffer — ~43 ms at 96 kHz */
+    recNode = actx.createScriptProcessor(4096, 2, 2);
+    recNode.onaudioprocess = (e) => {
+      if (!recActive) return;
+      const b = e.inputBuffer;
+      recChunks.push([
+        new Float32Array(b.getChannelData(0)),
+        new Float32Array(b.numberOfChannels > 1 ? b.getChannelData(1) : b.getChannelData(0)),
+      ]);
+    };
+    /* ScriptProcessor only ticks when its output is connected to a
+       destination; route through a muted gain into actx.destination
+       so it runs without doubling the speaker output. */
+    recSilentSink = actx.createGain();
+    recSilentSink.gain.value = 0;
+    recSilentSink.connect(actx.destination);
+    limiter.connect(recNode);
+    recNode.connect(recSilentSink);
+
+    recStartCtx = actx.currentTime;
+    recActive = true;
+    updateRecBtn();
+    setRecStatus("Recording");
+  } catch (e) {
+    setRecStatus("Record failed");
+    recActive = false;
+    updateRecBtn();
+  }
+}
+
+function stopRecording() {
+  if (!recActive) return;
+  recActive = false;
+  try { limiter.disconnect(recNode); } catch (_) {}
+  try { recNode.disconnect(); } catch (_) {}
+  try { recSilentSink.disconnect(); } catch (_) {}
+  if (recNode) recNode.onaudioprocess = null;
+  recNode = null;
+  recSilentSink = null;
+  updateRecBtn();
+
+  const chunks = recChunks;
+  recChunks = null;
+  if (!chunks || chunks.length === 0) { setRecStatus("Empty"); return; }
+
+  setRecStatus("Encoding…");
+  /* defer to next tick so the status text actually paints first */
+  setTimeout(() => {
+    try {
+      const sr = actx.sampleRate;
+      const blob = encodeWAVFloat32(chunks, sr);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      a.href = url;
+      a.download = "tidal-score-" + ts + ".wav";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      const samples = chunks.reduce((acc, c) => acc + c[0].length, 0);
+      setRecStatus("Saved " + (samples/sr).toFixed(1) + "s · " + (blob.size/1048576).toFixed(1) + " MB");
+    } catch (e) {
+      setRecStatus("Encode failed");
+    }
+  }, 30);
+}
+
+/* Encode an array of [L, R] Float32Array chunks as 32-bit IEEE float
+   stereo WAV (WAVE_FORMAT_IEEE_FLOAT, code 3). Uses an extended fmt
+   chunk (18 bytes) plus a required fact chunk so strict decoders
+   (Audacity, ffmpeg, REAPER) accept the file. */
+function encodeWAVFloat32(chunks, sampleRate) {
+  let totalSamples = 0;
+  for (const c of chunks) totalSamples += c[0].length;
+  const channels = 2;
+  const bytesPerSample = 4;
+  const dataSize = totalSamples * channels * bytesPerSample;
+  /* RIFF(12) + fmt(8+18) + fact(8+4) + data(8) = 58 bytes of header */
+  const headerSize = 58;
+  const buf = new ArrayBuffer(headerSize + dataSize);
+  const view = new DataView(buf);
+  let p = 0;
+  const wStr = (s) => { for (let i = 0; i < s.length; i++) view.setUint8(p++, s.charCodeAt(i)); };
+  const w32 = (n) => { view.setUint32(p, n, true); p += 4; };
+  const w16 = (n) => { view.setUint16(p, n, true); p += 2; };
+
+  wStr("RIFF");
+  w32(headerSize - 8 + dataSize);   // total file size - 8
+  wStr("WAVE");
+
+  wStr("fmt ");
+  w32(18);                          // extended fmt chunk size
+  w16(3);                           // WAVE_FORMAT_IEEE_FLOAT
+  w16(channels);
+  w32(sampleRate);
+  w32(sampleRate * channels * bytesPerSample);
+  w16(channels * bytesPerSample);   // block align
+  w16(32);                          // bits per sample
+  w16(0);                           // cbSize — no extra format bytes
+
+  wStr("fact");
+  w32(4);
+  w32(totalSamples);                // samples per channel
+
+  wStr("data");
+  w32(dataSize);
+
+  /* Float32 samples interleaved L, R, L, R, ... — no clipping, no
+     quantisation; the limiter already keeps peaks inside ±1. */
+  for (const [l, r] of chunks) {
+    const n = l.length;
+    for (let i = 0; i < n; i++) {
+      view.setFloat32(p, l[i], true); p += 4;
+      view.setFloat32(p, r[i], true); p += 4;
+    }
+  }
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+function loadPatchFromURL() {
+  if (!location.hash || location.hash.indexOf("#p=") !== 0) return false;
+  try {
+    const b64 = location.hash.slice(3);
+    const json = decodeURIComponent(escape(atob(b64)));
+    applyPatchObject(JSON.parse(json));
+    /* clear so subsequent reloads don't keep re-applying it */
+    history.replaceState(null, "", location.pathname + location.search);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function toggleSolo(kind) { soloed[kind] = !soloed[kind]; afterMixChange(); }
+function toggleMute(kind) { muted[kind]  = !muted[kind];  afterMixChange(); }
+function clearMix() {
+  for (const k of TRACKS) { soloed[k] = false; muted[k] = false; }
+  afterMixChange();
+}
+function afterMixChange() {
+  updateMixUI();
+  applyDroneAudibility();
+  applyWindBedAudibility();
+  applyScrapeBedAudibility();
+}
+function updateMixUI() {
+  document.querySelectorAll(".mix-row").forEach(row => {
+    const id = row.dataset.track;
+    row.querySelector(".solo").classList.toggle("on", !!soloed[id]);
+    row.querySelector(".mute").classList.toggle("on", !!muted[id]);
+    row.querySelector(".mix-name").classList.toggle("dim", !isAudible(id));
+  });
+  /* sync the per-section header clusters so the Mix matrix and the
+     in-section S / M lights stay identical */
+  for (const id of Object.keys(headBtnEls)) {
+    const b = headBtnEls[id];
+    b.solo.classList.toggle("on", !!soloed[id]);
+    b.mute.classList.toggle("on", !!muted[id]);
+  }
+}
+
+/* push knob value into live audio params where it must take effect immediately */
+let revSizeTimer = null;
+let grainIRTimer = null;
+let rateRebuildTimer = null;
+
+/* Tear down the current AudioContext and re-init at the new rate.
+   If recording is active, stop and save first; if the schedule was
+   running, restart it once the new engine is up. */
+function rebuildAudio() {
+  if (!actx) return;
+  const wasRunning = running;
+  if (recActive) stopRecording();
+  running = false;
+  try { actx.close(); } catch (_) {}
+  actx = null; master = null; limiter = null; reverb = null;
+  eqNodes = null; grainBus = null; breathNodes = null;
+  chorusBedNodes = null; windBedNodes = null; scrapeBedNodes = null;
+  voiceSends = null;
+  droneNodes = null; noiseBufs = null;
+  silentPrimer = null; outputBridge = null;
+  initAudio();
+  if (actx && actx.state === "suspended") actx.resume().catch(() => {});
+  if (wasRunning) {
+    running = true;
+    const now = performance.now() / 1000;
+    ALL_KINDS.forEach((k, i) => { nextDue[k] = now + 0.3 + i * 0.25 + Math.random() * 0.5; });
+  }
+}
+function applyParam(secId, knobId) {
+  if (!actx) return;
+  const now = actx.currentTime;
+  if (secId === "master") {
+    if (knobId === "vol") {
+      master.gain.cancelScheduledValues(now);
+      master.gain.linearRampToValueAtTime(params.master.vol, now + 0.05);
+    } else if (knobId === "cycleMin") {
+      document.getElementById("f-cycle").textContent = fmtMS(cycleSeconds());
+    } else if (knobId === "revMix" && reverb) {
+      reverb.wet.gain.cancelScheduledValues(now);
+      reverb.wet.gain.linearRampToValueAtTime(params.master.revMix, now + 0.1);
+    } else if (knobId === "revSize" && reverb) {
+      /* debounce IR rebuild — it's expensive */
+      if (revSizeTimer) clearTimeout(revSizeTimer);
+      revSizeTimer = setTimeout(() => {
+        reverb.convolver.buffer = makeIR(params.master.revSize, 2.6);
+        revSizeTimer = null;
+      }, 80);
+    } else if (knobId === "rateIdx") {
+      /* sample-rate change: rebuild the whole AudioContext. Heavily
+         debounced so dragging the knob through several rates only
+         triggers one tear-down at the end. */
+      if (rateRebuildTimer) clearTimeout(rateRebuildTimer);
+      rateRebuildTimer = setTimeout(() => {
+        rebuildAudio();
+        rateRebuildTimer = null;
+      }, 400);
+    } else if (knobId === "breath" && breathNodes) {
+      breathNodes.depth.gain.cancelScheduledValues(now);
+      breathNodes.depth.gain.linearRampToValueAtTime(params.master.breath * 0.25, now + 0.1);
+    } else if (knobId === "bed" && chorusBedNodes) {
+      chorusBedNodes.out.gain.cancelScheduledValues(now);
+      chorusBedNodes.out.gain.linearRampToValueAtTime(params.master.bed * 0.25, now + 0.1);
+    }
+    /* width is read at panNode creation time — no live patch */
+  } else if (secId === "eq" && eqNodes) {
+    const target = eqNodes[knobId];
+    if (target) {
+      target.gain.cancelScheduledValues(now);
+      target.gain.linearRampToValueAtTime(params.eq[knobId], now + 0.05);
+    }
+  } else if (secId === "grain" && grainBus) {
+    if (knobId === "send") {
+      grainBus.out.gain.cancelScheduledValues(now);
+      grainBus.out.gain.linearRampToValueAtTime(params.grain.send, now + 0.08);
+    } else if (knobId === "size" || knobId === "sparkle") {
+      /* IR rebuild is expensive — debounce */
+      if (grainIRTimer) clearTimeout(grainIRTimer);
+      grainIRTimer = setTimeout(() => {
+        grainBus.convolver.buffer = makeGranularIR(params.grain.size, params.grain.sparkle);
+        grainIRTimer = null;
+      }, 120);
+    }
+  } else if (secId === "drone" && droneNodes) {
+    if (knobId === "lvl") {
+      applyDroneAudibility();
+    } else if (knobId === "pan") {
+      droneNodes.dronePan.pan.cancelScheduledValues(now);
+      droneNodes.dronePan.pan.linearRampToValueAtTime(params.drone.pan, now + 0.1);
+    } else if (knobId === "key") {
+      const k = params.drone.key;
+      const ramp = now + 0.15;
+      droneNodes.a.frequency.cancelScheduledValues(now);
+      droneNodes.a.frequency.linearRampToValueAtTime(k,           ramp);
+      droneNodes.b.frequency.cancelScheduledValues(now);
+      droneNodes.b.frequency.linearRampToValueAtTime(k + 0.5,     ramp);
+      droneNodes.c.frequency.cancelScheduledValues(now);
+      droneNodes.c.frequency.linearRampToValueAtTime(k * 2 + 0.2, ramp);
+    } else if (knobId === "yuragi" && droneNodes.yuragi) {
+      for (const y of droneNodes.yuragi) {
+        y.depth.gain.cancelScheduledValues(now);
+        y.depth.gain.linearRampToValueAtTime(params.drone.yuragi * y.weight, now + 0.1);
+      }
+    } else if (knobId === "poly") {
+      const p = params.drone.poly;
+      droneNodes.polyAC.gain.cancelScheduledValues(now);
+      droneNodes.polyAC.gain.linearRampToValueAtTime(p * 120, now + 0.12);
+      droneNodes.polyCB.gain.cancelScheduledValues(now);
+      droneNodes.polyCB.gain.linearRampToValueAtTime(p *  35, now + 0.12);
+    }
+  } else if (secId === "wind") {
+    if (windBedNodes) {
+      const fund = 230 * params.wind.tube;
+      if (knobId === "lvl") {
+        applyWindBedAudibility();
+      } else if (knobId === "pan") {
+        windBedNodes.bedPan.pan.cancelScheduledValues(now);
+        windBedNodes.bedPan.pan.linearRampToValueAtTime(params.wind.pan, now + 0.1);
+      } else if (knobId === "tube") {
+        const ramp = now + 0.15;
+        windBedNodes.bp1.frequency.cancelScheduledValues(now);
+        windBedNodes.bp1.frequency.linearRampToValueAtTime(fund,     ramp);
+        windBedNodes.bp2.frequency.cancelScheduledValues(now);
+        windBedNodes.bp2.frequency.linearRampToValueAtTime(fund * 3, ramp);
+        windBedNodes.yDepth1.gain.cancelScheduledValues(now);
+        windBedNodes.yDepth1.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 0.35, ramp);
+        windBedNodes.yDepth2.gain.cancelScheduledValues(now);
+        windBedNodes.yDepth2.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 3 * 0.35, ramp);
+      } else if (knobId === "yuragi") {
+        windBedNodes.yDepth1.gain.cancelScheduledValues(now);
+        windBedNodes.yDepth1.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 0.35, now + 0.1);
+        windBedNodes.yDepth2.gain.cancelScheduledValues(now);
+        windBedNodes.yDepth2.gain.linearRampToValueAtTime(params.wind.yuragi * fund * 3 * 0.35, now + 0.1);
+      }
+    }
+    if (knobId === "grainSend" && voiceSends && voiceSends.wind) {
+      voiceSends.wind.gain.cancelScheduledValues(now);
+      voiceSends.wind.gain.linearRampToValueAtTime(params.wind.grainSend, now + 0.1);
+    }
+  } else if (secId === "scrape") {
+    if (scrapeBedNodes) {
+      const baseF = 280 * params.scrape.grit;
+      if (knobId === "lvl") {
+        applyScrapeBedAudibility();
+      } else if (knobId === "pan") {
+        scrapeBedNodes.bedPan.pan.cancelScheduledValues(now);
+        scrapeBedNodes.bedPan.pan.linearRampToValueAtTime(params.scrape.pan, now + 0.1);
+      } else if (knobId === "grit") {
+        const ramp = now + 0.15;
+        scrapeBedNodes.bp.frequency.cancelScheduledValues(now);
+        scrapeBedNodes.bp.frequency.linearRampToValueAtTime(baseF, ramp);
+        scrapeBedNodes.yDepth.gain.cancelScheduledValues(now);
+        scrapeBedNodes.yDepth.gain.linearRampToValueAtTime(params.scrape.yuragi * baseF * 0.5, ramp);
+      } else if (knobId === "yuragi") {
+        scrapeBedNodes.yDepth.gain.cancelScheduledValues(now);
+        scrapeBedNodes.yDepth.gain.linearRampToValueAtTime(params.scrape.yuragi * baseF * 0.5, now + 0.1);
+      }
+    }
+    if (knobId === "grainSend" && voiceSends && voiceSends.scrape) {
+      voiceSends.scrape.gain.cancelScheduledValues(now);
+      voiceSends.scrape.gain.linearRampToValueAtTime(params.scrape.grainSend, now + 0.1);
+    }
+  }
+  /* per-voice density / lvl / character / pan are read at trigger time */
+}
+
+/* gate the continuous scrape bed on its mute/solo state */
+function applyScrapeBedAudibility() {
+  if (!scrapeBedNodes) return;
+  const target = isAudible("scrape") ? params.scrape.lvl * 0.08 : 0;
+  const now = actx.currentTime;
+  scrapeBedNodes.bedG.gain.cancelScheduledValues(now);
+  scrapeBedNodes.bedG.gain.linearRampToValueAtTime(target, now + 0.1);
+}
+
+/* gate the continuous wind bed on its mute/solo state */
+function applyWindBedAudibility() {
+  if (!windBedNodes) return;
+  const target = isAudible("wind") ? params.wind.lvl * 0.16 : 0;
+  const now = actx.currentTime;
+  windBedNodes.bedG.gain.cancelScheduledValues(now);
+  windBedNodes.bedG.gain.linearRampToValueAtTime(target, now + 0.1);
+}
+
+/* gate the drone's continuous gain on its mute/solo state */
+function applyDroneAudibility() {
+  if (!droneNodes) return;
+  const target = isAudible("drone") ? params.drone.lvl : 0;
+  const now = actx.currentTime;
+  droneNodes.droneOut.gain.cancelScheduledValues(now);
+  droneNodes.droneOut.gain.linearRampToValueAtTime(target, now + 0.1);
+}
+
+/* ==================================================================
+   UI BINDINGS
+   ================================================================== */
+const m_time = document.getElementById("m-time");
+const m_level = document.getElementById("m-level");
+const m_phase = document.getElementById("m-phase");
+const f_cycle = document.getElementById("f-cycle");
+
+const startEl = document.getElementById("start");
+
+async function startAudio() {
+  if (!actx) initAudio();
+  /* Kick the silent primer inside the user gesture so iOS/macOS treats
+     the page as media playback and screen recording captures the live
+     AudioContext output. Must happen before any await. */
+  ensureSilentPrimer();
+  if (silentPrimer) {
+    const p = silentPrimer.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+  if (actx.state === "suspended") await actx.resume();
+  if (!running) {
+    startEl.classList.add("hidden");
+    running = true;
+    const now = performance.now() / 1000;
+    /* stagger first events so the piece doesn't burst on START */
+    ALL_KINDS.forEach((k, i) => { nextDue[k] = now + 0.3 + i * 0.25 + Math.random() * 0.5; });
+  }
+  updatePlayBtn();
+}
+
+/* General play / stop transport toggle in the header. */
+const playBtnEl = document.getElementById("play-toggle");
+async function togglePlay() {
+  if (!actx) { await startAudio(); return; }
+  if (running) {
+    running = false;
+    try { await actx.suspend(); } catch (_) {}
+  } else {
+    if (actx.state === "suspended") {
+      try { await actx.resume(); } catch (_) {}
+    }
+    running = true;
+    const now = performance.now() / 1000;
+    ALL_KINDS.forEach((k, i) => { nextDue[k] = now + 0.3 + i * 0.25 + Math.random() * 0.5; });
+  }
+  updatePlayBtn();
+}
+function updatePlayBtn() {
+  if (!playBtnEl) return;
+  playBtnEl.innerHTML = running ? "&#9632;" : "&#9654;";   /* ■ / ▶ */
+  playBtnEl.classList.toggle("playing", running);
+}
+if (playBtnEl) playBtnEl.addEventListener("click", togglePlay);
+startEl.addEventListener("click", startAudio);
+
+/* Manual one-shot trigger used by the Mix panel's ▶ buttons.
+   Bypasses mute/solo so the user can always audition a voice. */
+async function manualTrigger(trackId) {
+  await startAudio();
+  if (trackId === "drone") {
+    if (!droneNodes) return;
+    const t = actx.currentTime;
+    droneNodes.droneOut.gain.cancelScheduledValues(t);
+    droneNodes.droneOut.gain.linearRampToValueAtTime(params.drone.lvl, t + 0.05);
+    setTimeout(() => { if (actx) applyDroneAudibility(); }, 1500);
+  } else if (VOICE_FN[trackId]) {
+    VOICE_FN[trackId](1.0);
+  }
+}
+
+function fmtTime(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = String(Math.floor(sec / 3600)).padStart(2, "0");
+  const m = String(Math.floor((sec / 60) % 60)).padStart(2, "0");
+  const s = String(sec % 60).padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+function fmtMS(sec) {
+  const m = String(Math.floor(sec / 60)).padStart(2, "0");
+  const s = String(Math.floor(sec % 60)).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+function registerEvent(kind) {
+  const t = performance.now() / 1000 - T0;
+  events.push({ t, kind });
+}
+
+function tickUI(nowMs) {
+  const t = nowMs / 1000 - T0;
+  const lvl = conductorLevel(t);
+  const der = conductorDerivative(t);
+  m_time.textContent  = fmtTime(t);
+  m_level.textContent = (lvl >= 0 ? "+" : "") + lvl.toFixed(3);
+  m_phase.textContent = phaseLabel(lvl, der);
+
+  for (const k of ALL_KINDS) {
+    if (cntEls[k]) cntEls[k].textContent = counts[k];
+  }
+
+  for (const k of TRACKS) {
+    flash[k] = Math.max(0, flash[k] - 0.04);
+    /* drone has no event flashes — light steadily whenever audible */
+    const lit = (k === "drone") ? isAudible("drone") : (flash[k] > 0.5);
+    const head = dotEls[k];
+    const mixD = mixDotEls[k];
+    if (head) head.classList.toggle("on", lit);
+    if (mixD) mixD.classList.toggle("on", lit);
+  }
+
+  /* live recording counter / sample-rate display */
+  updateRecInfo();
+}
+
+/* ==================================================================
+   MAIN LOOP
+   ================================================================== */
+function frame(nowMs) {
+  draw(nowMs);
+  tickUI(nowMs);
+  drawScoreCanvas();
+  if (running) maybeTrigger(performance.now() / 1000);
+  requestAnimationFrame(frame);
+}
+
+buildPanel();
+/* Apply factory preset, then overlay a saved patch or one from the URL.
+   URL wins, then localStorage, then the bare factory state. */
+applyFactoryPatch();
+const fromURL = loadPatchFromURL();
+if (fromURL) setStatus("Loaded from URL");
+else if (loadPatchFromStorage()) setStatus("Restored");
+else setStatus("Factory");
+f_cycle.textContent = fmtMS(cycleSeconds());
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
