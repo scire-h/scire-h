@@ -8,10 +8,9 @@
 <title>虫時雨 — mushishigure · 秋夜の環境音具</title>
 <style>
   :root{
-    --bg:    #101112;
-    --bg2:   #0c0d0e;
-    --line:  #232527;   /* hairlines */
-    --line2: #323436;
+    --bg:    #000000;
+    --line:  #1e2022;   /* hairlines */
+    --line2: #2c2e30;
     --ink:   #cfcfcf;
     --dim:   #7d7f82;
     --faint: #4a4c4f;
@@ -34,13 +33,15 @@
   #app{
     max-width: 840px;
     margin: 0 auto;
-    padding: 0 20px 90px;
+    padding: 10px 20px 90px;
   }
 
-  /* ---------- header ---------- */
+  /* ---------- header — laid quietly over the black ---------- */
   header{
+    position: absolute; top: 40px; left: 44px; right: 128px;
     display: flex; align-items: baseline; gap: 22px;
-    padding: 46px 2px 26px;
+    z-index: 2;
+    pointer-events: none;
   }
   header h1{
     margin: 0;
@@ -58,36 +59,30 @@
     color: var(--faint);
   }
 
-  /* ---------- night scene ---------- */
+  /* ---------- night scene — the work itself, full bleed ---------- */
   #scene{
     position: relative;
-    height: 300px;
-    border: 1px solid var(--line);
+    height: 100vh;
+    height: 100svh;
     overflow: hidden;
-    background: var(--bg2);
+    background: #000;
   }
   #scene canvas{ display: block; width: 100%; height: 100%; }
   #moonBtn{
-    position: absolute; top: 26px; right: 32px;
-    width: 56px; height: 56px;
+    position: absolute; top: 36px; right: 44px;
+    width: 52px; height: 52px;
     padding: 0; margin: 0;
     background: none; border: 0; cursor: pointer;
     border-radius: 50%;
+    z-index: 2;
   }
   #moonBtn svg{ width: 100%; height: 100%; display: block; overflow: visible; }
-  #moonBtn .m-on{ opacity: 0; transition: opacity 1.6s ease; }
-  #moonBtn .m-off{ opacity: 1; transition: opacity 1.6s ease; }
+  #moonBtn .m-on{ opacity: 0; transition: opacity 2.4s ease; }
+  #moonBtn .m-off{ opacity: 1; transition: opacity 2.4s ease; }
   #moonBtn.on .m-on{ opacity: 1; }
   #moonBtn.on .m-off{ opacity: 0; }
-  #moonBtn.on{
-    animation: moonbreath 8s ease-in-out infinite;
-  }
-  @keyframes moonbreath{
-    0%,100%{ filter: drop-shadow(0 0 10px rgba(236,236,234,0.16)); }
-    50%    { filter: drop-shadow(0 0 22px rgba(236,236,234,0.30)); }
-  }
   #hint{
-    position: absolute; left: 0; right: 0; bottom: 18px;
+    position: absolute; left: 0; right: 0; bottom: 34px;
     text-align: center;
     font-size: 9.5px; letter-spacing: 0.6em; text-indent: 0.6em;
     color: var(--dim);
@@ -264,9 +259,8 @@
     .sp-call{ display: none; }
     .sp-name{ width: 96px; }
     .sp-name .kanji{ font-size: 13px; }
-    #scene{ height: 220px; }
-    #moonBtn{ width: 46px; height: 46px; top: 18px; right: 20px; }
-    header{ padding-top: 34px; gap: 14px; }
+    #moonBtn{ width: 44px; height: 44px; top: 24px; right: 24px; }
+    header{ top: 28px; left: 24px; right: 24px; gap: 14px; }
     header h1{ font-size: 13px; letter-spacing: 0.44em; }
     header .desc{ display: none; }
     #globals{ gap: 34px; row-gap: 44px; }
@@ -278,25 +272,24 @@
 </style>
 </head>
 <body>
-<div id="app">
-
+<div id="scene">
+  <canvas id="night"></canvas>
   <header>
     <h1>虫時雨</h1>
     <span class="romaji">MUSHI-SHIGURE</span>
     <span class="desc">秋の夜 · 環境音具</span>
   </header>
+  <button id="moonBtn" aria-label="play / stop">
+    <svg viewBox="0 0 64 64">
+      <circle class="m-off" cx="32" cy="32" r="19.5" fill="none"
+              stroke="#8e9092" stroke-width="1"/>
+      <circle class="m-on" cx="32" cy="32" r="20" fill="#e9e9e7"/>
+    </svg>
+  </button>
+  <div id="hint">月に触れると、夜がはじまる</div>
+</div>
 
-  <div id="scene">
-    <canvas id="night"></canvas>
-    <button id="moonBtn" aria-label="play / stop">
-      <svg viewBox="0 0 64 64">
-        <circle class="m-off" cx="32" cy="32" r="19.5" fill="none"
-                stroke="#8e9092" stroke-width="1"/>
-        <circle class="m-on" cx="32" cy="32" r="20" fill="#e9e9e7"/>
-      </svg>
-    </button>
-    <div id="hint">月に触れると、夜がはじまる</div>
-  </div>
+<div id="app">
 
   <section id="speciesList"></section>
 
@@ -1200,31 +1193,20 @@ function loadSaved(){
   }catch(_){}
 }
 
-/* ---------------- the night canvas ---------------- */
+/* ---------------- the night canvas ----------------
+   Pure black. One hairline horizon, breathing with 地.
+   Every call is a single thin ring that opens and disappears —
+   sound made visible, nothing else. */
 const cv = $("#night");
 const cx2 = cv.getContext("2d");
-let W=0, H=0, DPR=1, stars=[], grassPath=null, glows=[];
+const HORIZON = 0.72;
+let W=0, H=0, DPR=1, ripples=[];
 
 function resizeCanvas(){
   DPR = Math.min(2, window.devicePixelRatio||1);
   W = cv.clientWidth; H = cv.clientHeight;
   cv.width = W*DPR; cv.height = H*DPR;
   cx2.setTransform(DPR,0,0,DPR,0,0);
-  stars = [];
-  const n = Math.floor(W/9);
-  for(let i=0;i<n;i++){
-    stars.push({ x: Math.random(), y: Math.random()*0.62,
-                 r: rand(0.3,1.1), ph: rand(0,Math.PI*2), sp: rand(0.2,0.9) });
-  }
-  grassPath = new Path2D();
-  const blades = Math.floor(W/7);
-  for(let i=0;i<blades;i++){
-    const x = Math.random()*W;
-    const h = rand(10, 46)*(H/300);
-    const lean = rand(-14, 14);
-    grassPath.moveTo(x, H);
-    grassPath.quadraticCurveTo(x + lean*0.3, H - h*0.6, x + lean, H - h);
-  }
 }
 window.addEventListener("resize", resizeCanvas);
 
@@ -1232,60 +1214,49 @@ function addGlow(sp, ind, when, vel, dur){
   const delay = ctx ? Math.max(0, (when - ctx.currentTime)*1000) : 0;
   setTimeout(()=>{
     const d = indDist(sp, ind);
-    glows.push({
-      x: 0.5 + ind.pan*0.44,
-      y: 0.86 - d*0.42 - Math.random()*0.04,
-      r: lerp(20, 7, d),
-      hue: sp.hue,
-      a: lerp(0.5, 0.16, d)*Math.min(1, vel),
+    const scale = Math.min(W, H)/900;
+    ripples.push({
+      // sources sit on the ground plane — far voices near the horizon,
+      // with narrowed lateral spread (perspective)
+      x: 0.5 + ind.pan * lerp(0.44, 0.16, d),
+      y: HORIZON + 0.02 + (1-d)*0.15 + rand(-0.008, 0.008),
+      r0: 2,
+      r1: lerp(110, 26, d) * Math.max(0.5, scale),
+      lw: lerp(0.9, 0.5, d),
+      a0: lerp(0.34, 0.10, d) * Math.min(1, vel),
       born: performance.now(),
-      life: Math.max(500, Math.min(dur,2.5)*1000),
+      life: 1800 + Math.min(dur, 2.5)*800,
     });
-    if(glows.length > 60) glows.shift();
+    if(ripples.length > 80) ripples.shift();
   }, delay);
 }
 
 function draw(){
   requestAnimationFrame(draw);
-  const t = performance.now();
-  // sky
-  const grad = cx2.createLinearGradient(0,0,0,H);
-  grad.addColorStop(0, "#0a0b0c");
-  grad.addColorStop(0.6, "#0e0f10");
-  grad.addColorStop(1, "#121314");
-  cx2.fillStyle = grad;
-  cx2.fillRect(0,0,W,H);
-  // stars
-  for(const s of stars){
-    const tw = 0.4 + 0.6*(0.5 + 0.5*Math.sin(t*0.001*s.sp + s.ph));
-    cx2.globalAlpha = 0.32*tw;
-    cx2.fillStyle = "#a9abad";
-    cx2.fillRect(s.x*W, s.y*H, s.r, s.r);
-  }
-  cx2.globalAlpha = 1;
-  // call glows — voices as small lanterns in the grass
   const now = performance.now();
-  glows = glows.filter(g => now - g.born < g.life + 900);
-  for(const g of glows){
-    const age = now - g.born;
-    let a;
-    if(age < 140) a = g.a * (age/140);
-    else if(age < g.life) a = g.a * (0.75 + 0.25*Math.sin(age*0.02));
-    else a = g.a * Math.max(0, 1-(age-g.life)/900);
-    if(a <= 0.003) continue;
-    const gx = g.x*W, gy = g.y*H;
-    const rg = cx2.createRadialGradient(gx,gy,0, gx,gy,g.r);
-    rg.addColorStop(0, `rgba(228,229,230,${a*0.85})`);
-    rg.addColorStop(1, "rgba(228,229,230,0)");
-    cx2.fillStyle = rg;
-    cx2.beginPath(); cx2.arc(gx,gy,g.r,0,Math.PI*2); cx2.fill();
+  cx2.fillStyle = "#000";
+  cx2.fillRect(0,0,W,H);
+
+  // horizon — breathes with 地
+  const hy = Math.round(H*HORIZON) + 0.5;
+  const ha = 0.035 + 0.055*S.drone*(0.5 + 0.5*Math.sin(now*0.00021));
+  cx2.strokeStyle = `rgba(214,215,216,${ha})`;
+  cx2.lineWidth = 1;
+  cx2.beginPath(); cx2.moveTo(0,hy); cx2.lineTo(W,hy); cx2.stroke();
+
+  // ripples — each voice, once
+  ripples = ripples.filter(r => now - r.born < r.life);
+  for(const rp of ripples){
+    const t = (now - rp.born)/rp.life;
+    const e = 1 - Math.pow(1-t, 3);              // opens fast, then slows
+    const a = rp.a0 * Math.pow(1-t, 1.7);        // and quietly disappears
+    if(a <= 0.004) continue;
+    cx2.strokeStyle = `rgba(221,222,223,${a})`;
+    cx2.lineWidth = rp.lw;
+    cx2.beginPath();
+    cx2.arc(rp.x*W, rp.y*H, rp.r0 + (rp.r1-rp.r0)*e, 0, Math.PI*2);
+    cx2.stroke();
   }
-  // grass silhouette
-  cx2.strokeStyle = "rgba(7,8,9,0.9)";
-  cx2.lineWidth = 1.2;
-  if(grassPath) cx2.stroke(grassPath);
-  cx2.fillStyle = "rgba(6,7,8,0.85)";
-  cx2.fillRect(0, H-6, W, 6);
 }
 
 /* ---------------- boot ---------------- */
