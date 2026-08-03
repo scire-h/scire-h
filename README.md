@@ -26,7 +26,8 @@ a quiet Japanese autumn night — as an instrument, not a sample player.
   the field never repeats itself.
 * 気温 (temperature) follows Dolbear's law: cold nights sing slower
   and slightly flatter. 間 (ma) makes the whole field fall silent now
-  and then; a strong gust of 風 can do the same.
+  and then. 地 (ji) is a barely-there continuo drone — two low sines
+  beating slowly, breathing over tens of seconds, drifting a few cents.
 * Per species, timing is either 野 (free, natural intervals) or 拍 —
   a TR-808-style 16-step grid with swing (うねり) and per-hit timing
   looseness (ゆらぎ).
