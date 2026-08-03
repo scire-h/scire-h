@@ -3,6 +3,15 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## 虫時雨 mushi-shigure — autumn-night insect field
+
+* New standalone instrument `mushishigure.html`: an ambient simulation
+  of a Japanese autumn-night insect chorus (鈴虫・松虫・蟋蟀・鉦叩・
+  馬追・遠蜩) built on sine-carrier + wing-stroke-AM synthesis with
+  per-individual pitch drift, call-and-response, temperature-dependent
+  pace (Dolbear's law), field-wide hushes (間), a wind bed, and a
+  per-species 16-step grid mode with swing and timing looseness.
+
 ## Phase 2.7 — Multi-output bus
 
 * Added four optional stereo aux output buses (`Ch1 Out`…`Ch4 Out`)

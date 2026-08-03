@@ -1,0 +1,1330 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#070a12" />
+<title>虫時雨 — mushishigure · 秋夜の環境音具</title>
+<style>
+  :root{
+    --night:   #070a12;
+    --night2:  #0a0e1a;
+    --panel:   #0b101c;
+    --line:    #182238;
+    --line2:   #24304a;
+    --ink:     #b9c4d6;
+    --dim:     #5c6880;
+    --faint:   #38445c;
+    --moon:    #e9e2cc;
+    --ember:   #d9a45b;   /* 行灯の火 — the only warm light */
+    --ember-d: #8a6534;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin: 0; padding: 0;
+    background: var(--night);
+    color: var(--ink);
+    font-family: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho",
+                 "Noto Serif JP", "Songti SC", serif;
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+  body::after{ /* film grain — analog quietness */
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.6'/></svg>");
+  }
+  #app{
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 0 14px 60px;
+  }
+
+  /* ---------- header ---------- */
+  header{
+    display: flex; align-items: baseline; gap: 14px;
+    padding: 22px 4px 10px;
+  }
+  header h1{
+    margin: 0;
+    font-size: 21px; font-weight: 500;
+    letter-spacing: 0.42em;
+    color: var(--ink);
+  }
+  header .romaji{
+    font-size: 10px; letter-spacing: 0.28em;
+    color: var(--dim);
+  }
+  header .desc{
+    margin-left: auto;
+    font-size: 10px; letter-spacing: 0.18em;
+    color: var(--faint);
+  }
+
+  /* ---------- night scene ---------- */
+  #scene{
+    position: relative;
+    height: 300px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--night);
+  }
+  #scene canvas{ display:block; width: 100%; height: 100%; }
+  #moonBtn{
+    position: absolute; top: 22px; right: 30px;
+    width: 64px; height: 64px;
+    padding: 0; margin: 0;
+    background: none; border: 0; cursor: pointer;
+    border-radius: 50%;
+    transition: filter 1.2s ease;
+    filter: drop-shadow(0 0 6px rgba(233,226,204,0.10));
+  }
+  #moonBtn.on{
+    filter: drop-shadow(0 0 18px rgba(233,226,204,0.38));
+    animation: moonbreath 7s ease-in-out infinite;
+  }
+  @keyframes moonbreath{
+    0%,100%{ filter: drop-shadow(0 0 14px rgba(233,226,204,0.30)); }
+    50%    { filter: drop-shadow(0 0 26px rgba(233,226,204,0.50)); }
+  }
+  #moonBtn svg{ width: 100%; height: 100%; display: block; }
+  #hint{
+    position: absolute; left: 0; right: 0; bottom: 16px;
+    text-align: center;
+    font-size: 11px; letter-spacing: 0.5em; text-indent: 0.5em;
+    color: var(--dim);
+    transition: opacity 2.5s ease;
+    pointer-events: none;
+  }
+  #hint.gone{ opacity: 0; }
+
+  /* ---------- species rows ---------- */
+  #speciesList{ margin-top: 26px; }
+  .sp-row{
+    border-top: 1px solid var(--line);
+    padding: 12px 4px 12px;
+    transition: opacity 0.6s ease;
+  }
+  .sp-row:last-child{ border-bottom: 1px solid var(--line); }
+  .sp-row.silent{ opacity: 0.38; }
+  .sp-main{
+    display: flex; align-items: center; gap: 14px;
+    flex-wrap: wrap;
+  }
+  .sp-name{ width: 118px; flex-shrink: 0; }
+  .sp-name .kanji{
+    font-size: 17px; letter-spacing: 0.30em;
+    color: var(--ink);
+  }
+  .sp-name .yomi{
+    font-size: 9px; letter-spacing: 0.22em;
+    color: var(--faint);
+    margin-top: 1px;
+  }
+  .sp-call{
+    width: 108px; flex-shrink: 0;
+    font-size: 10px; letter-spacing: 0.14em;
+    color: var(--dim);
+  }
+  /* population — small circles, tap n-th to set count */
+  .pop{
+    display: flex; gap: 7px; align-items: center;
+    flex-shrink: 0;
+    padding: 6px 2px;
+    cursor: pointer;
+  }
+  .pop .p{
+    width: 9px; height: 9px; border-radius: 50%;
+    border: 1px solid var(--faint);
+    background: transparent;
+    transition: background 0.4s, border-color 0.4s, box-shadow 0.4s;
+  }
+  .pop .p.on{
+    background: var(--ember);
+    border-color: var(--ember);
+    box-shadow: 0 0 6px rgba(217,164,91,0.35);
+  }
+  .sp-knobs{ display: flex; gap: 10px; align-items: flex-start; }
+  .sp-spacer{ flex: 1; }
+  /* mode toggle 野 / 拍 */
+  .mode{
+    display: flex;
+    border: 1px solid var(--line2);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .mode button{
+    background: transparent;
+    color: var(--dim);
+    border: 0;
+    font: inherit; font-size: 12px;
+    letter-spacing: 0.1em;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+  .mode button + button{ border-left: 1px solid var(--line2); }
+  .mode button.on{
+    color: var(--night);
+    background: var(--ember);
+  }
+  /* 16-step row */
+  .sp-steps{
+    display: none;
+    margin-top: 11px;
+    padding-left: 2px;
+    gap: 8px;
+    align-items: center;
+  }
+  .sp-row.grid .sp-steps{ display: flex; flex-wrap: wrap; }
+  .step{
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    border: 1px solid var(--faint);
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    position: relative;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .step:nth-child(4n+1){ margin-left: 10px; }
+  .step:first-child{ margin-left: 0; }
+  .step.on{ background: var(--ember); border-color: var(--ember); }
+  .step.soft{ border-color: var(--ember-d); }
+  .step.soft::after{
+    content:""; position:absolute; inset: 4px;
+    border-radius: 50%;
+    background: var(--ember-d);
+  }
+  .step.cur{ box-shadow: 0 0 0 2px rgba(233,226,204,0.35); }
+
+  /* ---------- knobs ---------- */
+  .knob{
+    display: flex; flex-direction: column; align-items: center;
+    width: 46px;
+    position: relative;
+  }
+  .knob svg{
+    width: 34px; height: 34px; display: block;
+    touch-action: none;
+    cursor: ns-resize;
+  }
+  .knob .track{ fill: none; stroke: var(--line2); stroke-width: 2; }
+  .knob .fill { fill: none; stroke: var(--ember-d); stroke-width: 2; }
+  .knob .ptr  { stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; }
+  .knob.active .fill{ stroke: var(--ember); }
+  .knob .lbl{
+    margin-top: 3px;
+    font-size: 9.5px; letter-spacing: 0.24em; text-indent: 0.24em;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  .knob .pop-v{
+    position: absolute; top: -22px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel);
+    border: 1px solid var(--line2);
+    color: var(--moon);
+    font-size: 10px; letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 2px;
+    white-space: nowrap;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.12s;
+    z-index: 10;
+  }
+  .knob.active .pop-v{ opacity: 1; }
+
+  /* ---------- global sections ---------- */
+  #globals{
+    margin-top: 30px;
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .g-group{
+    display: flex; gap: 12px;
+    align-items: flex-start;
+    padding: 14px 16px 12px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    position: relative;
+  }
+  .g-group .g-title{
+    position: absolute; top: -8px; left: 12px;
+    background: var(--night);
+    padding: 0 8px;
+    font-size: 9.5px; letter-spacing: 0.34em; text-indent: 0.34em;
+    color: var(--faint);
+  }
+  .g-group .knob{ width: 52px; }
+  .g-group .knob svg{ width: 38px; height: 38px; }
+
+  footer{
+    margin-top: 34px;
+    font-size: 9.5px; letter-spacing: 0.2em;
+    color: var(--faint);
+    text-align: center;
+  }
+
+  @media (max-width: 640px){
+    .sp-call{ display: none; }
+    .sp-name{ width: 96px; }
+    .sp-name .kanji{ font-size: 15px; }
+    #scene{ height: 220px; }
+    #moonBtn{ width: 52px; height: 52px; top: 16px; right: 18px; }
+    header h1{ font-size: 17px; letter-spacing: 0.3em; }
+    header .desc{ display: none; }
+    #globals{ gap: 18px; }
+    .g-group{ padding: 12px 10px 10px; gap: 6px; }
+    .g-group .knob{ width: 46px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>虫時雨</h1>
+    <span class="romaji">MUSHI-SHIGURE</span>
+    <span class="desc">秋の夜 · 環境音具</span>
+  </header>
+
+  <div id="scene">
+    <canvas id="night"></canvas>
+    <button id="moonBtn" aria-label="play / stop">
+      <svg viewBox="0 0 64 64">
+        <defs>
+          <radialGradient id="mg" cx="42%" cy="38%" r="70%">
+            <stop offset="0%"  stop-color="#f4eeda"/>
+            <stop offset="70%" stop-color="#ded5b8"/>
+            <stop offset="100%" stop-color="#b8ad8e"/>
+          </radialGradient>
+        </defs>
+        <circle cx="32" cy="32" r="21" fill="url(#mg)"/>
+        <circle cx="25" cy="27" r="3.2" fill="rgba(140,130,105,0.35)"/>
+        <circle cx="38" cy="38" r="4.4" fill="rgba(140,130,105,0.28)"/>
+        <circle cx="40" cy="23" r="2.1" fill="rgba(140,130,105,0.30)"/>
+        <circle cx="27" cy="41" r="2.4" fill="rgba(140,130,105,0.25)"/>
+      </svg>
+    </button>
+    <div id="hint">月に触れると、夜がはじまる</div>
+  </div>
+
+  <section id="speciesList"></section>
+
+  <section id="globals">
+    <div class="g-group" id="gNight">
+      <span class="g-title">夜　気</span>
+    </div>
+    <div class="g-group" id="gBeat">
+      <span class="g-title">拍</span>
+    </div>
+    <div class="g-group" id="gOut">
+      <span class="g-title">出</span>
+    </div>
+  </section>
+
+  <footer>空白鍵で開始と停止 · 「野」は自然の間合い · 「拍」は十六歩の刻み</footer>
+</div>
+
+<script>
+/* =====================================================================
+   虫時雨 MUSHI-SHIGURE — a quiet autumn-night field, as an instrument.
+
+   Design notes:
+   · every voice is a sine carrier with wing-stroke AM (real cricket
+     stridulation is nearly pure-tone) — no noise-burst "static"
+   · pitch is alive: per-individual Ornstein–Uhlenbeck drift, onset
+     glide inside each ring, and a slow sub-Hz waver
+   · individuals are persistent characters: own detune, own pace, own
+     place in the garden, occasional long rests, call-and-response
+   · 気温 (temperature) follows Dolbear's law — cold nights are slower
+     and slightly flatter
+   · 間 (ma) — sometimes the whole field falls silent, then returns
+   · per-species 野 (free) / 拍 (16-step grid, swing + ゆらぎ) timing
+   ===================================================================== */
+"use strict";
+
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b)=> v<a?a:v>b?b:v;
+const lerp  = (a,b,t)=> a+(b-a)*t;
+const rand  = (a,b)=> a+Math.random()*(b-a);
+function gauss(){
+  let u=0,v=0;
+  while(!u) u=Math.random();
+  while(!v) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+
+/* ---------------- species definitions ---------------- */
+/* interval = mean seconds between phrases per individual (at 19°C) */
+const SPECIES = [
+  { id:"suzu", kanji:"鈴虫", yomi:"すずむし", call:"リーン、リーン",
+    hue: 42, baseFreq: 4300, interval: 7.5, drift: 0.006,
+    pop: 2, vol: 0.62, pitch: 1.0, dist: 0.35 },
+  { id:"matsu", kanji:"松虫", yomi:"まつむし", call:"チンチロリン",
+    hue: 52, baseFreq: 5200, interval: 11, drift: 0.007,
+    pop: 1, vol: 0.5, pitch: 1.0, dist: 0.45 },
+  { id:"korogi", kanji:"蟋蟀", yomi:"こおろぎ", call:"コロコロリー",
+    hue: 30, baseFreq: 1750, interval: 9, drift: 0.008,
+    pop: 2, vol: 0.6, pitch: 1.0, dist: 0.25 },
+  { id:"kane", kanji:"鉦叩", yomi:"かねたたき", call:"チン、チン、チン",
+    hue: 58, baseFreq: 5900, interval: 14, drift: 0.005,
+    pop: 1, vol: 0.42, pitch: 1.0, dist: 0.55 },
+  { id:"umaoi", kanji:"馬追", yomi:"うまおい", call:"スイーッチョン",
+    hue: 48, baseFreq: 5400, interval: 17, drift: 0.009,
+    pop: 1, vol: 0.44, pitch: 1.0, dist: 0.4 },
+  { id:"higu", kanji:"遠蜩", yomi:"とおひぐらし", call:"カナカナカナ…",
+    hue: 20, baseFreq: 3050, interval: 34, drift: 0.006,
+    pop: 0, vol: 0.5, pitch: 1.0, dist: 0.8 },
+];
+const MAXPOP = 4;
+
+/* ---------------- global state ---------------- */
+const S = {
+  running: false,
+  temp: 19,          // 気温 °C  (14–26)
+  wind: 0.35,        // 風
+  dew: 0.5,          // 露 — reverb depth
+  ma: 0.5,           // 間 — hush frequency (0 = never)
+  bpm: 72, swing: 0.12, yuragi: 0.5,
+  masterVol: 0.8,
+  step: 0, stepTime: null,
+  nextHush: Infinity, hushUntil: 0,
+  windMoveAt: 0, gust: 0,
+};
+function tempRate(){ return lerp(0.5, 1.45, (S.temp-14)/12); }   // Dolbear-ish
+function tempPitch(){ return lerp(0.955, 1.045, (S.temp-14)/12); }
+
+/* ---------------- audio graph ---------------- */
+let ctx=null, insectBus, fieldGain, windGainNode, mixBus, shaper,
+    dryGain, revBus, conv, revReturn, comp, masterGain;
+
+function initAudio(){
+  if(ctx) return;
+  ctx = new (window.AudioContext||window.webkitAudioContext)({ latencyHint:"playback" });
+
+  insectBus = ctx.createGain();
+  fieldGain = ctx.createGain();               // 間 (hush) rides here
+  insectBus.connect(fieldGain);
+
+  mixBus = ctx.createGain();
+  fieldGain.connect(mixBus);
+
+  // gentle analog-ish saturation
+  shaper = ctx.createWaveShaper();
+  const curve = new Float32Array(1024);
+  for(let i=0;i<1024;i++){
+    const x = i/511.5 - 1;
+    curve[i] = Math.tanh(1.4*x)/Math.tanh(1.4);
+  }
+  shaper.curve = curve;
+  shaper.oversample = "2x";
+  mixBus.connect(shaper);
+
+  // soften the very top — night air absorbs it
+  const airLPF = ctx.createBiquadFilter();
+  airLPF.type = "lowpass"; airLPF.frequency.value = 12500; airLPF.Q.value = 0.5;
+  shaper.connect(airLPF);
+
+  dryGain = ctx.createGain();
+  airLPF.connect(dryGain);
+
+  revBus = ctx.createGain();
+  conv = ctx.createConvolver();
+  conv.buffer = makeIR(3.2);
+  revReturn = ctx.createGain();
+  revBus.connect(conv).connect(revReturn);
+
+  comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -26; comp.knee.value = 18;
+  comp.ratio.value = 2.5; comp.attack.value = 0.02; comp.release.value = 0.45;
+  dryGain.connect(comp);
+  revReturn.connect(comp);
+
+  masterGain = ctx.createGain();
+  masterGain.gain.value = 0;
+  comp.connect(masterGain).connect(ctx.destination);
+
+  buildWind();
+  for(const sp of SPECIES) buildIndividuals(sp);
+  applyGlobals();
+}
+
+/* dark exponential-decay IR, brightness dying over the tail */
+function makeIR(seconds){
+  const sr = ctx.sampleRate, len = Math.floor(sr*seconds);
+  const buf = ctx.createBuffer(2, len, sr);
+  for(let ch=0; ch<2; ch++){
+    const d = buf.getChannelData(ch);
+    let lp = 0;
+    for(let i=0;i<len;i++){
+      const t = i/len;
+      const a = Math.pow(1-t, 2.4);
+      // one-pole lowpass whose coefficient darkens along the tail
+      const k = lerp(0.25, 0.02, t);
+      lp += k * ((Math.random()*2-1) - lp);
+      d[i] = lp * a;
+    }
+  }
+  return buf;
+}
+
+/* ---------------- wind bed ---------------- */
+let windFilter, rustleFilter, rustleGain, noiseBuf;
+function getNoise(){
+  if(noiseBuf) return noiseBuf;
+  const sr = ctx.sampleRate, len = sr*4;
+  noiseBuf = ctx.createBuffer(1, len, sr);
+  const d = noiseBuf.getChannelData(0);
+  let b0=0,b1=0,b2=0;
+  for(let i=0;i<len;i++){ // pink-ish
+    const w = Math.random()*2-1;
+    b0 = 0.997*b0 + w*0.029591;
+    b1 = 0.985*b1 + w*0.032534;
+    b2 = 0.950*b2 + w*0.048056;
+    d[i] = (b0+b1+b2+w*0.05)*3.2;
+  }
+  return noiseBuf;
+}
+function buildWind(){
+  const src = ctx.createBufferSource();
+  src.buffer = getNoise(); src.loop = true;
+  windFilter = ctx.createBiquadFilter();
+  windFilter.type = "lowpass"; windFilter.frequency.value = 420; windFilter.Q.value = 0.4;
+  windGainNode = ctx.createGain(); windGainNode.gain.value = 0;
+  src.connect(windFilter).connect(windGainNode).connect(mixBus);
+
+  // faint grass rustle band
+  rustleFilter = ctx.createBiquadFilter();
+  rustleFilter.type = "bandpass"; rustleFilter.frequency.value = 2600; rustleFilter.Q.value = 0.8;
+  rustleGain = ctx.createGain(); rustleGain.gain.value = 0;
+  src.connect(rustleFilter).connect(rustleGain).connect(mixBus);
+
+  const wet = ctx.createGain(); wet.gain.value = 0.25;
+  windGainNode.connect(wet).connect(revBus);
+  src.start();
+}
+function updateWind(now){
+  if(now < S.windMoveAt) return;
+  S.windMoveAt = now + rand(2.5, 7);
+  const breeze = Math.pow(Math.random(), 1.4);            // mostly gentle
+  const gusty = Math.random() < 0.10;
+  const level = S.wind * (0.05 + breeze*0.10 + (gusty ? 0.16 : 0));
+  windGainNode.gain.setTargetAtTime(level, now, gusty ? 0.9 : 2.4);
+  rustleGain.gain.setTargetAtTime(level*0.24*breeze, now, 2.0);
+  windFilter.frequency.setTargetAtTime(rand(260, 750) + breeze*500, now, 2.5);
+  if(gusty && S.wind > 0.15){
+    // a real gust makes the field hold its breath, sometimes
+    if(Math.random() < 0.5 && S.ma > 0 && now > S.hushUntil){
+      scheduleHush(now + rand(0.6, 1.6), rand(2.5, 6));
+    }
+  }
+}
+
+/* ---------------- individuals ---------------- */
+function buildIndividuals(sp){
+  sp.inds = [];
+  sp.gridIdx = 0;
+  for(let i=0;i<MAXPOP;i++){
+    const ind = {
+      det: rand(-0.028, 0.028),          // personal tuning
+      rateMul: rand(0.78, 1.3),          // personal pace
+      pers: rand(0.7, 1.0),              // personal loudness
+      pan: rand(-0.85, 0.85),
+      distOff: rand(-0.12, 0.12),
+      walk: 0,                            // OU pitch state
+      actPhase: rand(0, Math.PI*2),
+      next: 0, restUntil: 0,
+    };
+    ind.input = ctx.createGain();                 // per-call sum
+    ind.lpf = ctx.createBiquadFilter();
+    ind.lpf.type = "lowpass"; ind.lpf.Q.value = 0.4;
+    ind.panner = ctx.createStereoPanner();
+    ind.panner.pan.value = ind.pan;
+    ind.dry = ctx.createGain();
+    ind.wet = ctx.createGain();
+    ind.input.connect(ind.lpf).connect(ind.panner);
+    ind.panner.connect(ind.dry).connect(insectBus);
+    ind.panner.connect(ind.wet).connect(revBus);
+    sp.inds.push(ind);
+  }
+  applySpeciesMix(sp);
+}
+function indDist(sp, ind){ return clamp(sp.dist + ind.distOff, 0, 1); }
+function applySpeciesMix(sp){
+  if(!ctx) return;
+  const now = ctx.currentTime;
+  for(const ind of sp.inds){
+    const d = indDist(sp, ind);
+    ind.lpf.frequency.setTargetAtTime(lerp(13000, 2100, d*d), now, 0.1);
+    ind.dry.gain.setTargetAtTime(sp.vol * ind.pers * lerp(1.0, 0.3, d), now, 0.1);
+    ind.wet.gain.setTargetAtTime(sp.vol * ind.pers * lerp(0.15, 0.85, d) * 0.8, now, 0.1);
+  }
+}
+
+/* per-ring living pitch */
+function indFreq(sp, ind){
+  ind.walk = clamp(ind.walk*0.88 + gauss()*sp.drift, -0.045, 0.045);
+  return sp.baseFreq * sp.pitch * tempPitch() * (1 + ind.det) * (1 + ind.walk);
+}
+
+/* ---------------- voice building blocks ---------------- */
+function autokill(nodes, oscs, tEnd){
+  for(const o of oscs){ try{ o.stop(tEnd); }catch(_){} }
+  if(oscs.length){
+    oscs[0].onended = ()=>{ for(const n of nodes) try{ n.disconnect(); }catch(_){} };
+  }
+}
+
+/* one ring: sine carrier + faint 2nd partial, wing-stroke AM,
+   onset glide + sub-audio waver. The heart of the instrument. */
+function ring(ind, t, dur, f, vel, opt={}){
+  const amHz    = opt.amHz    ?? 46;
+  const amDepth = opt.amDepth ?? 0.9;
+  const glide   = opt.glide   ?? 0.010;   // starts sharp, settles
+  const waver   = opt.waver   ?? 0.004;
+  const atk     = opt.atk     ?? dur*0.32;
+  const rel     = opt.rel     ?? 0.10;
+  const p2      = opt.p2      ?? 0.10;
+
+  const o1 = ctx.createOscillator(); o1.type = "sine";
+  o1.frequency.setValueAtTime(f*(1+glide), t);
+  o1.frequency.exponentialRampToValueAtTime(f*(1-glide*0.3), t+Math.min(dur*0.6, 0.25));
+
+  const o2 = ctx.createOscillator(); o2.type = "sine";
+  o2.frequency.setValueAtTime(f*2.02*(1+glide), t);
+  o2.frequency.exponentialRampToValueAtTime(f*2.02, t+Math.min(dur*0.5, 0.2));
+  const g2 = ctx.createGain(); g2.gain.value = p2;
+
+  // slow waver on the carrier — the not-quite-steady bow arm
+  const wav = ctx.createOscillator(); wav.type = "sine";
+  wav.frequency.value = rand(4.5, 7.5);
+  const wavG = ctx.createGain(); wavG.gain.value = f*waver;
+  wav.connect(wavG).connect(o1.frequency);
+
+  // wing-stroke AM with its own slight rate drift
+  const am = ctx.createGain(); am.gain.value = 1 - amDepth*0.5;
+  const lfo = ctx.createOscillator(); lfo.type = "sine";
+  lfo.frequency.setValueAtTime(amHz*rand(0.94,1.06), t);
+  lfo.frequency.linearRampToValueAtTime(amHz*rand(0.94,1.06), t+dur);
+  const lfoG = ctx.createGain(); lfoG.gain.value = amDepth*0.5;
+  lfo.connect(lfoG).connect(am.gain);
+
+  const env = ctx.createGain(); env.gain.value = 0;
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(vel, t+atk);
+  env.gain.setValueAtTime(vel, Math.max(t+atk, t+dur-rel*0.6));
+  env.gain.linearRampToValueAtTime(0.0001, t+dur+rel);
+
+  o1.connect(am); o2.connect(g2).connect(am);
+  am.connect(env).connect(ind.input);
+
+  o1.start(t); o2.start(t); wav.start(t); lfo.start(t);
+  autokill([g2,wavG,am,lfoG,env,wav,lfo,o2,o1], [o1,o2,wav,lfo], t+dur+rel+0.05);
+}
+
+/* short pitched tick — kanetataki / matsumushi notes */
+function tick(ind, t, dur, f, vel, opt={}){
+  const o = ctx.createOscillator(); o.type = "sine";
+  o.frequency.setValueAtTime(f*1.012, t);
+  o.frequency.exponentialRampToValueAtTime(f, t+dur*0.7);
+  const o2 = ctx.createOscillator(); o2.type = "sine";
+  o2.frequency.value = f*(opt.pRatio ?? 2.4);
+  const g2 = ctx.createGain(); g2.gain.value = opt.p2 ?? 0.14;
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(vel, t+(opt.atk ?? 0.004));
+  env.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.connect(env); o2.connect(g2).connect(env);
+  env.connect(ind.input);
+  o.start(t); o2.start(t);
+  autokill([g2,env,o2,o], [o,o2], t+dur+0.03);
+}
+
+/* ---------------- species phrases ----------------
+   phrase(sp, ind, t, vel) → seconds of sound scheduled
+   unit(sp, ind, t, vel)   → one grid-triggerable element   */
+
+const VOICES = {
+  suzu: {
+    phrase(sp, ind, t, vel){
+      const n = 2 + (Math.random()*3|0);
+      let tt = t;
+      for(let i=0;i<n;i++){
+        const dur = rand(0.34, 0.6);
+        ring(ind, tt, dur, indFreq(sp, ind), 0.20*vel*rand(0.85,1),
+             { amHz: 46, amDepth: 0.92 });
+        tt += dur + rand(0.16, 0.4);
+      }
+      return tt - t;
+    },
+    unit(sp, ind, t, vel){
+      ring(ind, t, rand(0.3,0.42), indFreq(sp, ind), 0.20*vel, { amHz: 46 });
+    },
+  },
+
+  matsu: {
+    /* チン・チロリン — one clear note, then a quick roll */
+    phrase(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      tick(ind, t, 0.11, f, 0.16*vel, { p2: 0.1 });
+      const roll = [1.09, 0.97, 1.05, 0.93];
+      const cnt = 3 + (Math.random()<0.5?1:0);
+      let tt = t + rand(0.16, 0.22);
+      for(let i=0;i<cnt;i++){
+        tick(ind, tt, 0.09, f*roll[i]*(1+gauss()*0.004), 0.15*vel*rand(0.8,1));
+        tt += rand(0.055, 0.075);
+      }
+      return tt + 0.1 - t;
+    },
+    unit(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      tick(ind, t, 0.1, f, 0.16*vel);
+      tick(ind, t+0.06, 0.09, f*1.08, 0.13*vel);
+      tick(ind, t+0.12, 0.09, f*0.96, 0.13*vel);
+    },
+  },
+
+  korogi: {
+    /* コロコロリー — a slowing, breathing pulse train */
+    phrase(sp, ind, t, vel){
+      const f0 = indFreq(sp, ind);
+      const n = 7 + (Math.random()*7|0);
+      let iv = rand(0.042, 0.052), tt = t, f = f0;
+      for(let i=0;i<n;i++){
+        const bell = Math.sin(Math.PI * (i+0.5)/n);       // swell then fade
+        ring(ind, tt, 0.034, f, 0.17*vel*(0.35+0.65*bell),
+             { amHz: 0.0001, amDepth: 0, atk: 0.008, rel: 0.02, glide: 0.004, p2: 0.06 });
+        f *= 1 - 0.0022 - Math.random()*0.002;            // sags as it tires
+        iv *= 1.018 + Math.random()*0.012;
+        tt += iv;
+      }
+      return tt - t;
+    },
+    unit(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      for(let i=0;i<3;i++)
+        ring(ind, t+i*0.05, 0.034, f*(1-0.002*i), 0.16*vel*(1-0.15*i),
+             { amHz:0.0001, amDepth:0, atk:0.008, rel:0.02, p2:0.06 });
+    },
+  },
+
+  kane: {
+    /* チン、チン、チン — patient little bell strikes */
+    phrase(sp, ind, t, vel){
+      const n = 5 + (Math.random()*9|0);
+      const iv = rand(0.15, 0.21);
+      let tt = t;
+      for(let i=0;i<n;i++){
+        tick(ind, tt, 0.055, indFreq(sp, ind), 0.13*vel*rand(0.8,1),
+             { pRatio: 1.63, p2: 0.2, atk: 0.002 });
+        tt += iv * rand(0.92, 1.1);
+      }
+      return tt - t;
+    },
+    unit(sp, ind, t, vel){
+      tick(ind, t, 0.055, indFreq(sp, ind), 0.14*vel, { pRatio: 1.63, p2: 0.2, atk: 0.002 });
+    },
+  },
+
+  umaoi: {
+    /* スイーッ…チョン */
+    phrase(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      const dur = rand(0.4, 0.6);
+      // rising buzz — square-wave wing AM
+      const o = ctx.createOscillator(); o.type = "sine";
+      o.frequency.setValueAtTime(f*0.86, t);
+      o.frequency.exponentialRampToValueAtTime(f*1.04, t+dur);
+      const am = ctx.createGain(); am.gain.value = 0.5;
+      const lfo = ctx.createOscillator(); lfo.type = "square";
+      lfo.frequency.setValueAtTime(64, t);
+      lfo.frequency.linearRampToValueAtTime(96, t+dur);
+      const lfoG = ctx.createGain(); lfoG.gain.value = 0.5;
+      lfo.connect(lfoG).connect(am.gain);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.11*vel, t+dur*0.7);
+      env.gain.linearRampToValueAtTime(0.13*vel, t+dur);
+      env.gain.linearRampToValueAtTime(0.0001, t+dur+0.02);
+      o.connect(am).connect(env).connect(ind.input);
+      o.start(t);
+      lfo.start(t);
+      autokill([am,lfoG,env,lfo,o],[o,lfo], t+dur+0.05);
+      // チョン
+      tick(ind, t+dur+rand(0.02,0.06), 0.07, f*0.74, 0.19*vel, { p2: 0.18, atk: 0.003 });
+      return dur + 0.15;
+    },
+    unit(sp, ind, t, vel){
+      tick(ind, t, 0.07, indFreq(sp, ind)*0.74, 0.18*vel, { p2: 0.18, atk: 0.003 });
+    },
+  },
+
+  higu: {
+    /* カナカナカナ… — far away, mostly reverb */
+    phrase(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      const dur = rand(2.0, 3.4);
+      const o = ctx.createOscillator(); o.type = "sine";
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.exponentialRampToValueAtTime(f*0.8, t+dur);
+      const o2 = ctx.createOscillator(); o2.type = "sine";
+      o2.frequency.setValueAtTime(f*1.98, t);
+      o2.frequency.exponentialRampToValueAtTime(f*1.98*0.8, t+dur);
+      const g2 = ctx.createGain(); g2.gain.value = 0.12;
+      const am = ctx.createGain(); am.gain.value = 0.5;
+      const lfo = ctx.createOscillator(); lfo.type = "sine";
+      lfo.frequency.setValueAtTime(rand(8,9.5), t);
+      lfo.frequency.linearRampToValueAtTime(rand(6.5,7.5), t+dur);
+      const lfoG = ctx.createGain(); lfoG.gain.value = 0.5;
+      lfo.connect(lfoG).connect(am.gain);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.12*vel, t+0.6);
+      env.gain.setValueAtTime(0.12*vel, t+dur-0.9);
+      env.gain.linearRampToValueAtTime(0.0001, t+dur);
+      o.connect(am); o2.connect(g2).connect(am);
+      am.connect(env).connect(ind.input);
+      o.start(t); o2.start(t); lfo.start(t);
+      autokill([g2,am,lfoG,env,o,o2,lfo],[o,o2,lfo], t+dur+0.05);
+      return dur;
+    },
+    unit(sp, ind, t, vel){
+      ring(ind, t, 0.35, indFreq(sp, ind), 0.11*vel, { amHz: 8, amDepth: 1 });
+    },
+  },
+};
+
+/* ---------------- firing & scheduling ---------------- */
+function firePhrase(sp, ind, t, vel, isUnit){
+  const v = VOICES[sp.id];
+  let dur = 0.3;
+  if(isUnit) v.unit(sp, ind, t, vel);
+  else dur = v.phrase(sp, ind, t, vel);
+  addGlow(sp, ind, t, vel, dur);
+  return dur;
+}
+
+function scheduleNext(sp, ind, tEnd){
+  ind.actPhase += rand(0.25, 0.6);
+  const act = 0.62 + 0.38*Math.sin(ind.actPhase);          // slow personal tide
+  let iv = sp.interval * ind.rateMul / tempRate() / act;
+  iv *= 0.45 + Math.pow(Math.random(), 1.6) * 1.7;          // skewed jitter
+  if(Math.random() < 0.06 * (0.4 + S.ma)){                  // a long rest
+    ind.restUntil = tEnd + rand(16, 50);
+  }
+  ind.next = tEnd + Math.max(0.5, iv);
+}
+
+/* call-and-response inside a species */
+function kakeai(sp, caller, t, dur){
+  if(sp.pop < 2) return;
+  for(let i=0;i<sp.pop;i++){
+    const other = sp.inds[i];
+    if(other === caller) continue;
+    if(Math.random() < 0.4 && other.restUntil < t){
+      const reply = t + dur + rand(0.3, 1.8);
+      if(other.next > reply) other.next = reply;
+    }
+  }
+}
+
+function anyGrid(){ return SPECIES.some(sp => sp.mode === "grid" && sp.pop > 0); }
+
+let schedTimer = null;
+function tickSched(){
+  if(!S.running) return;
+  const now = ctx.currentTime;
+  const horizon = now + 0.35;
+
+  for(const sp of SPECIES){
+    if(sp.mode === "grid") continue;
+    for(let i=0;i<sp.pop;i++){
+      const ind = sp.inds[i];
+      if(ind.next === 0) ind.next = now + rand(0.3, sp.interval*0.9);
+      while(ind.next < horizon){
+        if(ind.restUntil > ind.next){
+          ind.next = ind.restUntil + rand(0, 2);
+          continue;
+        }
+        const t = Math.max(ind.next, now + 0.02);
+        const dur = firePhrase(sp, ind, t, 1, false);
+        kakeai(sp, ind, t, dur);
+        scheduleNext(sp, ind, t + dur);
+      }
+    }
+  }
+
+  if(anyGrid()){
+    if(S.stepTime === null){ S.stepTime = now + 0.06; S.step = 0; }
+    const spb = 60 / S.bpm / 4;
+    while(S.stepTime < horizon){
+      const idx = S.step;
+      for(const sp of SPECIES){
+        if(sp.mode !== "grid" || sp.pop === 0) continue;
+        const v = sp.steps[idx];
+        if(v){
+          let t = S.stepTime;
+          if(idx % 2 === 1) t += S.swing * spb * 0.66;
+          t += gauss() * S.yuragi * 0.028;
+          t = Math.max(t, now + 0.01);
+          sp.gridIdx = (sp.gridIdx + 1) % Math.max(1, sp.pop);
+          firePhrase(sp, sp.inds[sp.gridIdx], t, v === 2 ? 0.45 : 1, true);
+        }
+      }
+      stepVisual(idx, S.stepTime);
+      S.step = (S.step + 1) % 16;
+      S.stepTime += spb;
+    }
+  } else {
+    S.stepTime = null;
+  }
+
+  updateWind(now);
+  updateHush(now);
+  schedTimer = setTimeout(tickSched, 60);
+}
+
+/* ---------------- 間 — the field's silence ---------------- */
+function armHush(now){
+  S.nextHush = S.ma > 0.02
+    ? now + lerp(220, 55, S.ma) * rand(0.7, 1.5)
+    : Infinity;
+}
+function scheduleHush(t, hold){
+  fieldGain.gain.cancelScheduledValues(t);
+  fieldGain.gain.setTargetAtTime(0.04, t, 0.5);
+  const back = t + 1.5 + hold;
+  fieldGain.gain.setTargetAtTime(1.0, back, 1.8);
+  S.hushUntil = back + 4;
+  // individuals wake staggered, not all at once
+  for(const sp of SPECIES) for(let i=0;i<sp.pop;i++){
+    const ind = sp.inds[i];
+    if(ind.next < back) ind.next = back + rand(0.5, 6);
+  }
+  armHush(back);
+}
+function updateHush(now){
+  if(S.ma <= 0.02){ S.nextHush = Infinity; return; }
+  if(S.nextHush === Infinity) armHush(now);
+  if(now >= S.nextHush) scheduleHush(now, rand(3, 9));
+}
+
+/* ---------------- transport ---------------- */
+async function startNight(){
+  initAudio();
+  if(ctx.state === "suspended") await ctx.resume();
+  S.running = true;
+  const now = ctx.currentTime;
+  masterGain.gain.cancelScheduledValues(now);
+  masterGain.gain.setTargetAtTime(S.masterVol*0.7, now, 1.2);
+  fieldGain.gain.setValueAtTime(1, now);
+  for(const sp of SPECIES) for(const ind of sp.inds){
+    ind.next = 0; ind.restUntil = 0;
+  }
+  S.stepTime = null;
+  S.windMoveAt = 0;
+  armHush(now + 20);
+  tickSched();
+  $("#moonBtn").classList.add("on");
+  $("#hint").classList.add("gone");
+}
+function stopNight(){
+  S.running = false;
+  clearTimeout(schedTimer);
+  if(ctx){
+    const now = ctx.currentTime;
+    masterGain.gain.setTargetAtTime(0, now, 0.7);
+  }
+  $("#moonBtn").classList.remove("on");
+}
+$("#moonBtn").addEventListener("click", ()=>{ S.running ? stopNight() : startNight(); });
+window.addEventListener("keydown", e=>{
+  if(e.code === "Space" && !e.repeat){
+    e.preventDefault();
+    S.running ? stopNight() : startNight();
+  }
+});
+
+/* ---------------- knob widget ---------------- */
+function makeKnob({label, min, max, value, fmt, onInput, def}){
+  const el = document.createElement("div");
+  el.className = "knob";
+  el.innerHTML = `
+    <div class="pop-v"></div>
+    <svg viewBox="0 0 40 40">
+      <path class="track" d=""/>
+      <path class="fill" d=""/>
+      <line class="ptr" x1="20" y1="20" x2="20" y2="6"/>
+    </svg>
+    <div class="lbl">${label}</div>`;
+  const svg = el.querySelector("svg");
+  const track = el.querySelector(".track");
+  const fill = el.querySelector(".fill");
+  const ptr = el.querySelector(".ptr");
+  const popV = el.querySelector(".pop-v");
+  const A0 = -135, A1 = 135;
+  function arc(a0, a1){
+    const r = 16, cx = 20, cy = 20;
+    const p = a => [cx + r*Math.sin(a*Math.PI/180), cy - r*Math.cos(a*Math.PI/180)];
+    const [x0,y0] = p(a0), [x1,y1] = p(a1);
+    const large = (a1-a0) > 180 ? 1 : 0;
+    return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
+  }
+  track.setAttribute("d", arc(A0, A1));
+  let v = value;
+  function render(){
+    const t = (v - min)/(max - min);
+    const a = lerp(A0, A1, t);
+    fill.setAttribute("d", t > 0.004 ? arc(A0, a) : "");
+    const rad = a*Math.PI/180;
+    ptr.setAttribute("x2", 20 + 11*Math.sin(rad));
+    ptr.setAttribute("y2", 20 - 11*Math.cos(rad));
+    popV.textContent = fmt ? fmt(v) : v.toFixed(2);
+  }
+  render();
+  let dragY = null, dragV = 0;
+  svg.addEventListener("pointerdown", e=>{
+    e.preventDefault();
+    svg.setPointerCapture(e.pointerId);
+    dragY = e.clientY; dragV = v;
+    el.classList.add("active");
+  });
+  svg.addEventListener("pointermove", e=>{
+    if(dragY === null) return;
+    const dy = dragY - e.clientY;
+    v = clamp(dragV + dy/130*(max-min), min, max);
+    render(); onInput(v);
+  });
+  const end = e=>{ dragY = null; el.classList.remove("active"); };
+  svg.addEventListener("pointerup", end);
+  svg.addEventListener("pointercancel", end);
+  svg.addEventListener("dblclick", ()=>{
+    if(def !== undefined){ v = def; render(); onInput(v); }
+  });
+  svg.addEventListener("wheel", e=>{
+    e.preventDefault();
+    v = clamp(v - Math.sign(e.deltaY)*(max-min)/60, min, max);
+    render(); onInput(v);
+    el.classList.add("active");
+    clearTimeout(el._wt);
+    el._wt = setTimeout(()=> el.classList.remove("active"), 700);
+  }, {passive:false});
+  el._set = nv => { v = clamp(nv, min, max); render(); };
+  return el;
+}
+
+/* ---------------- species UI ---------------- */
+function buildSpeciesUI(){
+  const root = $("#speciesList");
+  root.innerHTML = "";
+  for(const sp of SPECIES){
+    sp.mode = sp.mode || "free";
+    sp.steps = sp.steps || defaultSteps(sp);
+    const row = document.createElement("div");
+    row.className = "sp-row" + (sp.pop === 0 ? " silent" : "") + (sp.mode === "grid" ? " grid" : "");
+    row.innerHTML = `
+      <div class="sp-main">
+        <div class="sp-name">
+          <div class="kanji">${sp.kanji}</div>
+          <div class="yomi">${sp.yomi}</div>
+        </div>
+        <div class="sp-call">${sp.call}</div>
+        <div class="pop" title="数 — how many are singing"></div>
+        <div class="sp-spacer"></div>
+        <div class="sp-knobs"></div>
+        <div class="mode">
+          <button data-m="free" class="${sp.mode==='free'?'on':''}">野</button>
+          <button data-m="grid" class="${sp.mode==='grid'?'on':''}">拍</button>
+        </div>
+      </div>
+      <div class="sp-steps"></div>`;
+
+    // population dots
+    const popEl = row.querySelector(".pop");
+    const dots = [];
+    for(let i=0;i<MAXPOP;i++){
+      const d = document.createElement("div");
+      d.className = "p" + (i < sp.pop ? " on" : "");
+      d.addEventListener("click", ()=>{
+        const target = (sp.pop === i+1) ? i : i+1;
+        setPop(sp, target, row, dots);
+      });
+      popEl.appendChild(d); dots.push(d);
+    }
+
+    // knobs 声 / 遠 / 音
+    const kn = row.querySelector(".sp-knobs");
+    kn.appendChild(makeKnob({
+      label:"声", min:0.88, max:1.14, value:sp.pitch, def:1,
+      fmt:v=> (sp.baseFreq*v).toFixed(0)+" Hz",
+      onInput:v=>{ sp.pitch = v; saveSoon(); },
+    }));
+    kn.appendChild(makeKnob({
+      label:"遠", min:0, max:1, value:sp.dist, def:sp.dist,
+      fmt:v=> v<0.33?"すぐそこ":v<0.66?"庭のさき":"野のむこう",
+      onInput:v=>{ sp.dist = v; applySpeciesMix(sp); saveSoon(); },
+    }));
+    kn.appendChild(makeKnob({
+      label:"音", min:0, max:1, value:sp.vol, def:0.6,
+      fmt:v=> Math.round(v*100)+"",
+      onInput:v=>{ sp.vol = v; applySpeciesMix(sp); saveSoon(); },
+    }));
+
+    // mode toggle
+    row.querySelectorAll(".mode button").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        sp.mode = b.dataset.m;
+        row.querySelectorAll(".mode button").forEach(x=> x.classList.toggle("on", x===b));
+        row.classList.toggle("grid", sp.mode === "grid");
+        if(sp.mode === "free" && ctx)
+          for(let i=0;i<sp.pop;i++) sp.inds[i].next = ctx.currentTime + rand(0.3, 3);
+        saveSoon();
+      });
+    });
+
+    // steps: off → on → soft → off
+    const stepsEl = row.querySelector(".sp-steps");
+    sp.stepEls = [];
+    for(let i=0;i<16;i++){
+      const b = document.createElement("button");
+      b.className = "step";
+      paintStep(b, sp.steps[i]);
+      b.addEventListener("click", ()=>{
+        sp.steps[i] = (sp.steps[i] + 1) % 3;
+        paintStep(b, sp.steps[i]);
+        saveSoon();
+      });
+      stepsEl.appendChild(b);
+      sp.stepEls.push(b);
+    }
+    root.appendChild(row);
+  }
+}
+function paintStep(el, v){
+  el.classList.toggle("on", v === 1);
+  el.classList.toggle("soft", v === 2);
+}
+function setPop(sp, n, row, dots){
+  const prev = sp.pop;
+  sp.pop = clamp(n, 0, MAXPOP);
+  dots.forEach((d,i)=> d.classList.toggle("on", i < sp.pop));
+  row.classList.toggle("silent", sp.pop === 0);
+  if(ctx && S.running){
+    for(let i=prev; i<sp.pop; i++){
+      sp.inds[i].next = ctx.currentTime + rand(0.4, 3.5);
+      sp.inds[i].restUntil = 0;
+    }
+  }
+  saveSoon();
+}
+function defaultSteps(sp){
+  const s = new Array(16).fill(0);
+  if(sp.id === "suzu"){ s[0]=1; s[8]=1; }
+  if(sp.id === "korogi"){ s[4]=1; s[12]=2; }
+  if(sp.id === "kane"){ s[2]=2; s[6]=2; s[10]=2; s[14]=2; }
+  return s;
+}
+function stepVisual(idx, when){
+  const ms = Math.max(0, (when - ctx.currentTime)*1000);
+  setTimeout(()=>{
+    for(const sp of SPECIES){
+      if(!sp.stepEls) continue;
+      sp.stepEls.forEach((el,i)=> el.classList.toggle("cur", sp.mode==="grid" && i===idx));
+    }
+  }, ms);
+}
+
+/* ---------------- global UI ---------------- */
+function buildGlobalUI(){
+  const gN = $("#gNight"), gB = $("#gBeat"), gO = $("#gOut");
+  gN.appendChild(makeKnob({
+    label:"気温", min:14, max:26, value:S.temp, def:19,
+    fmt:v=> v.toFixed(1)+" ℃",
+    onInput:v=>{ S.temp = v; saveSoon(); },
+  }));
+  gN.appendChild(makeKnob({
+    label:"風", min:0, max:1, value:S.wind, def:0.35,
+    fmt:v=> v<0.05?"無風":v<0.4?"そよ風":v<0.75?"夜風":"野分",
+    onInput:v=>{ S.wind = v; if(ctx) S.windMoveAt = 0; saveSoon(); },
+  }));
+  gN.appendChild(makeKnob({
+    label:"露", min:0, max:1, value:S.dew, def:0.5,
+    fmt:v=> Math.round(v*100)+"",
+    onInput:v=>{ S.dew = v; applyGlobals(); saveSoon(); },
+  }));
+  gN.appendChild(makeKnob({
+    label:"間", min:0, max:1, value:S.ma, def:0.5,
+    fmt:v=> v<0.02?"なし":v<0.5?"まれに":"しばしば",
+    onInput:v=>{ S.ma = v; if(ctx) armHush(ctx.currentTime); saveSoon(); },
+  }));
+  gB.appendChild(makeKnob({
+    label:"速さ", min:40, max:140, value:S.bpm, def:72,
+    fmt:v=> v.toFixed(0)+" 拍",
+    onInput:v=>{ S.bpm = v; saveSoon(); },
+  }));
+  gB.appendChild(makeKnob({
+    label:"うねり", min:0, max:0.6, value:S.swing, def:0.12,
+    fmt:v=> Math.round(v*100)+"",
+    onInput:v=>{ S.swing = v; saveSoon(); },
+  }));
+  gB.appendChild(makeKnob({
+    label:"ゆらぎ", min:0, max:1, value:S.yuragi, def:0.5,
+    fmt:v=> Math.round(v*100)+"",
+    onInput:v=>{ S.yuragi = v; saveSoon(); },
+  }));
+  gO.appendChild(makeKnob({
+    label:"音量", min:0, max:1, value:S.masterVol, def:0.8,
+    fmt:v=> Math.round(v*100)+"",
+    onInput:v=>{
+      S.masterVol = v;
+      if(ctx && S.running)
+        masterGain.gain.setTargetAtTime(v*0.7, ctx.currentTime, 0.15);
+      saveSoon();
+    },
+  }));
+}
+function applyGlobals(){
+  if(!ctx) return;
+  const now = ctx.currentTime;
+  revReturn.gain.setTargetAtTime(S.dew * 1.1, now, 0.2);
+  dryGain.gain.setTargetAtTime(1 - S.dew*0.25, now, 0.2);
+}
+
+/* ---------------- persistence ---------------- */
+const LS_KEY = "mushishigure-v1";
+let saveTimer = null;
+function saveSoon(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{
+      const data = {
+        S: { temp:S.temp, wind:S.wind, dew:S.dew, ma:S.ma,
+             bpm:S.bpm, swing:S.swing, yuragi:S.yuragi, masterVol:S.masterVol },
+        sp: SPECIES.map(sp=>({ pop:sp.pop, vol:sp.vol, pitch:sp.pitch,
+                               dist:sp.dist, mode:sp.mode, steps:sp.steps })),
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify(data));
+    }catch(_){}
+  }, 400);
+}
+function loadSaved(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    Object.assign(S, data.S || {});
+    (data.sp || []).forEach((d,i)=>{
+      if(!SPECIES[i]) return;
+      Object.assign(SPECIES[i], d);
+    });
+  }catch(_){}
+}
+
+/* ---------------- the night canvas ---------------- */
+const cv = $("#night");
+const cx2 = cv.getContext("2d");
+let W=0, H=0, DPR=1, stars=[], grassPath=null, glows=[];
+
+function resizeCanvas(){
+  DPR = Math.min(2, window.devicePixelRatio||1);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = W*DPR; cv.height = H*DPR;
+  cx2.setTransform(DPR,0,0,DPR,0,0);
+  stars = [];
+  const n = Math.floor(W/9);
+  for(let i=0;i<n;i++){
+    stars.push({ x: Math.random(), y: Math.random()*0.62,
+                 r: rand(0.3,1.1), ph: rand(0,Math.PI*2), sp: rand(0.2,0.9) });
+  }
+  grassPath = new Path2D();
+  const blades = Math.floor(W/7);
+  for(let i=0;i<blades;i++){
+    const x = Math.random()*W;
+    const h = rand(10, 46)*(H/300);
+    const lean = rand(-14, 14);
+    grassPath.moveTo(x, H);
+    grassPath.quadraticCurveTo(x + lean*0.3, H - h*0.6, x + lean, H - h);
+  }
+}
+window.addEventListener("resize", resizeCanvas);
+
+function addGlow(sp, ind, when, vel, dur){
+  const delay = ctx ? Math.max(0, (when - ctx.currentTime)*1000) : 0;
+  setTimeout(()=>{
+    const d = indDist(sp, ind);
+    glows.push({
+      x: 0.5 + ind.pan*0.44,
+      y: 0.86 - d*0.42 - Math.random()*0.04,
+      r: lerp(20, 7, d),
+      hue: sp.hue,
+      a: lerp(0.5, 0.16, d)*Math.min(1, vel),
+      born: performance.now(),
+      life: Math.max(500, Math.min(dur,2.5)*1000),
+    });
+    if(glows.length > 60) glows.shift();
+  }, delay);
+}
+
+function draw(){
+  requestAnimationFrame(draw);
+  const t = performance.now();
+  // sky
+  const grad = cx2.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, "#05070f");
+  grad.addColorStop(0.6, "#0a0e1c");
+  grad.addColorStop(1, "#0c1220");
+  cx2.fillStyle = grad;
+  cx2.fillRect(0,0,W,H);
+  // stars
+  for(const s of stars){
+    const tw = 0.4 + 0.6*(0.5 + 0.5*Math.sin(t*0.001*s.sp + s.ph));
+    cx2.globalAlpha = 0.5*tw;
+    cx2.fillStyle = "#cfd8e8";
+    cx2.fillRect(s.x*W, s.y*H, s.r, s.r);
+  }
+  cx2.globalAlpha = 1;
+  // call glows — voices as small lanterns in the grass
+  const now = performance.now();
+  glows = glows.filter(g => now - g.born < g.life + 900);
+  for(const g of glows){
+    const age = now - g.born;
+    let a;
+    if(age < 140) a = g.a * (age/140);
+    else if(age < g.life) a = g.a * (0.75 + 0.25*Math.sin(age*0.02));
+    else a = g.a * Math.max(0, 1-(age-g.life)/900);
+    if(a <= 0.003) continue;
+    const gx = g.x*W, gy = g.y*H;
+    const rg = cx2.createRadialGradient(gx,gy,0, gx,gy,g.r);
+    rg.addColorStop(0, `hsla(${g.hue}, 62%, 68%, ${a})`);
+    rg.addColorStop(1, `hsla(${g.hue}, 62%, 50%, 0)`);
+    cx2.fillStyle = rg;
+    cx2.beginPath(); cx2.arc(gx,gy,g.r,0,Math.PI*2); cx2.fill();
+  }
+  // grass silhouette
+  cx2.strokeStyle = "rgba(6,9,14,0.9)";
+  cx2.lineWidth = 1.4;
+  if(grassPath) cx2.stroke(grassPath);
+  cx2.fillStyle = "rgba(5,8,13,0.85)";
+  cx2.fillRect(0, H-6, W, 6);
+}
+
+/* ---------------- boot ---------------- */
+loadSaved();
+buildSpeciesUI();
+buildGlobalUI();
+resizeCanvas();
+draw();
+</script>
+</body>
+</html>
