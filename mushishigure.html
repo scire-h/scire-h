@@ -4,66 +4,57 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="theme-color" content="#070a12" />
+<meta name="theme-color" content="#101112" />
 <title>虫時雨 — mushishigure · 秋夜の環境音具</title>
 <style>
   :root{
-    --night:   #070a12;
-    --night2:  #0a0e1a;
-    --panel:   #0b101c;
-    --line:    #182238;
-    --line2:   #24304a;
-    --ink:     #b9c4d6;
-    --dim:     #5c6880;
-    --faint:   #38445c;
-    --moon:    #e9e2cc;
-    --ember:   #d9a45b;   /* 行灯の火 — the only warm light */
-    --ember-d: #8a6534;
+    --bg:    #101112;
+    --bg2:   #0c0d0e;
+    --line:  #232527;   /* hairlines */
+    --line2: #323436;
+    --ink:   #cfcfcf;
+    --dim:   #7d7f82;
+    --faint: #4a4c4f;
+    --hi:    #ececea;   /* the only "on" — white */
   }
   *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body{
     margin: 0; padding: 0;
-    background: var(--night);
+    background: var(--bg);
     color: var(--ink);
-    font-family: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho",
-                 "Noto Serif JP", "Songti SC", serif;
-    font-size: 13px;
-    line-height: 1.5;
+    font-family: "Helvetica Neue", "Neue Haas Grotesk Text", Helvetica, Arial,
+                 "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+    font-weight: 300;
+    font-size: 12px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     user-select: none;
   }
-  body::after{ /* film grain — analog quietness */
-    content: "";
-    position: fixed; inset: 0;
-    pointer-events: none;
-    z-index: 50;
-    opacity: 0.05;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.6'/></svg>");
-  }
+  button{ font-weight: 300; }
   #app{
-    max-width: 880px;
+    max-width: 840px;
     margin: 0 auto;
-    padding: 0 14px 60px;
+    padding: 0 20px 90px;
   }
 
   /* ---------- header ---------- */
   header{
-    display: flex; align-items: baseline; gap: 14px;
-    padding: 22px 4px 10px;
+    display: flex; align-items: baseline; gap: 22px;
+    padding: 46px 2px 26px;
   }
   header h1{
     margin: 0;
-    font-size: 21px; font-weight: 500;
-    letter-spacing: 0.42em;
+    font-size: 14px; font-weight: 400;
+    letter-spacing: 0.62em;
     color: var(--ink);
   }
   header .romaji{
-    font-size: 10px; letter-spacing: 0.28em;
-    color: var(--dim);
+    font-size: 8.5px; letter-spacing: 0.42em;
+    color: var(--faint);
   }
   header .desc{
     margin-left: auto;
-    font-size: 10px; letter-spacing: 0.18em;
+    font-size: 8.5px; letter-spacing: 0.34em;
     color: var(--faint);
   }
 
@@ -72,33 +63,33 @@
     position: relative;
     height: 300px;
     border: 1px solid var(--line);
-    border-radius: 3px;
     overflow: hidden;
-    background: var(--night);
+    background: var(--bg2);
   }
-  #scene canvas{ display:block; width: 100%; height: 100%; }
+  #scene canvas{ display: block; width: 100%; height: 100%; }
   #moonBtn{
-    position: absolute; top: 22px; right: 30px;
-    width: 64px; height: 64px;
+    position: absolute; top: 26px; right: 32px;
+    width: 56px; height: 56px;
     padding: 0; margin: 0;
     background: none; border: 0; cursor: pointer;
     border-radius: 50%;
-    transition: filter 1.2s ease;
-    filter: drop-shadow(0 0 6px rgba(233,226,204,0.10));
   }
+  #moonBtn svg{ width: 100%; height: 100%; display: block; overflow: visible; }
+  #moonBtn .m-on{ opacity: 0; transition: opacity 1.6s ease; }
+  #moonBtn .m-off{ opacity: 1; transition: opacity 1.6s ease; }
+  #moonBtn.on .m-on{ opacity: 1; }
+  #moonBtn.on .m-off{ opacity: 0; }
   #moonBtn.on{
-    filter: drop-shadow(0 0 18px rgba(233,226,204,0.38));
-    animation: moonbreath 7s ease-in-out infinite;
+    animation: moonbreath 8s ease-in-out infinite;
   }
   @keyframes moonbreath{
-    0%,100%{ filter: drop-shadow(0 0 14px rgba(233,226,204,0.30)); }
-    50%    { filter: drop-shadow(0 0 26px rgba(233,226,204,0.50)); }
+    0%,100%{ filter: drop-shadow(0 0 10px rgba(236,236,234,0.16)); }
+    50%    { filter: drop-shadow(0 0 22px rgba(236,236,234,0.30)); }
   }
-  #moonBtn svg{ width: 100%; height: 100%; display: block; }
   #hint{
-    position: absolute; left: 0; right: 0; bottom: 16px;
+    position: absolute; left: 0; right: 0; bottom: 18px;
     text-align: center;
-    font-size: 11px; letter-spacing: 0.5em; text-indent: 0.5em;
+    font-size: 9.5px; letter-spacing: 0.6em; text-indent: 0.6em;
     color: var(--dim);
     transition: opacity 2.5s ease;
     pointer-events: none;
@@ -106,135 +97,131 @@
   #hint.gone{ opacity: 0; }
 
   /* ---------- species rows ---------- */
-  #speciesList{ margin-top: 26px; }
+  #speciesList{ margin-top: 54px; }
   .sp-row{
     border-top: 1px solid var(--line);
-    padding: 12px 4px 12px;
+    padding: 17px 2px;
     transition: opacity 0.6s ease;
   }
   .sp-row:last-child{ border-bottom: 1px solid var(--line); }
-  .sp-row.silent{ opacity: 0.38; }
+  .sp-row.silent{ opacity: 0.34; }
   .sp-main{
-    display: flex; align-items: center; gap: 14px;
+    display: flex; align-items: center; gap: 18px;
     flex-wrap: wrap;
   }
-  .sp-name{ width: 118px; flex-shrink: 0; }
+  .sp-name{ width: 120px; flex-shrink: 0; }
   .sp-name .kanji{
-    font-size: 17px; letter-spacing: 0.30em;
+    font-size: 14px; font-weight: 400;
+    letter-spacing: 0.38em;
     color: var(--ink);
   }
   .sp-name .yomi{
-    font-size: 9px; letter-spacing: 0.22em;
+    font-size: 8px; letter-spacing: 0.32em;
     color: var(--faint);
-    margin-top: 1px;
+    margin-top: 2px;
   }
   .sp-call{
-    width: 108px; flex-shrink: 0;
-    font-size: 10px; letter-spacing: 0.14em;
+    width: 110px; flex-shrink: 0;
+    font-size: 9px; letter-spacing: 0.2em;
     color: var(--dim);
   }
-  /* population — small circles, tap n-th to set count */
+  /* population — hairline circles, tap n-th to set count */
   .pop{
-    display: flex; gap: 7px; align-items: center;
+    display: flex; gap: 9px; align-items: center;
     flex-shrink: 0;
     padding: 6px 2px;
     cursor: pointer;
   }
   .pop .p{
-    width: 9px; height: 9px; border-radius: 50%;
+    width: 8px; height: 8px; border-radius: 50%;
     border: 1px solid var(--faint);
     background: transparent;
-    transition: background 0.4s, border-color 0.4s, box-shadow 0.4s;
+    transition: background 0.35s, border-color 0.35s;
   }
   .pop .p.on{
-    background: var(--ember);
-    border-color: var(--ember);
-    box-shadow: 0 0 6px rgba(217,164,91,0.35);
+    background: var(--hi);
+    border-color: var(--hi);
   }
-  .sp-knobs{ display: flex; gap: 10px; align-items: flex-start; }
+  .sp-knobs{ display: flex; gap: 14px; align-items: flex-start; }
   .sp-spacer{ flex: 1; }
-  /* mode toggle 野 / 拍 */
+  /* mode toggle 野 / 拍 — words, not switches */
   .mode{
-    display: flex;
-    border: 1px solid var(--line2);
-    border-radius: 2px;
-    overflow: hidden;
+    display: flex; gap: 16px;
     flex-shrink: 0;
   }
   .mode button{
-    background: transparent;
-    color: var(--dim);
-    border: 0;
+    background: none; border: 0;
+    color: var(--faint);
     font: inherit; font-size: 12px;
     letter-spacing: 0.1em;
-    padding: 4px 12px;
+    padding: 2px 0 3px;
     cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: color 0.3s, border-color 0.3s;
   }
-  .mode button + button{ border-left: 1px solid var(--line2); }
   .mode button.on{
-    color: var(--night);
-    background: var(--ember);
+    color: var(--hi);
+    border-bottom-color: var(--hi);
   }
   /* 16-step row */
   .sp-steps{
     display: none;
-    margin-top: 11px;
+    margin-top: 14px;
     padding-left: 2px;
-    gap: 8px;
+    gap: 9px;
     align-items: center;
   }
   .sp-row.grid .sp-steps{ display: flex; flex-wrap: wrap; }
   .step{
-    width: 15px; height: 15px;
+    width: 13px; height: 13px;
     border-radius: 50%;
-    border: 1px solid var(--faint);
+    border: 1px solid var(--line2);
     background: transparent;
     cursor: pointer;
     padding: 0;
     position: relative;
     transition: background 0.15s, border-color 0.15s;
   }
-  .step:nth-child(4n+1){ margin-left: 10px; }
+  .step:nth-child(4n+1){ margin-left: 12px; }
   .step:first-child{ margin-left: 0; }
-  .step.on{ background: var(--ember); border-color: var(--ember); }
-  .step.soft{ border-color: var(--ember-d); }
+  .step.on{ background: var(--hi); border-color: var(--hi); }
+  .step.soft{ border-color: var(--dim); }
   .step.soft::after{
-    content:""; position:absolute; inset: 4px;
+    content:""; position:absolute; inset: 3.5px;
     border-radius: 50%;
-    background: var(--ember-d);
+    background: var(--dim);
   }
-  .step.cur{ box-shadow: 0 0 0 2px rgba(233,226,204,0.35); }
+  .step.cur{ box-shadow: 0 0 0 2px rgba(236,236,234,0.22); }
 
   /* ---------- knobs ---------- */
   .knob{
     display: flex; flex-direction: column; align-items: center;
-    width: 46px;
+    width: 44px;
     position: relative;
   }
   .knob svg{
-    width: 34px; height: 34px; display: block;
+    width: 32px; height: 32px; display: block;
     touch-action: none;
     cursor: ns-resize;
   }
-  .knob .track{ fill: none; stroke: var(--line2); stroke-width: 2; }
-  .knob .fill { fill: none; stroke: var(--ember-d); stroke-width: 2; }
-  .knob .ptr  { stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; }
-  .knob.active .fill{ stroke: var(--ember); }
+  .knob .track{ fill: none; stroke: var(--line2); stroke-width: 1; }
+  .knob .fill { fill: none; stroke: var(--dim); stroke-width: 1; }
+  .knob .ptr  { stroke: var(--ink); stroke-width: 1.2; stroke-linecap: butt; }
+  .knob.active .fill{ stroke: var(--hi); }
   .knob .lbl{
-    margin-top: 3px;
-    font-size: 9.5px; letter-spacing: 0.24em; text-indent: 0.24em;
+    margin-top: 5px;
+    font-size: 8.5px; letter-spacing: 0.3em; text-indent: 0.3em;
     color: var(--dim);
     white-space: nowrap;
   }
   .knob .pop-v{
-    position: absolute; top: -22px; left: 50%;
+    position: absolute; top: -24px; left: 50%;
     transform: translateX(-50%);
-    background: var(--panel);
+    background: var(--bg);
     border: 1px solid var(--line2);
-    color: var(--moon);
-    font-size: 10px; letter-spacing: 0.06em;
-    padding: 2px 8px;
-    border-radius: 2px;
+    color: var(--hi);
+    font-size: 9.5px; letter-spacing: 0.12em;
+    padding: 2px 9px;
     white-space: nowrap;
     opacity: 0; pointer-events: none;
     transition: opacity 0.12s;
@@ -244,33 +231,31 @@
 
   /* ---------- global sections ---------- */
   #globals{
-    margin-top: 30px;
+    margin-top: 58px;
     display: flex;
-    gap: 30px;
+    gap: 56px;
     flex-wrap: wrap;
     align-items: flex-start;
   }
   .g-group{
-    display: flex; gap: 12px;
+    display: flex; gap: 16px;
     align-items: flex-start;
-    padding: 14px 16px 12px;
-    border: 1px solid var(--line);
-    border-radius: 3px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
     position: relative;
+    min-width: 120px;
   }
   .g-group .g-title{
-    position: absolute; top: -8px; left: 12px;
-    background: var(--night);
-    padding: 0 8px;
-    font-size: 9.5px; letter-spacing: 0.34em; text-indent: 0.34em;
+    position: absolute; top: -20px; left: 0;
+    font-size: 8.5px; letter-spacing: 0.5em;
     color: var(--faint);
   }
-  .g-group .knob{ width: 52px; }
-  .g-group .knob svg{ width: 38px; height: 38px; }
+  .g-group .knob{ width: 50px; }
+  .g-group .knob svg{ width: 36px; height: 36px; }
 
   footer{
-    margin-top: 34px;
-    font-size: 9.5px; letter-spacing: 0.2em;
+    margin-top: 64px;
+    font-size: 8.5px; letter-spacing: 0.32em;
     color: var(--faint);
     text-align: center;
   }
@@ -278,14 +263,17 @@
   @media (max-width: 640px){
     .sp-call{ display: none; }
     .sp-name{ width: 96px; }
-    .sp-name .kanji{ font-size: 15px; }
+    .sp-name .kanji{ font-size: 13px; }
     #scene{ height: 220px; }
-    #moonBtn{ width: 52px; height: 52px; top: 16px; right: 18px; }
-    header h1{ font-size: 17px; letter-spacing: 0.3em; }
+    #moonBtn{ width: 46px; height: 46px; top: 18px; right: 20px; }
+    header{ padding-top: 34px; gap: 14px; }
+    header h1{ font-size: 13px; letter-spacing: 0.44em; }
     header .desc{ display: none; }
-    #globals{ gap: 18px; }
-    .g-group{ padding: 12px 10px 10px; gap: 6px; }
-    .g-group .knob{ width: 46px; }
+    #globals{ gap: 34px; row-gap: 44px; }
+    .g-group{ gap: 8px; min-width: 0; }
+    .g-group .knob{ width: 44px; }
+    .sp-main{ gap: 12px; }
+    .sp-knobs{ gap: 8px; }
   }
 </style>
 </head>
@@ -302,18 +290,9 @@
     <canvas id="night"></canvas>
     <button id="moonBtn" aria-label="play / stop">
       <svg viewBox="0 0 64 64">
-        <defs>
-          <radialGradient id="mg" cx="42%" cy="38%" r="70%">
-            <stop offset="0%"  stop-color="#f4eeda"/>
-            <stop offset="70%" stop-color="#ded5b8"/>
-            <stop offset="100%" stop-color="#b8ad8e"/>
-          </radialGradient>
-        </defs>
-        <circle cx="32" cy="32" r="21" fill="url(#mg)"/>
-        <circle cx="25" cy="27" r="3.2" fill="rgba(140,130,105,0.35)"/>
-        <circle cx="38" cy="38" r="4.4" fill="rgba(140,130,105,0.28)"/>
-        <circle cx="40" cy="23" r="2.1" fill="rgba(140,130,105,0.30)"/>
-        <circle cx="27" cy="41" r="2.4" fill="rgba(140,130,105,0.25)"/>
+        <circle class="m-off" cx="32" cy="32" r="19.5" fill="none"
+                stroke="#8e9092" stroke-width="1"/>
+        <circle class="m-on" cx="32" cy="32" r="20" fill="#e9e9e7"/>
       </svg>
     </button>
     <div id="hint">月に触れると、夜がはじまる</div>
@@ -1271,16 +1250,16 @@ function draw(){
   const t = performance.now();
   // sky
   const grad = cx2.createLinearGradient(0,0,0,H);
-  grad.addColorStop(0, "#05070f");
-  grad.addColorStop(0.6, "#0a0e1c");
-  grad.addColorStop(1, "#0c1220");
+  grad.addColorStop(0, "#0a0b0c");
+  grad.addColorStop(0.6, "#0e0f10");
+  grad.addColorStop(1, "#121314");
   cx2.fillStyle = grad;
   cx2.fillRect(0,0,W,H);
   // stars
   for(const s of stars){
     const tw = 0.4 + 0.6*(0.5 + 0.5*Math.sin(t*0.001*s.sp + s.ph));
-    cx2.globalAlpha = 0.5*tw;
-    cx2.fillStyle = "#cfd8e8";
+    cx2.globalAlpha = 0.32*tw;
+    cx2.fillStyle = "#a9abad";
     cx2.fillRect(s.x*W, s.y*H, s.r, s.r);
   }
   cx2.globalAlpha = 1;
@@ -1296,16 +1275,16 @@ function draw(){
     if(a <= 0.003) continue;
     const gx = g.x*W, gy = g.y*H;
     const rg = cx2.createRadialGradient(gx,gy,0, gx,gy,g.r);
-    rg.addColorStop(0, `hsla(${g.hue}, 62%, 68%, ${a})`);
-    rg.addColorStop(1, `hsla(${g.hue}, 62%, 50%, 0)`);
+    rg.addColorStop(0, `rgba(228,229,230,${a*0.85})`);
+    rg.addColorStop(1, "rgba(228,229,230,0)");
     cx2.fillStyle = rg;
     cx2.beginPath(); cx2.arc(gx,gy,g.r,0,Math.PI*2); cx2.fill();
   }
   // grass silhouette
-  cx2.strokeStyle = "rgba(6,9,14,0.9)";
-  cx2.lineWidth = 1.4;
+  cx2.strokeStyle = "rgba(7,8,9,0.9)";
+  cx2.lineWidth = 1.2;
   if(grassPath) cx2.stroke(grassPath);
-  cx2.fillStyle = "rgba(5,8,13,0.85)";
+  cx2.fillStyle = "rgba(6,7,8,0.85)";
   cx2.fillRect(0, H-6, W, 6);
 }
 
