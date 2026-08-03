@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#16161d">
+<title>墨流し — Suminagashi</title>
+<style>
+  :root{
+    --paper:#f0e8d6;
+    --ink:#16161d;
+    --panel:#1b1b22;
+    --panel2:#23232c;
+    --line:#34343f;
+    --txt:#e9e4d6;
+    --txt-dim:#9a958a;
+    --accent:#c8922e;
+    --r:12px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:#0e0e12;color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",
+      "Segoe UI",system-ui,sans-serif;
+    overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+  #app{display:flex;flex-direction:column;height:100%;height:100dvh}
+
+  header{display:flex;align-items:baseline;gap:.6em;padding:10px 16px 8px;
+    flex:0 0 auto}
+  header .ja{font-size:18px;font-weight:700;letter-spacing:.18em}
+  header .en{font-size:10px;letter-spacing:.34em;color:var(--txt-dim);
+    text-transform:uppercase}
+
+  #stage{flex:1 1 auto;position:relative;min-height:0;
+    margin:0 12px;border-radius:var(--r);overflow:hidden;
+    box-shadow:0 10px 40px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.05);
+    background:var(--paper);touch-action:none}
+  #c{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+  #hint{position:absolute;left:0;right:0;bottom:10px;text-align:center;
+    font-size:11px;letter-spacing:.12em;color:rgba(30,25,15,.45);
+    pointer-events:none;transition:opacity .6s}
+
+  #panel{flex:0 0 auto;padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;gap:9px}
+
+  .swatches{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 4px;
+    scrollbar-width:none}
+  .swatches::-webkit-scrollbar{display:none}
+  .sw{flex:0 0 auto;width:30px;height:30px;border-radius:50%;cursor:pointer;
+    border:2px solid rgba(255,255,255,.12);transition:transform .12s,border-color .12s;
+    position:relative}
+  .sw.clear{background:
+      repeating-conic-gradient(#cfc6b2 0% 25%,#efe8d8 0% 50%) 50%/10px 10px}
+  .sw[data-on="1"]{border-color:var(--accent);transform:scale(1.12)}
+  .sw[data-on="1"]::after{content:"";position:absolute;inset:-6px;border-radius:50%;
+    border:1px solid rgba(200,146,46,.5)}
+
+  .row{display:flex;gap:8px;align-items:center}
+  .seg{display:flex;flex:1 1 auto;background:var(--panel);border-radius:10px;
+    padding:3px;gap:3px;border:1px solid var(--line)}
+  .seg button{flex:1 1 0;background:transparent;color:var(--txt-dim);border:0;
+    padding:9px 4px;border-radius:7px;font-size:12px;cursor:pointer;
+    font-family:inherit;letter-spacing:.04em;transition:.12s;line-height:1.15}
+  .seg button b{display:block;font-size:15px;margin-bottom:1px}
+  .seg button[data-on="1"]{background:var(--panel2);color:var(--txt);
+    box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 1px 6px rgba(0,0,0,.3)}
+
+  .ctl{display:flex;align-items:center;gap:10px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:7px 12px;flex:1 1 auto}
+  .ctl label{font-size:11px;color:var(--txt-dim);letter-spacing:.08em;
+    flex:0 0 auto;min-width:2.4em}
+  input[type=range]{flex:1 1 auto;-webkit-appearance:none;appearance:none;height:3px;
+    background:var(--line);border-radius:3px;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;
+    border-radius:50%;background:var(--accent);cursor:pointer;
+    box-shadow:0 1px 4px rgba(0,0,0,.5)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border:0;border-radius:50%;
+    background:var(--accent);cursor:pointer}
+
+  .tog{flex:0 0 auto;display:flex;align-items:center;gap:7px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:11px;
+    color:var(--txt-dim);cursor:pointer;letter-spacing:.05em;white-space:nowrap}
+  .tog .dot{width:13px;height:13px;border-radius:50%;background:var(--line);
+    transition:.15s}
+  .tog[data-on="1"]{color:var(--txt)}
+  .tog[data-on="1"] .dot{background:var(--accent);box-shadow:0 0 8px rgba(200,146,46,.6)}
+
+  .acts{display:flex;gap:8px}
+  .acts button{flex:1 1 0;background:var(--panel);color:var(--txt);
+    border:1px solid var(--line);border-radius:10px;padding:11px 6px;font-size:12px;
+    cursor:pointer;font-family:inherit;letter-spacing:.06em;transition:.12s}
+  .acts button:active{background:var(--panel2);transform:translateY(1px)}
+  .acts button.go{background:var(--accent);color:#1a1408;border-color:transparent;
+    font-weight:700}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><span class="ja">墨流し</span><span class="en">Suminagashi · ink on water</span></header>
+
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="hint">水面をタップして墨を落とす — ドラッグで流す</div>
+  </div>
+
+  <div id="panel">
+    <div class="swatches" id="swatches"></div>
+
+    <div class="row">
+      <div class="seg" id="tools">
+        <button data-tool="drop"  data-on="1"><b>◉</b>落とす</button>
+        <button data-tool="comb"><b>⫶</b>櫛</button>
+        <button data-tool="swirl"><b>◠</b>渦</button>
+        <button data-tool="wave"><b>∿</b>波</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="ctl"><label id="sizeLab">太さ</label>
+        <input type="range" id="size" min="0" max="1" step="0.01" value="0.42"></div>
+      <div class="tog" id="alt" data-on="1"><span class="dot"></span>交互</div>
+    </div>
+
+    <div class="acts">
+      <button id="undo">戻す</button>
+      <button id="clear">流し直す</button>
+      <button id="save">保存</button>
+      <button id="gen" class="go">自動生成</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function(){
+  const PAPER = "#f0e8d6";
+  // traditional Japanese pigment palette + surfactant(clear=paper)
+  const COLORS = [
+    "#16161d", // 墨  sumi black
+    "#1b3b6f", // 藍  indigo
+    "#2e5e9e", // 群青 gunjo
+    "#1f6f6b", // 青緑 teal
+    "#c0392b", // 朱  vermilion
+    "#b5495b", // 紅梅 plum-red
+    "#c8922e", // 黄土 ochre
+    "#5e4b8b", // 古代紫 ancient purple
+    PAPER      // 界面活性剤(透明) = paper, pushes ink into rings
+  ];
+
+  const cvs = document.getElementById("c");
+  const ctx = cvs.getContext("2d");
+  let W = 0, H = 0, dpr = 1;
+
+  // ---- model: each drop is a closed polygon of floats [x0,y0,x1,y1,...] ----
+  let drops = [];                 // {color, pts:Float32Array, n}
+  const MAXLEN = 5;               // target max edge length (css px) -> crisp
+  const POINT_BUDGET = 260000;    // global vertex cap (perf guard)
+  let totalPts = 0;
+
+  // ---- undo (snapshots of full state, capped) ----
+  let undoStack = [];
+  const UNDO_MAX = 12;
+  function snapshot(){
+    const s = drops.map(d => ({color:d.color, n:d.n, pts:d.pts.slice(0, d.n*2)}));
+    undoStack.push(s);
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+  }
+  function undo(){
+    if (!undoStack.length) return;
+    drops = undoStack.pop();
+    recount();
+    render();
+  }
+  function recount(){ totalPts = drops.reduce((a,d)=>a+d.n,0); }
+
+  // ---------------------------------------------------------------- geometry
+  // close-form drop: push every existing vertex radially outward.
+  // a point at distance d maps to sqrt(d^2 + r^2): the disk of radius r
+  // becomes clean new ink, everything else is shoved outside it.
+  function applyDrop(cx, cy, r){
+    const r2 = r*r;
+    for (const d of drops){
+      const p = d.pts, n = d.n*2;
+      for (let i=0;i<n;i+=2){
+        const dx = p[i]-cx, dy = p[i+1]-cy;
+        let d2 = dx*dx + dy*dy;
+        if (d2 < 1e-4) d2 = 1e-4;
+        const m = Math.sqrt(1 + r2/d2);
+        p[i]   = cx + dx*m;
+        p[i+1] = cy + dy*m;
+      }
+    }
+  }
+
+  // tine line: drag segment A->B drags ink along u, decaying with the
+  // perpendicular distance to the (infinite) line through A.
+  function applyTine(ax, ay, bx, by, lambda){
+    let ux = bx-ax, uy = by-ay;
+    const len = Math.hypot(ux, uy);
+    if (len < 1e-4) return;
+    ux/=len; uy/=len;
+    const mag = len;                      // pull strength ~ how far you moved
+    for (const d of drops){
+      const p = d.pts, n = d.n*2;
+      for (let i=0;i<n;i+=2){
+        const wx = p[i]-ax, wy = p[i+1]-ay;
+        const proj = wx*ux + wy*uy;        // along-line component
+        const perpx = wx - proj*ux, perpy = wy - proj*uy;
+        const dist = Math.hypot(perpx, perpy);
+        const f = mag * lambda/(lambda + dist);
+        p[i]   += ux*f;
+        p[i+1] += uy*f;
+      }
+    }
+  }
+
+  // vortex: rotate around c, angle decays with distance (tight near center).
+  function applySwirl(cx, cy, angle, R){
+    for (const d of drops){
+      const p = d.pts, n = d.n*2;
+      for (let i=0;i<n;i+=2){
+        const dx = p[i]-cx, dy = p[i+1]-cy;
+        const dist = Math.hypot(dx, dy);
+        const a = angle / (1 + (dist/R)*(dist/R));
+        const ca = Math.cos(a), sa = Math.sin(a);
+        p[i]   = cx + dx*ca - dy*sa;
+        p[i+1] = cy + dx*sa + dy*ca;
+      }
+    }
+  }
+
+  // sinusoidal comb across the whole surface.
+  function applyWave(axis, amp, wavelength){
+    const k = 2*Math.PI/wavelength;
+    for (const d of drops){
+      const p = d.pts, n = d.n*2;
+      for (let i=0;i<n;i+=2){
+        if (axis==="x") p[i]   += amp*Math.sin(p[i+1]*k);
+        else            p[i+1] += amp*Math.sin(p[i]*k);
+      }
+    }
+  }
+
+  // keep edges short so stretched ink stays a crisp filled shape.
+  function subdivide(d){
+    if (totalPts > POINT_BUDGET) return;
+    const p = d.pts, n = d.n;
+    const out = [];
+    const max2 = MAXLEN*MAXLEN;
+    for (let i=0;i<n;i++){
+      const ax = p[i*2], ay = p[i*2+1];
+      const j = (i+1)%n;
+      const bx = p[j*2], by = p[j*2+1];
+      out.push(ax, ay);
+      const ex = bx-ax, ey = by-ay;
+      const len2 = ex*ex + ey*ey;
+      if (len2 > max2){
+        const segs = Math.min(64, Math.ceil(Math.sqrt(len2)/MAXLEN));
+        for (let s=1;s<segs;s++){
+          const t = s/segs;
+          out.push(ax+ex*t, ay+ey*t);
+        }
+      }
+    }
+    totalPts += (out.length/2 - d.n);
+    d.pts = Float32Array.from(out);
+    d.n = out.length/2;
+  }
+  function subdivideAll(){ for (const d of drops) subdivide(d); }
+
+  function makeCircle(cx, cy, r, color){
+    const n = Math.max(28, Math.round(2*Math.PI*r / MAXLEN));
+    const pts = new Float32Array(n*2);
+    for (let i=0;i<n;i++){
+      const a = i/n*2*Math.PI;
+      pts[i*2]   = cx + Math.cos(a)*r;
+      pts[i*2+1] = cy + Math.sin(a)*r;
+    }
+    drops.push({color, pts, n});
+    totalPts += n;
+  }
+
+  // ---------------------------------------------------------------- render
+  function render(){
+    ctx.save();
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0,0,W,H);
+    for (const d of drops){
+      const p = d.pts, n = d.n;
+      if (n < 3) continue;
+      ctx.beginPath();
+      ctx.moveTo(p[0], p[1]);
+      for (let i=1;i<n;i++) ctx.lineTo(p[i*2], p[i*2+1]);
+      ctx.closePath();
+      ctx.fillStyle = d.color;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------- UI state
+  let curColor = COLORS[0];
+  let tool = "drop";
+  let altMode = true;     // alternate ink / surfactant on each drop
+  let altPhase = 0;
+  let sizeT = 0.42;
+  let waveAxis = "y";
+
+  function dropRadius(){ return 16 + sizeT*sizeT*150; }      // 16..166
+  function combLambda(){ return 14 + sizeT*120; }            // 14..134
+  function swirlRadius(){ return 60 + sizeT*260; }           // 60..320
+
+  // swatches -------------------------------------------------------
+  const swEl = document.getElementById("swatches");
+  COLORS.forEach((col,i)=>{
+    const b = document.createElement("div");
+    b.className = "sw" + (col===PAPER ? " clear":"");
+    if (col!==PAPER) b.style.background = col;
+    b.dataset.on = (i===0)?"1":"0";
+    b.title = col===PAPER ? "界面活性剤(透明)" : col;
+    b.addEventListener("click", ()=>{
+      curColor = col; altPhase = 0;
+      [...swEl.children].forEach(c=>c.dataset.on="0");
+      b.dataset.on = "1";
+    });
+    swEl.appendChild(b);
+  });
+
+  // tools ----------------------------------------------------------
+  const toolsEl = document.getElementById("tools");
+  toolsEl.addEventListener("click", e=>{
+    const btn = e.target.closest("button"); if(!btn) return;
+    if (btn.dataset.tool === "wave"){           // wave is a one-shot action
+      snapshot();
+      applyWave(waveAxis, 10 + sizeT*26, 60 + (1-sizeT)*160);
+      waveAxis = waveAxis==="y" ? "x" : "y";
+      subdivideAll(); render();
+      return;
+    }
+    tool = btn.dataset.tool;
+    [...toolsEl.children].forEach(b=>b.dataset.on = b===btn ? "1":"0");
+    sizeLab.textContent = tool==="drop"?"大きさ" : tool==="comb"?"幅" : "範囲";
+  });
+
+  // size + toggles -------------------------------------------------
+  const sizeLab = document.getElementById("sizeLab");
+  document.getElementById("size").addEventListener("input", e=> sizeT = +e.target.value);
+  const altEl = document.getElementById("alt");
+  altEl.addEventListener("click", ()=>{ altMode = !altMode; altEl.dataset.on = altMode?"1":"0"; });
+
+  // actions --------------------------------------------------------
+  document.getElementById("undo").addEventListener("click", undo);
+  document.getElementById("save").addEventListener("click", savePNG);
+  document.getElementById("clear").addEventListener("click", ()=>{
+    snapshot(); drops = []; totalPts = 0; render();
+  });
+  document.getElementById("gen").addEventListener("click", generate);
+
+  function nextColor(){
+    if (!altMode) return curColor;
+    altPhase ^= 1;
+    return altPhase ? PAPER : (curColor===PAPER ? COLORS[0] : curColor);
+  }
+
+  // ---------------------------------------------------------------- pointer
+  const stage = cvs;
+  let dragging = false, lastX=0, lastY=0, moved=false, startX=0, startY=0;
+  let swirlCx=0, swirlCy=0;
+
+  function pos(e){
+    const r = cvs.getBoundingClientRect();
+    return [ e.clientX - r.left, e.clientY - r.top ];
+  }
+
+  stage.addEventListener("pointerdown", e=>{
+    e.preventDefault();
+    stage.setPointerCapture(e.pointerId);
+    const [x,y] = pos(e);
+    dragging = true; moved = false;
+    lastX = startX = x; lastY = startY = y;
+    swirlCx = x; swirlCy = y;
+    snapshot();
+    hideHint();
+    if (tool==="drop"){
+      const r = dropRadius();
+      applyDrop(x,y,r);
+      makeCircle(x,y,r, nextColor());
+      subdivideAll();
+      render();
+    }
+  });
+
+  stage.addEventListener("pointermove", e=>{
+    if (!dragging) return;
+    const [x,y] = pos(e);
+    const dx = x-lastX, dy = y-lastY;
+    if (dx*dx+dy*dy < 9) return;       // throttle to ~3px steps
+    moved = true;
+    if (tool==="comb"){
+      applyTine(lastX,lastY,x,y, combLambda());
+      subdivideAll(); render();
+    } else if (tool==="swirl"){
+      // signed angle increment from tangential motion about the center
+      const r1x=lastX-swirlCx, r1y=lastY-swirlCy;
+      const cross = r1x*dy - r1y*dx;
+      const dist = Math.hypot(r1x,r1y) + 1;
+      const dAng = (cross/(dist*dist)) * 1.6;
+      applySwirl(swirlCx,swirlCy, dAng, swirlRadius());
+      subdivideAll(); render();
+    } else if (tool==="drop"){
+      // dragging in drop mode sprinkles a trail of ink
+      const r = dropRadius()*0.6;
+      applyDrop(x,y,r); makeCircle(x,y,r,nextColor());
+      subdivideAll(); render();
+    }
+    lastX = x; lastY = y;
+  });
+
+  function endDrag(e){ dragging = false; }
+  stage.addEventListener("pointerup", endDrag);
+  stage.addEventListener("pointercancel", endDrag);
+
+  let hintGone = false;
+  function hideHint(){
+    if (hintGone) return; hintGone = true;
+    const h = document.getElementById("hint"); h.style.opacity = "0";
+  }
+
+  // ---------------------------------------------------------------- save
+  function savePNG(){
+    const a = document.createElement("a");
+    a.download = "suminagashi.png";
+    a.href = cvs.toDataURL("image/png");
+    a.click();
+  }
+
+  // ---------------------------------------------------------------- auto
+  function generate(){
+    snapshot();
+    drops = []; totalPts = 0;
+    const cx = W*(0.35+Math.random()*0.3), cy = H*(0.35+Math.random()*0.3);
+    const pal = COLORS.slice(0,8);
+    // a stack of concentric rings (ink alternating with surfactant)
+    const rings = 7 + (Math.random()*6|0);
+    let base = pal[(Math.random()*pal.length)|0];
+    for (let i=0;i<rings;i++){
+      const r = 14 + i*0; // same spot -> classic concentric suminagashi
+      const jx = cx + (Math.random()-0.5)*20, jy = cy + (Math.random()-0.5)*20;
+      const rr = 18 + Math.random()*22;
+      applyDrop(jx,jy,rr);
+      makeCircle(jx,jy,rr, i%2 ? PAPER : base);
+      if (i%2===0 && Math.random()<0.4) base = pal[(Math.random()*pal.length)|0];
+    }
+    subdivideAll();
+    // a couple of secondary drops elsewhere
+    for (let k=0;k<3;k++){
+      const x=Math.random()*W, y=Math.random()*H, rr=20+Math.random()*40;
+      applyDrop(x,y,rr); makeCircle(x,y,rr, pal[(Math.random()*pal.length)|0]);
+    }
+    subdivideAll();
+    // comb passes
+    const passes = 2 + (Math.random()*2|0);
+    for (let q=0;q<passes;q++){
+      const horiz = Math.random()<0.5;
+      const n = 5;
+      for (let s=0;s<n;s++){
+        if (horiz){
+          const y = H*(s+0.5)/n;
+          applyTine(0,y, W,y, 40+Math.random()*40);
+        } else {
+          const x = W*(s+0.5)/n;
+          applyTine(x,0, x,H, 40+Math.random()*40);
+        }
+      }
+      subdivideAll();
+    }
+    if (Math.random()<0.6){
+      applySwirl(W*Math.random(), H*Math.random(), (Math.random()-0.5)*2.4, 120+Math.random()*180);
+      subdivideAll();
+    }
+    hideHint();
+    render();
+  }
+
+  // ---------------------------------------------------------------- resize
+  function resize(){
+    const st = document.getElementById("stage");
+    const rect = st.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio||1, 2);
+    W = rect.width; H = rect.height;
+    cvs.width = Math.round(W*dpr);
+    cvs.height = Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    render();
+  }
+  window.addEventListener("resize", resize);
+
+  // boot
+  requestAnimationFrame(()=>{ resize(); generate(); });
+})();
+</script>
+</body>
+</html>
