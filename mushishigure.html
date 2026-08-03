@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#101112" />
-<title>虫時雨 — mushishigure · 秋夜の環境音具</title>
+<title>宇宙には朝も夜もある — in universo et mane et nox sunt</title>
 <style>
   :root{
     --bg:    #000000;
@@ -36,27 +36,25 @@
     padding: 10px 20px 90px;
   }
 
-  /* ---------- header — laid quietly over the black ---------- */
+  /* ---------- title — one thought, four tongues ----------
+     it withdraws completely while the universe is running */
   header{
-    position: absolute; top: 40px; left: 44px; right: 128px;
-    display: flex; align-items: baseline; gap: 22px;
+    position: absolute; top: 46px; left: 48px;
     z-index: 2;
     pointer-events: none;
+    transition: opacity 2s ease;
   }
-  header h1{
-    margin: 0;
-    font-size: 14px; font-weight: 400;
-    letter-spacing: 0.62em;
+  #scene.running header{ opacity: 0; }
+  header .t-ja{
+    font-size: 13px; font-weight: 400;
+    letter-spacing: 0.5em;
     color: var(--ink);
   }
-  header .romaji{
-    font-size: 8.5px; letter-spacing: 0.42em;
+  header .t-sub{
+    margin-top: 12px;
+    font-size: 8px; letter-spacing: 0.34em;
     color: var(--faint);
-  }
-  header .desc{
-    margin-left: auto;
-    font-size: 8.5px; letter-spacing: 0.34em;
-    color: var(--faint);
+    line-height: 2.3;
   }
 
   /* ---------- night scene — the work itself, full bleed ---------- */
@@ -68,19 +66,43 @@
     background: #000;
   }
   #scene canvas{ display: block; width: 100%; height: 100%; }
-  #moonBtn{
-    position: absolute; top: 36px; right: 44px;
-    width: 52px; height: 52px;
-    padding: 0; margin: 0;
+  #scene:fullscreen{ height: 100%; }
+  /* the switch is one grain, resting at the exact centre */
+  #seedBtn{
+    position: absolute; top: 50%; left: 50%;
+    width: 44px; height: 44px;
+    margin: -22px 0 0 -22px;
+    padding: 0;
     background: none; border: 0; cursor: pointer;
-    border-radius: 50%;
-    z-index: 2;
+    z-index: 3;
   }
-  #moonBtn svg{ width: 100%; height: 100%; display: block; overflow: visible; }
-  #moonBtn .m-on{ opacity: 0; transition: opacity 2.4s ease; }
-  #moonBtn .m-off{ opacity: 1; transition: opacity 2.4s ease; }
-  #moonBtn.on .m-on{ opacity: 1; }
-  #moonBtn.on .m-off{ opacity: 0; }
+  #seedBtn::after{
+    content: "";
+    position: absolute; top: 50%; left: 50%;
+    width: 3px; height: 3px;
+    margin: -1.5px 0 0 -1.5px;
+    background: var(--hi);
+    animation: seedpulse 4.5s ease-in-out infinite;
+  }
+  #scene.running #seedBtn::after{ animation: none; opacity: 0.45; }
+  @keyframes seedpulse{ 0%,100%{ opacity: 0.3; } 50%{ opacity: 1; } }
+  /* fullscreen — a small empty frame; gone while running */
+  #fsBtn{
+    position: absolute; top: 36px; right: 40px;
+    width: 28px; height: 28px;
+    padding: 0;
+    background: none;
+    border: 1px solid var(--line2);
+    cursor: pointer;
+    z-index: 2;
+    transition: opacity 1.5s ease, border-color 0.3s;
+  }
+  #fsBtn::after{
+    content: ""; position: absolute; inset: 8px;
+    border: 1px solid var(--dim);
+  }
+  #fsBtn:hover{ border-color: var(--dim); }
+  #scene.running #fsBtn{ opacity: 0; pointer-events: none; }
   #hint{
     position: absolute; left: 0; right: 0; bottom: 34px;
     text-align: center;
@@ -89,7 +111,7 @@
     transition: opacity 2.5s ease;
     pointer-events: none;
   }
-  #hint.gone{ opacity: 0; }
+  #scene.running #hint, #hint.gone{ opacity: 0; }
 
   /* ---------- species rows ---------- */
   #speciesList{ margin-top: 54px; }
@@ -259,10 +281,11 @@
     .sp-call{ display: none; }
     .sp-name{ width: 96px; }
     .sp-name .kanji{ font-size: 13px; }
-    #moonBtn{ width: 44px; height: 44px; top: 24px; right: 24px; }
-    header{ top: 28px; left: 24px; right: 24px; gap: 14px; }
-    header h1{ font-size: 13px; letter-spacing: 0.44em; }
-    header .desc{ display: none; }
+    #fsBtn{ top: 22px; right: 22px; width: 24px; height: 24px; }
+    #fsBtn::after{ inset: 7px; }
+    header{ top: 30px; left: 26px; }
+    header .t-ja{ font-size: 12px; letter-spacing: 0.4em; }
+    header .t-sub{ font-size: 7.5px; }
     #globals{ gap: 34px; row-gap: 44px; }
     .g-group{ gap: 8px; min-width: 0; }
     .g-group .knob{ width: 44px; }
@@ -275,18 +298,16 @@
 <div id="scene">
   <canvas id="night"></canvas>
   <header>
-    <h1>虫時雨</h1>
-    <span class="romaji">MUSHI-SHIGURE</span>
-    <span class="desc">秋の夜 · 環境音具</span>
+    <div class="t-ja">宇宙には朝も夜もある</div>
+    <div class="t-sub">
+      <div>THE UNIVERSE TOO HAS ITS MORNINGS AND ITS NIGHTS</div>
+      <div>IN UNIVERSO ET MANE ET NOX SUNT</div>
+      <div>宇宙亦有朝暮</div>
+    </div>
   </header>
-  <button id="moonBtn" aria-label="play / stop">
-    <svg viewBox="0 0 64 64">
-      <circle class="m-off" cx="32" cy="32" r="19.5" fill="none"
-              stroke="#a6a8aa" stroke-width="1"/>
-      <circle class="m-on" cx="32" cy="32" r="20" fill="#e9e9e7"/>
-    </svg>
-  </button>
-  <div id="hint">月に触れると、夜がはじまる</div>
+  <button id="seedBtn" aria-label="start / stop"></button>
+  <button id="fsBtn" aria-label="fullscreen"></button>
+  <div id="hint">中心の粒に触れる</div>
 </div>
 
 <div id="app">
@@ -308,7 +329,7 @@
     </div>
   </section>
 
-  <footer>空白鍵で開始と停止 · 「野」は自然の間合い · 「拍」は十六歩の刻み</footer>
+  <footer>空白鍵で開始と停止 · fか二回打で全画面 · 「野」は自然の間合い · 「拍」は十六歩の刻み</footer>
 </div>
 
 <script>
@@ -944,7 +965,7 @@ async function startNight(){
   S.droneMoveAt = 0;
   armHush(now + 20);
   tickSched();
-  $("#moonBtn").classList.add("on");
+  $("#scene").classList.add("running");
   $("#hint").classList.add("gone");
 }
 function stopNight(){
@@ -954,14 +975,30 @@ function stopNight(){
     const now = ctx.currentTime;
     masterGain.gain.setTargetAtTime(0, now, 0.7);
   }
-  $("#moonBtn").classList.remove("on");
+  $("#scene").classList.remove("running");
 }
-$("#moonBtn").addEventListener("click", ()=>{ S.running ? stopNight() : startNight(); });
+$("#seedBtn").addEventListener("click", ()=>{ S.running ? stopNight() : startNight(); });
+
+function toggleFullscreen(){
+  if(document.fullscreenElement){
+    document.exitFullscreen();
+  } else if($("#scene").requestFullscreen){
+    $("#scene").requestFullscreen();
+  }
+}
+$("#fsBtn").addEventListener("click", e=>{ e.stopPropagation(); toggleFullscreen(); });
+$("#scene").addEventListener("dblclick", e=>{
+  if(e.target.closest("#seedBtn") || e.target.closest("#fsBtn")) return;
+  toggleFullscreen();
+});
+document.addEventListener("fullscreenchange", ()=> setTimeout(resizeCanvas, 80));
+
 window.addEventListener("keydown", e=>{
   if(e.code === "Space" && !e.repeat){
     e.preventDefault();
     S.running ? stopNight() : startNight();
   }
+  if(e.key === "f" && !e.repeat) toggleFullscreen();
 });
 
 /* ---------------- knob widget ---------------- */
@@ -1564,18 +1601,17 @@ function draw(ts){
       const wy = m10*mo.x + m11*mo.y + m12*mo.z;
       const wz = m20*mo.x + m21*mo.y + m22*mo.z;
       const [px, py, k, dz] = project(cl.x+wx, cl.y+wy, cl.z+wz);
-      const size = clamp(k*0.0075, 0.7, 3.4);
+      // one grain is one grain, whatever its distance
       cx2.fillStyle = `rgba(${mo.c},${mo.c},${mo.c+2},${clamp(1.9/dz, 0.22, 0.85)})`;
-      cx2.fillRect(px, py, size, size);
+      cx2.fillRect(px, py, 1.7, 1.7);
     }
   }
 
-  // loose grains
+  // loose grains — the same size at any depth
   for(const g of free){
     const [px, py, k, dz] = project(g.x, g.y, g.z);
-    const size = clamp(k*0.006, 0.5, 2.6);
     cx2.fillStyle = `rgba(${g.c},${g.c},${g.c+2},${clamp(1.5/dz, 0.16, 0.7)})`;
-    cx2.fillRect(px, py, size, size);
+    cx2.fillRect(px, py, 1.5, 1.5);
   }
 }
 

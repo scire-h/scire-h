@@ -11,10 +11,13 @@ scire-h/
 └── ds4-native/         ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
 ```
 
-## 0. 虫時雨 mushi-shigure (`mushishigure.html`)
+## 0. 宇宙には朝も夜もある — mushishigure (`mushishigure.html`)
 
-A single self-contained HTML page that simulates the insect chorus of
-a quiet Japanese autumn night — as an instrument, not a sample player.
+A single self-contained HTML page — "the universe too has its mornings
+and its nights" — that simulates the insect chorus of a quiet Japanese
+autumn night as an instrument, and renders it as a weightless cosmology:
+ether smoke, slow inflation, and grains that condense into strange
+tumbling bodies, all in time with the sound.
 
 * Every voice is a **sine carrier with wing-stroke amplitude
   modulation** (real cricket stridulation is nearly pure-tone), so it
@@ -31,7 +34,9 @@ a quiet Japanese autumn night — as an instrument, not a sample player.
 * Per species, timing is either 野 (free, natural intervals) or 拍 —
   a TR-808-style 16-step grid with swing (うねり) and per-hit timing
   looseness (ゆらぎ).
-* Touch the moon to begin the night. Settings persist in the browser.
+* Touch the grain at the centre to begin; f (or double-click) for
+  fullscreen. While it runs, no words remain on screen. Settings
+  persist in the browser.
 
 ## 1. HTML / Web Audio clone (`index.html`)
 
