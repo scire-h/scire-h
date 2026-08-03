@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a0c" />
+<title>SYNTH DRUM 4 — Pollard Syndrum channel recreation</title>
+<style>
+  :root {
+    --bg:     #0a0a0c;
+    --panel:  #141417;
+    --panel2: #1d1d22;
+    --line:   #2a2a30;
+    --text:   #ecebe7;
+    --dim:    #8d8c93;
+    --red:    #e6402e;   /* Pollard logo red */
+    --cream:  #efe6d2;   /* silk-screen lettering */
+    --hit:    #ff6a45;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; touch-action:manipulation; }
+  html,body { margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Hiragino Sans",sans-serif; }
+  .app { max-width:560px; margin:0 auto; padding-bottom:60px; }
+
+  /* ---------- header ---------- */
+  .top {
+    display:flex; align-items:baseline; gap:10px;
+    padding:14px 14px 10px; background:#070708; border-bottom:2px solid var(--red);
+  }
+  .top .logo { font-weight:900; letter-spacing:.1em; color:var(--red);
+    font-size:20px; font-style:italic; }
+  .top .sub { font-size:10px; letter-spacing:.18em; color:var(--dim); }
+  .top .spacer { flex:1; }
+  .audToggle {
+    font-size:10px; font-weight:800; letter-spacing:.1em;
+    padding:6px 10px; border-radius:6px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--dim); cursor:pointer;
+  }
+  .audToggle.on { background:var(--red); color:#fff; border-color:var(--red); }
+
+  /* ---------- pad ---------- */
+  .padWrap { display:flex; flex-direction:column; align-items:center; padding:18px 0 6px; }
+  .pad {
+    width:min(62vw,260px); height:min(62vw,260px); border-radius:50%;
+    background:
+      radial-gradient(circle at 38% 32%, #ffffff, #ddd8cf 45%, #b9b2a6 78%, #8e887d 100%);
+    border:10px solid #c9ced4;            /* chrome hoop */
+    box-shadow: inset 0 -10px 26px rgba(0,0,0,.28),
+                inset 0 6px 14px rgba(255,255,255,.5),
+                0 8px 22px rgba(0,0,0,.6);
+    position:relative; cursor:pointer;
+    transition:transform 40ms;
+  }
+  .pad.hit { transform:scale(.965); }
+  .pad .brand {
+    position:absolute; left:50%; top:54%; transform:translateX(-50%);
+    color:#9a3328; font-size:12px; font-weight:900; font-style:italic;
+    letter-spacing:.08em; opacity:.75; pointer-events:none;
+  }
+  .padHint { margin-top:8px; font-size:10px; color:var(--dim); letter-spacing:.12em; }
+
+  /* ---------- presets ---------- */
+  .presets { display:flex; gap:6px; padding:10px 12px 4px; flex-wrap:wrap; }
+  .presets button {
+    flex:1 1 30%; padding:9px 4px; border-radius:7px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--cream); font-size:11px; font-weight:700;
+    letter-spacing:.06em;
+  }
+  .presets button:active { background:var(--red); color:#fff; }
+
+  /* ---------- parameter sections ---------- */
+  .params { padding:8px 12px 0; }
+  .sec { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px 8px; margin-bottom:10px; }
+  .sec h3 { margin:0 0 10px; font-size:11px; letter-spacing:.18em;
+    color:var(--cream); font-weight:800;
+    border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .sec h3 small { color:var(--dim); font-weight:600; letter-spacing:.06em; margin-left:8px; }
+  .prow { display:grid; grid-template-columns:96px 1fr 74px; gap:8px; align-items:center;
+    margin-bottom:2px; }
+  .prow .lb { font-size:12px; color:#cfcdc8; letter-spacing:.04em; }
+  .ext { color:var(--red); font-weight:800; }
+  .prow .vl { text-align:right; font-size:12px; color:var(--red); font-weight:700;
+    font-variant-numeric:tabular-nums; }
+  .prow input[type=range] { -webkit-appearance:none; appearance:none;
+    height:36px; background:transparent; width:100%; margin:0; }
+  .prow input[type=range]::-webkit-slider-runnable-track {
+    height:4px; border-radius:2px; background:#3a3a42; }
+  .prow input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:14px; height:26px; border-radius:3px;
+    margin-top:-11px; background:linear-gradient(#f4f1ea,#b9b4a8);
+    border:1px solid #555; box-shadow:0 2px 4px rgba(0,0,0,.5); }
+  .prow input[type=range]::-moz-range-track {
+    height:4px; border-radius:2px; background:#3a3a42; }
+  .prow input[type=range]::-moz-range-thumb {
+    width:14px; height:26px; border-radius:3px;
+    background:linear-gradient(#f4f1ea,#b9b4a8); border:1px solid #555; }
+
+  .swRow { display:grid; grid-template-columns:96px 1fr; gap:8px; align-items:center;
+    margin:4px 0 8px; }
+  .swRow .lb { font-size:12px; color:#cfcdc8; }
+  .seg { display:flex; gap:0; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+  .seg button { flex:1; padding:9px 0; border:none; background:var(--panel2);
+    color:var(--dim); font-size:11px; font-weight:800; letter-spacing:.08em;
+    border-right:1px solid var(--line); }
+  .seg button:last-child { border-right:none; }
+  .seg button.act { background:var(--red); color:#fff; }
+
+  .dim2 { color:var(--dim); font-weight:400; font-size:10px; }
+  /* ---------- mini keyboard (±2 octaves, semitone-accurate) ---------- */
+  .kbWrap { overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
+    border:1px solid var(--line); border-radius:8px; background:#0d0d10;
+    padding:6px; margin-bottom:10px; }
+  .kb { position:relative; height:92px; }
+  .kb .wk, .kb .bk { position:absolute; top:0; cursor:pointer;
+    border-radius:0 0 4px 4px; }
+  .kb .wk { height:92px; background:linear-gradient(#fbfaf6,#e3ded2);
+    border:1px solid #9a958a; }
+  .kb .wk:active, .kb .wk.cur { background:linear-gradient(#ffd9b0,#ff9a5d); }
+  .kb .bk { height:58px; background:linear-gradient(#2a2a2e,#111); border:1px solid #000;
+    z-index:2; }
+  .kb .bk:active, .kb .bk.cur { background:linear-gradient(#ff8a4d,#c0461f); }
+  .kb .wk .oc { position:absolute; bottom:3px; left:0; right:0; text-align:center;
+    font-size:8px; color:#9a958a; pointer-events:none; }
+
+  /* ---------- scope ---------- */
+  .scopeWrap { padding:0 12px 12px; }
+  canvas.scope { width:100%; height:84px; display:block;
+    background:#0d1410; border:1px solid var(--line); border-radius:10px; }
+  .foot { text-align:center; font-size:10px; color:var(--dim); padding:6px 14px 18px;
+    line-height:1.7; letter-spacing:.04em; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="top">
+    <span class="logo">SYNTH DRUM 4</span>
+    <span class="sub">POLLARD SYNDRUM 478 CHANNEL · DIGITAL RECREATION</span>
+    <span class="spacer"></span>
+    <button class="audToggle on" id="audBtn" title="つまみを動かすと音が鳴る">♪ AUDITION</button>
+  </div>
+
+  <div class="padWrap">
+    <div class="pad" id="pad"><span class="brand">SD-4</span></div>
+    <div class="padHint">TAP — 中心ほど強打 ／ KEYS: Z=soft X=mid SPACE=hard ／ 鍵盤=音程選択+演奏 ／ TUNEで微調整</div>
+  </div>
+
+  <div class="presets" id="presets"></div>
+
+  <div class="params">
+
+    <div class="sec">
+      <h3>TRIGGER<small>pad conditioner</small></h3>
+      <div class="prow"><span class="lb">SENSITIVITY</span>
+        <input type="range" id="sens" min="0" max="1" step="0.01"><span class="vl" id="sensV"></span></div>
+    </div>
+
+    <div class="sec">
+      <h3>PITCH<small id="noteReadout">— · ±2 oct keyboard</small></h3>
+      <div class="kbWrap" id="kbWrap"><div class="kb" id="kb"></div></div>
+      <div class="prow"><span class="lb">TUNE <span class="dim2">(fine)</span></span>
+        <input type="range" id="fine" min="-100" max="100" step="1"><span class="vl" id="fineV"></span></div>
+    </div>
+
+    <div class="sec">
+      <h3>TONE<small>VCO — function generator</small></h3>
+      <div class="swRow"><span class="lb">TONE</span>
+        <div class="seg" id="waveSeg">
+          <button data-v="sine">SINE</button><button data-v="triangle">TRI</button><button data-v="square">SQUARE</button>
+        </div></div>
+      <div class="prow"><span class="lb">ATTACK <span class="ext">+</span></span>
+        <input type="range" id="attack" min="0" max="1" step="0.001"><span class="vl" id="attackV"></span></div>
+      <div class="prow"><span class="lb">TONE SUSTAIN</span>
+        <input type="range" id="sustain" min="0" max="1" step="0.001"><span class="vl" id="sustainV"></span></div>
+    </div>
+
+    <div class="sec">
+      <h3>SWEEP<small>pitch EG</small></h3>
+      <div class="swRow"><span class="lb">SWEEP</span>
+        <div class="seg" id="dirSeg">
+          <button data-v="up">UP</button><button data-v="off">OFF</button><button data-v="down">DOWN</button>
+        </div></div>
+      <div class="prow"><span class="lb">RANGE</span>
+        <input type="range" id="range" min="0" max="36" step="0.5"><span class="vl" id="rangeV"></span></div>
+      <div class="prow"><span class="lb">SWEEP TIME</span>
+        <input type="range" id="sweepTime" min="0" max="1" step="0.001"><span class="vl" id="sweepTimeV"></span></div>
+    </div>
+
+    <div class="sec">
+      <h3>VIBRATO<small>LFO 0.5–250 Hz, audio-rate FM</small></h3>
+      <div class="swRow"><span class="lb">WAVE</span>
+        <div class="seg" id="vibSeg">
+          <button data-v="square">SQR</button><button data-v="triangle">TRI</button><button data-v="sawtooth">RAMP</button>
+        </div></div>
+      <div class="prow"><span class="lb">RATE</span>
+        <input type="range" id="vibRate" min="0" max="1" step="0.001"><span class="vl" id="vibRateV"></span></div>
+      <div class="prow"><span class="lb">DEPTH</span>
+        <input type="range" id="vibDepth" min="0" max="1" step="0.01"><span class="vl" id="vibDepthV"></span></div>
+      <div class="prow"><span class="lb">DELAY <span class="ext">+</span></span>
+        <input type="range" id="vibDelay" min="0" max="1.5" step="0.01"><span class="vl" id="vibDelayV"></span></div>
+    </div>
+
+    <div class="sec">
+      <h3>SNARE<small>noise burst</small></h3>
+      <div class="swRow"><span class="lb">SNARE</span>
+        <div class="seg" id="snSeg">
+          <button data-v="0">OFF</button><button data-v="1">1</button><button data-v="2">2</button>
+        </div></div>
+      <div class="prow"><span class="lb">SNARE SUSTAIN</span>
+        <input type="range" id="snSustain" min="0" max="1" step="0.001"><span class="vl" id="snSustainV"></span></div>
+    </div>
+
+    <div class="sec">
+      <h3>OUTPUT</h3>
+      <div class="prow"><span class="lb">DRIVE <span class="ext">+</span></span>
+        <input type="range" id="drive" min="0.5" max="6" step="0.1"><span class="vl" id="driveV"></span></div>
+      <div class="prow"><span class="lb">VOLUME</span>
+        <input type="range" id="vol" min="0" max="1" step="0.01"><span class="vl" id="volV"></span></div>
+    </div>
+
+  </div>
+
+  <div class="scopeWrap"><canvas class="scope" id="scope"></canvas></div>
+
+  <div class="foot">
+    Synth Drum 4 — a digital recreation of one Pollard Syndrum 478 channel.<br>
+    ±2-octave semitone keyboard (C1–C5) + TUNE fine offset · RC-discharge
+    envelopes · exponential-in-octaves pitch sweep · analog VCO drift ·
+    velocity drives level + sweep depth + sustain · vibrato to 250 Hz
+    (real FM) · 2-band snare noise · attack / vib-delay / drive extensions.<br>
+    <span class="ext">+</span> = performance extension beyond the original 478 panel
+    (defaults reproduce the hardware).<br>
+    Circuit notes: <code>docs/RESEARCH.md</code>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   SYNTH DRUM 4 — Phase 0 (Web Audio)
+   One channel of the Pollard Syndrum 478, per docs/RESEARCH.md:
+
+     pad → conditioner(SENSITIVITY) ─┬─ SWEEP EG → VCO pitch (±RANGE)
+                                     ├─ TONE  EG → tone VCA
+                                     └─ SNARE EG → noise VCA
+     VCO(sine/tri/square, +vibrato LFO) ┐
+     noise → band shaping              ─┴ mix → soft clip → VOLUME → out
+
+   All envelopes are setTargetAtTime — the exact RC-discharge curve of
+   the hardware. Velocity feeds level, sweep depth and sustain length,
+   matching the documented trigger behaviour.
+   ===================================================================== */
+
+const AC = window.AudioContext || window.webkitAudioContext;
+let ac = null, master = null, analyser = null, noiseBuf = null, sine8038 = null;
+let currentVoice = null;
+
+/* ---------- parameters (P holds physical values) ---------- */
+const P = {
+  sens: 0.7,            // 0..1
+  wave: "sine",         // sine | triangle | square
+  note: 38,             // MIDI note (D2 ≈ 73.4 Hz); keyboard C1..C5 = ±2 oct of C3
+  fine: 0,              // cents, -100..+100 (TUNE = fine offset from the note)
+  attack: 0.0015,       // s, 0.0002..0.08 (+ ext; hardware ≈ instant)
+  sustain: 0.8,         // s, 0.05..20
+  dir: "down",          // up | off | down
+  range: 18,            // semitones, 0..36 (× velocity)
+  sweepTime: 0.4,       // s, 0.03..2
+  vibWave: "triangle",  // square | triangle | sawtooth(ramp)
+  vibRate: 6,           // Hz, 0.5..250
+  vibDepth: 0,          // 0..1
+  vibDelay: 0,          // s, 0..1.5 (+ ext; LFO fades in)
+  snare: 0,             // 0 | 1 | 2
+  snSustain: 0.3,       // s, 0.04..3
+  drive: 1.25,          // × pre-gain into the OTA-VCA tanh (+ ext)
+  vol: 0.8,             // 0..1
+};
+
+/* exponential slider mappings: slider 0..1 ⇄ physical lo..hi */
+const expMap = (lo, hi) => ({
+  to:   x => lo * Math.pow(hi / lo, x),
+  from: v => Math.log(v / lo) / Math.log(hi / lo),
+});
+const MAPS = {
+  attack:    expMap(0.0002, 0.08),
+  sustain:   expMap(0.05, 20),
+  sweepTime: expMap(0.03, 2),
+  vibRate:   expMap(0.5, 250),
+  snSustain: expMap(0.04, 3),
+};
+const fmtHz = v => v >= 100 ? v.toFixed(0) + " Hz" : v.toFixed(1) + " Hz";
+const fmtS  = v => v >= 1 ? v.toFixed(2) + " s" : (v * 1000).toFixed(0) + " ms";
+
+/* note helpers: MIDI ⇄ Hz, name */
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const midiToHz = m => 440 * Math.pow(2, (m - 69) / 12);
+const noteName = m => NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+const KB_LO = 24, KB_HI = 72;   // C1..C5 — two octaves either side of C3
+// base VCO frequency: selected note, fine-tuned by ±100 cents
+const baseFreq = () => midiToHz(P.note) * Math.pow(2, P.fine / 1200);
+
+/* ---------- audio graph ---------- */
+function ensureAC() {
+  if (ac) { if (ac.state === "suspended") ac.resume(); return; }
+  ac = new AC({ latencyHint: "interactive" });
+
+  // master: gentle op-amp-style soft clip → volume → analyser → out
+  const drive = ac.createGain(); drive.gain.value = P.drive;
+  const clip = ac.createWaveShaper();
+  const N = 2048, curve = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const x = (i / (N - 1)) * 2 - 1;
+    curve[i] = Math.tanh(1.6 * x) / Math.tanh(1.6);
+  }
+  clip.curve = curve; clip.oversample = "2x";
+  const vol = ac.createGain(); vol.gain.value = P.vol;
+  analyser = ac.createAnalyser(); analyser.fftSize = 2048;
+  drive.connect(clip); clip.connect(vol); vol.connect(analyser);
+  analyser.connect(ac.destination);
+  master = { in: drive, drive, vol };
+
+  // function-generator sine: fundamental + H3 at −38 dB (≈1.3 % THD)
+  const real = new Float32Array([0, 0, 0, 0, 0, 0]);
+  const imag = new Float32Array([0, 1, 0, -0.0126, 0, 0.002]);
+  sine8038 = ac.createPeriodicWave(real, imag);
+
+  // 2 s of white noise, looped by each snare burst
+  noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+
+  requestAnimationFrame(drawScope);
+}
+
+/* ---------- one hit ---------- */
+function trigger(rawVel) {
+  ensureAC();
+  const t = ac.currentTime + 0.002;
+
+  // SENSITIVITY scales the conditioned trigger pulse
+  const v = Math.min(1, Math.max(0.02, rawVel * (0.25 + 1.5 * P.sens)));
+
+  // monophonic channel: a new hit chokes the previous voice
+  if (currentVoice) chokeVoice(currentVoice, t);
+
+  const stopAts = [];
+  const voice = { gains: [], oscs: [] };
+
+  /* --- tone path: VCO → tone EG VCA --- */
+  const sustEff = P.sustain * (0.35 + 0.65 * v);      // velocity lengthens sustain
+  const ampPeak = Math.pow(v, 1.3);
+
+  const vco = ac.createOscillator();
+  if (P.wave === "sine") vco.setPeriodicWave(sine8038);
+  else vco.type = P.wave;
+
+  // analog VCO drift: per-hit detune (±3 cents) on the base pitch
+  const detune = Math.pow(2, ((Math.random() * 2 - 1) * 3) / 1200);
+  const f0 = baseFreq() * detune;
+
+  if (P.dir === "off" || P.range === 0) {
+    vco.frequency.setValueAtTime(f0, t);
+  } else {
+    // velocity drives the sweep farther (documented hardware behaviour)
+    const rangeEff = P.range * (0.3 + 0.7 * v);
+    // DOWN: jump up then decay down to TUNE; UP: mirror image
+    const sgn = P.dir === "down" ? +1 : -1;
+    // The sweep EG is an RC-discharge voltage; in a 1 V/oct VCO that
+    // makes the pitch decay exponentially *in octaves*, not in Hz.
+    // Render that authentic curve directly.
+    const tau = Math.max(0.004, P.sweepTime / 4.6);   // ≈99 % settle at SWEEP TIME
+    const dur = Math.min(P.sweepTime * 1.3 + 0.02, 6);
+    const N = 256;
+    const curve = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const env = Math.exp(-(i / (N - 1)) * dur / tau);  // 1 → ~0
+      curve[i] = f0 * Math.pow(2, sgn * rangeEff / 12 * env);
+    }
+    vco.frequency.setValueCurveAtTime(curve, t, dur);
+  }
+
+  // slow continuous wobble (0.15–0.4 Hz), summed onto VCO pitch
+  const wob = ac.createOscillator();
+  wob.type = "sine";
+  wob.frequency.value = 0.15 + Math.random() * 0.25;
+  const wobG = ac.createGain();
+  wobG.gain.value = f0 * 0.0015;   // ≈2.5 cents peak
+  wob.connect(wobG); wobG.connect(vco.frequency);
+  wob.start(t); voice.oscs.push(wob);
+
+  // vibrato LFO straight into VCO pitch — true FM at audio rates
+  if (P.vibDepth > 0.001) {
+    const lfo = ac.createOscillator();
+    lfo.type = P.vibWave;
+    lfo.frequency.setValueAtTime(P.vibRate, t);
+    const lg = ac.createGain();
+    const vibAmt = P.vibDepth * f0 * 0.9;
+    if (P.vibDelay > 0.01) {            // DELAY: LFO fades in after the hit
+      lg.gain.setValueAtTime(0, t);
+      lg.gain.linearRampToValueAtTime(vibAmt, t + P.vibDelay);
+    } else {
+      lg.gain.setValueAtTime(vibAmt, t);
+    }
+    lfo.connect(lg); lg.connect(vco.frequency);
+    lfo.start(t); voice.oscs.push(lfo);
+  }
+
+  const vca = ac.createGain();
+  const atk = P.attack;
+  vca.gain.setValueAtTime(0, t);
+  vca.gain.linearRampToValueAtTime(ampPeak, t + atk);   // ATTACK (≈instant by default)
+  vca.gain.setTargetAtTime(0, t + atk, sustEff / 6);    // RC discharge
+  vco.connect(vca); vca.connect(master.in);
+  vco.start(t);
+  voice.oscs.push(vco); voice.gains.push(vca);
+  stopAts.push(t + sustEff * 1.6 + 0.25);
+
+  /* --- snare path: noise → 2-band shaping → snare EG VCA --- */
+  if (P.snare > 0) {
+    // SNARE 1 = quiet + shorter, SNARE 2 = loud + longer.
+    // Two parallel band-passes: a body band + a higher emphasis band
+    // for the metallic sizzle, mirroring the hardware noise voicing.
+    const cfg = P.snare === 1
+      ? { body: 2400, bodyQ: 0.8, emph: 5200, emphQ: 3.5, lvl: 0.45, lenMul: 0.8 }
+      : { body: 1500, bodyQ: 0.6, emph: 3800, emphQ: 3.0, lvl: 0.95, lenMul: 1.6 };
+    const snT = P.snSustain * cfg.lenMul;
+
+    const src = ac.createBufferSource();
+    src.buffer = noiseBuf; src.loop = true;
+    src.playbackRate.value = 0.96 + Math.random() * 0.08;
+
+    const body = ac.createBiquadFilter();
+    body.type = "bandpass"; body.frequency.value = cfg.body; body.Q.value = cfg.bodyQ;
+    const emph = ac.createBiquadFilter();
+    emph.type = "bandpass"; emph.frequency.value = cfg.emph; emph.Q.value = cfg.emphQ;
+    const emphG = ac.createGain(); emphG.gain.value = 0.5;
+
+    const sg = ac.createGain();
+    sg.gain.setValueAtTime(0, t);
+    sg.gain.linearRampToValueAtTime(cfg.lvl * v, t + 0.001);
+    sg.gain.setTargetAtTime(0, t + 0.001, snT / 5);
+
+    src.connect(body); body.connect(sg);
+    src.connect(emph); emph.connect(emphG); emphG.connect(sg);
+    sg.connect(master.in);
+    src.start(t);
+    voice.oscs.push(src); voice.gains.push(sg);
+    stopAts.push(t + snT * 1.6 + 0.25);
+  }
+
+  const end = Math.max(...stopAts);
+  voice.oscs.forEach(o => o.stop(end));
+  currentVoice = voice;
+}
+
+function chokeVoice(voice, t) {
+  for (const g of voice.gains) {
+    g.gain.cancelScheduledValues(t);
+    g.gain.setTargetAtTime(0, t, 0.0015);
+  }
+  for (const o of voice.oscs) { try { o.stop(t + 0.03); } catch (_) {} }
+}
+
+/* ---------- presets ---------- */
+const PRESETS = {
+  "DISCO DROP": { wave:"sine", note:38, fine:37, sustain:0.8, dir:"down", range:18, sweepTime:0.4,
+                  vibDepth:0, snare:0, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6, snSustain:0.3,
+                  attack:0.0015, vibDelay:0, drive:1.25 },
+  "LASER UP":   { wave:"square", note:51, fine:49, sustain:0.45, dir:"up", range:30, sweepTime:0.22,
+                  vibDepth:0, snare:0, sens:0.75, vol:0.7, vibWave:"triangle", vibRate:6, snSustain:0.3,
+                  attack:0.0015, vibDelay:0, drive:1.7 },
+  "SPACE SNARE":{ wave:"triangle", note:54, fine:46, sustain:0.22, dir:"down", range:9, sweepTime:0.12,
+                  vibDepth:0, snare:2, snSustain:0.35, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6,
+                  attack:0.0015, vibDelay:0, drive:1.3 },
+  "SYN-TOM":    { wave:"triangle", note:45, fine:0, sustain:0.3, dir:"down", range:6, sweepTime:0.13,
+                  vibDepth:0, snare:0, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6, snSustain:0.3,
+                  attack:0.0015, vibDelay:0, drive:1.4 },
+  "UFO":        { wave:"sine", note:62, fine:37, sustain:2.2, dir:"off", range:0, sweepTime:0.4,
+                  vibWave:"sawtooth", vibRate:42, vibDepth:0.8, snare:0, sens:0.7, vol:0.65, snSustain:0.3,
+                  attack:0.03, vibDelay:0.5, drive:1.1 },
+  "SOFT MALLET":{ wave:"sine", note:48, fine:-11, sustain:1.0, dir:"down", range:5, sweepTime:0.5,
+                  vibDepth:0, snare:0, sens:0.7, vol:0.8, vibWave:"triangle", vibRate:6, snSustain:0.3,
+                  attack:0.045, vibDelay:0, drive:1.0 },
+  "BUZZ RING":  { wave:"sine", note:49, fine:18, sustain:0.6, dir:"down", range:12, sweepTime:0.3,
+                  vibWave:"square", vibRate:180, vibDepth:0.55, snare:0, sens:0.7, vol:0.65, snSustain:0.3,
+                  attack:0.0015, vibDelay:0, drive:2.4 },
+};
+
+/* ---------- UI wiring ---------- */
+const $ = id => document.getElementById(id);
+
+/* audition: play the sound when a control is adjusted.
+   Sliders fire many input events while dragging, so debounce and play
+   one hit once the knob settles; switches are discrete, play at once. */
+let auditionOn = true;
+let auditionTimer = null;
+function auditionNow() { if (auditionOn) trigger(0.9); }
+function auditionDebounced() {
+  if (!auditionOn) return;
+  clearTimeout(auditionTimer);
+  auditionTimer = setTimeout(() => trigger(0.9), 130);
+}
+const audBtn = $("audBtn");
+audBtn.addEventListener("click", () => {
+  auditionOn = !auditionOn;
+  audBtn.classList.toggle("on", auditionOn);
+});
+
+const SLIDERS = [
+  { id:"sens",      get:() => P.sens,      set:x => P.sens = +x,            fmt:v => Math.round(v*100)+" %" },
+  { id:"fine",      get:() => P.fine,      set:x => { P.fine = +x; updateNoteReadout(); }, fmt:v => (v>0?"+":"")+v.toFixed(0)+" c" },
+  { id:"attack",    map:MAPS.attack,    key:"attack",    fmt:fmtS },
+  { id:"sustain",   map:MAPS.sustain,   key:"sustain",   fmt:fmtS },
+  { id:"range",     get:() => P.range,     set:x => P.range = +x,           fmt:v => v.toFixed(1)+" st" },
+  { id:"sweepTime", map:MAPS.sweepTime, key:"sweepTime", fmt:fmtS },
+  { id:"vibRate",   map:MAPS.vibRate,   key:"vibRate",   fmt:fmtHz },
+  { id:"vibDepth",  get:() => P.vibDepth,  set:x => P.vibDepth = +x,        fmt:v => Math.round(v*100)+" %" },
+  { id:"vibDelay",  get:() => P.vibDelay,  set:x => P.vibDelay = +x,        fmt:fmtS },
+  { id:"snSustain", map:MAPS.snSustain, key:"snSustain", fmt:fmtS },
+  { id:"drive",     get:() => P.drive,     set:x => { P.drive = +x; if (master) master.drive.gain.value = P.drive; }, fmt:v => v.toFixed(1)+"×" },
+  { id:"vol",       get:() => P.vol,       set:x => { P.vol = +x; if (master) master.vol.gain.value = P.vol; }, fmt:v => Math.round(v*100)+" %" },
+];
+
+function refreshSlider(s) {
+  const el = $(s.id), vl = $(s.id + "V");
+  if (s.map) { el.value = s.map.from(P[s.key]); vl.textContent = s.fmt(P[s.key]); }
+  else { el.value = s.get(); vl.textContent = s.fmt(s.get()); }
+}
+for (const s of SLIDERS) {
+  $(s.id).addEventListener("input", e => {
+    if (s.map) P[s.key] = s.map.to(+e.target.value);
+    else s.set(e.target.value);
+    $(s.id + "V").textContent = s.fmt(s.map ? P[s.key] : s.get());
+    auditionDebounced();
+  });
+}
+
+const SEGS = [
+  { id:"waveSeg", key:"wave" },
+  { id:"dirSeg",  key:"dir" },
+  { id:"vibSeg",  key:"vibWave" },
+  { id:"snSeg",   key:"snare", num:true },
+];
+function refreshSeg(s) {
+  for (const b of $(s.id).querySelectorAll("button"))
+    b.classList.toggle("act", String(P[s.key]) === b.dataset.v);
+}
+for (const s of SEGS) {
+  $(s.id).addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    P[s.key] = s.num ? +b.dataset.v : b.dataset.v;
+    refreshSeg(s);
+    auditionNow();
+  });
+}
+
+/* ---------- mini keyboard (±2 octaves, semitone-accurate) ---------- */
+const kb = $("kb"), kbWrap = $("kbWrap");
+const WHITE_W = 30, BLACK_W = 18;
+const isBlack = m => [1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12);
+function buildKeyboard() {
+  kb.innerHTML = "";
+  let whiteIdx = 0;
+  for (let m = KB_LO; m <= KB_HI; m++) {
+    const k = document.createElement("div");
+    k.dataset.note = m;
+    if (isBlack(m)) {
+      k.className = "bk";
+      k.style.left = (whiteIdx * WHITE_W - BLACK_W / 2) + "px";
+      k.style.width = BLACK_W + "px";
+    } else {
+      k.className = "wk";
+      k.style.left = (whiteIdx * WHITE_W) + "px";
+      k.style.width = (WHITE_W - 1) + "px";
+      if (m % 12 === 0) {   // label each C
+        const oc = document.createElement("span");
+        oc.className = "oc"; oc.textContent = noteName(m);
+        k.appendChild(oc);
+      }
+      whiteIdx++;
+    }
+    k.addEventListener("pointerdown", ev => {
+      ev.preventDefault();
+      P.note = m;
+      refreshKeyboard();
+      trigger(0.9);     // play the exact note straight away
+    });
+    kb.appendChild(k);
+  }
+  kb.style.width = (whiteIdx * WHITE_W) + "px";
+}
+function refreshKeyboard() {
+  for (const k of kb.children)
+    k.classList.toggle("cur", +k.dataset.note === P.note);
+  updateNoteReadout();
+}
+function updateNoteReadout() {
+  const hz = baseFreq();
+  $("noteReadout").textContent =
+    noteName(P.note) + (P.fine ? (P.fine > 0 ? " +" : " ") + P.fine + "c" : "") +
+    " · " + (hz >= 100 ? hz.toFixed(0) : hz.toFixed(1)) + " Hz";
+}
+function scrollKeyboardToNote() {
+  // centre the current note in the scroll viewport
+  const cur = [...kb.children].find(k => +k.dataset.note === P.note);
+  if (cur) kbWrap.scrollLeft = cur.offsetLeft - kbWrap.clientWidth / 2 + cur.offsetWidth / 2;
+}
+buildKeyboard();
+
+function refreshAll() { SLIDERS.forEach(refreshSlider); SEGS.forEach(refreshSeg); refreshKeyboard(); }
+
+const presetBox = $("presets");
+for (const name of Object.keys(PRESETS)) {
+  const b = document.createElement("button");
+  b.textContent = name;
+  b.addEventListener("click", () => {
+    Object.assign(P, PRESETS[name]);
+    if (master) { master.vol.gain.value = P.vol; master.drive.gain.value = P.drive; }
+    refreshAll();
+    scrollKeyboardToNote();
+    trigger(0.9);
+  });
+  presetBox.appendChild(b);
+}
+refreshAll();
+requestAnimationFrame(scrollKeyboardToNote);   // centre on the default note once laid out
+
+/* ---------- pad: tap position → velocity (center = hardest) ---------- */
+const pad = $("pad");
+function padHit(clientX, clientY) {
+  const r = pad.getBoundingClientRect();
+  const dx = (clientX - (r.left + r.width / 2)) / (r.width / 2);
+  const dy = (clientY - (r.top + r.height / 2)) / (r.height / 2);
+  const dist = Math.min(1, Math.hypot(dx, dy));
+  trigger(1 - 0.65 * dist);
+  pad.classList.add("hit");
+  setTimeout(() => pad.classList.remove("hit"), 70);
+}
+pad.addEventListener("pointerdown", e => { e.preventDefault(); padHit(e.clientX, e.clientY); });
+
+document.addEventListener("keydown", e => {
+  if (e.repeat) return;
+  const vel = { "z": 0.35, "x": 0.65, " ": 1.0, "c": 1.0 }[e.key.toLowerCase()];
+  if (vel === undefined) return;
+  e.preventDefault();
+  trigger(vel);
+  pad.classList.add("hit");
+  setTimeout(() => pad.classList.remove("hit"), 70);
+});
+
+/* ---------- oscilloscope ---------- */
+const scope = $("scope"), sctx = scope.getContext("2d");
+function drawScope() {
+  requestAnimationFrame(drawScope);
+  if (!analyser) return;
+  const w = scope.width = scope.clientWidth * (window.devicePixelRatio || 1);
+  const h = scope.height = scope.clientHeight * (window.devicePixelRatio || 1);
+  const buf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  sctx.clearRect(0, 0, w, h);
+  sctx.strokeStyle = "#36e08a"; sctx.lineWidth = Math.max(1.5, h / 60);
+  sctx.beginPath();
+  for (let i = 0; i < buf.length; i++) {
+    const x = (i / (buf.length - 1)) * w;
+    const y = h / 2 - buf[i] * h * 0.46;
+    i ? sctx.lineTo(x, y) : sctx.moveTo(x, y);
+  }
+  sctx.stroke();
+}
+
+/* unlock AudioContext on the first gesture anywhere */
+document.addEventListener("pointerdown", ensureAC, { once: false });
+</script>
+</body>
+</html>

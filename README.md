@@ -1,13 +1,37 @@
-# scire-h — ULT-SOUND DS-4M clones
+# scire-h — analog drum-synth recreations
 
-Two implementations of the **ULT-SOUND DS-4M** (Toyo Gakki, 1978),
-a four-channel analog drum synthesiser in the Pollard Syndrum family.
+Digital recreations of 1970s analog drum synthesisers: the
+**ULT-SOUND DS-4M** (Toyo Gakki, 1978) and the **Pollard Syndrum**
+(1976–78), the instrument that started the family.
 
 ```
 scire-h/
-├── index.html        ← single-file HTML / Web Audio clone
-└── ds4-native/       ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
+├── index.html        ← DS-4M single-file HTML / Web Audio clone
+├── ds4-native/       ← DS-4M JUCE 8 C++ plug-in (Standalone + AU + VST3)
+└── synth-drum-4/     ← Synth Drum 4: Pollard Syndrum 478 channel, exact recreation
 ```
+
+## 0. Synth Drum 4 (`synth-drum-4/`)
+
+A **digitally exact recreation of one Pollard Syndrum 478 channel**,
+schematic-derived. One pad for now; the full channel control set is
+reproduced — SENSITIVITY, TONE (sine/tri/square), TUNE, TONE SUSTAIN
+(to 20 s), SWEEP switch (UP/OFF/DOWN) + RANGE + SWEEP TIME, VIBRATO
+(SQR/TRI/RAMP, 0.5–250 Hz — real audio-rate FM), SNARE (OFF/1/2) +
+SNARE SUSTAIN, VOLUME. Velocity drives level, sweep depth and sustain
+length, like the hardware trigger conditioner.
+
+It is a single self-contained `synth-drum-4/index.html` (Web Audio, no
+dependencies — open it in any browser). Circuit research and
+panel-to-DSP mapping live in
+[`synth-drum-4/docs/RESEARCH.md`](synth-drum-4/docs/RESEARCH.md).
+
+**▶ Try it live (no install):**
+[**raw.githack.com → Synth Drum 4**](https://raw.githack.com/scire-h/scire-h/claude/70s-synth-drum-design-lwul61/synth-drum-4/index.html)
+— served straight from the development branch via githack. Tap the pad
+(centre = harder hit) or use keys `Z` / `X` / `Space`, then click a
+preset. (githack serves this branch URL; once merged, swap the branch
+segment for `main`.)
 
 ## 1. HTML / Web Audio clone (`index.html`)
 

@@ -3,6 +3,68 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## Synth Drum 4 — Phase 0.3 (playable pitch)
+
+* Added a **semitone-accurate keyboard** spanning ±2 octaves (C1–C5,
+  centred on C3). Tapping a key sets the played note and fires the
+  voice at that exact pitch, so the drum can be tuned to / played at
+  real musical notes. The keyboard scrolls to centre the current note.
+* **TUNE** is now a **fine offset** (±100 cents) layered on top of the
+  selected note — pick the key, then trim it subtly, exactly the
+  workflow requested.
+* Pitch is now `note → Hz × 2^(fine/1200)`; presets carry note + fine
+  (e.g. DISCO DROP = D2 +37 c ≈ 75 Hz, unchanged from before). A live
+  readout shows note name, cents and Hz.
+
+## Synth Drum 4 — Phase 0.2 (more parameters)
+
+* Added three performance-extension controls (marked `+` in the UI,
+  defaults reproduce the original 478):
+  * **ATTACK** — amp-envelope rise time, 0.2 – 80 ms (was a fixed
+    1.5 ms instant attack).
+  * **VIB DELAY** — vibrato fades in over 0 – 1.5 s after the hit.
+  * **DRIVE** — pre-gain into the OTA-VCA `tanh` (0.5 – 6×), exposing
+    the saturation "bloom" that was previously fixed.
+* New **SOFT MALLET** preset showing the slow-attack voice; presets now
+  carry the three new params and re-apply DRIVE to the live graph.
+* RESEARCH.md documents each extension, its hardware basis and the
+  default that matches the original panel.
+
+## Synth Drum 4 — Phase 0.1 (fidelity)
+
+* **Pitch sweep** now modelled as the circuit behaves: the RC-discharge
+  sweep EG voltage drives a 1 V/oct VCO, so the pitch decays
+  exponentially *in octaves*. Rendered via `setValueCurveAtTime`
+  (`f0·2^(±range/12·e^{-t/τ})`) instead of a linear-in-Hz
+  `setTargetAtTime`, which was audibly wrong on large sweeps.
+* **Analog VCO drift**: per-hit ±3-cent detune + continuous
+  0.15–0.4 Hz / ≈2.5-cent wobble summed onto the VCO pitch, matching
+  the `ds4-native` `TriangleCoreVCO` drift model.
+* **Snare noise**: two parallel band-passes (body + high emphasis) per
+  snare type, replacing the single biquad.
+* RESEARCH.md updated; the linear-Hz-sweep and single-biquad-snare
+  Phase-0 simplifications are now resolved.
+
+## Synth Drum 4 — Phase 0
+
+* New project `synth-drum-4/`: a digitally exact recreation of one
+  **Pollard Syndrum 478** channel (the instrument the DS-4 derives
+  from), starting with a single pad.
+* Full channel control set reproduced: SENSITIVITY, TONE waveform
+  (sine / triangle / square, with the function-generator −38 dB H3
+  sine colour), TUNE, TONE SUSTAIN (50 ms – 20 s), SWEEP switch
+  UP/OFF/DOWN + RANGE + SWEEP TIME, VIBRATO (SQR/TRI/RAMP,
+  0.5 – 250 Hz as true audio-rate FM), SNARE OFF/1/2 + SNARE SUSTAIN,
+  VOLUME.
+* Hardware trigger law: one velocity sample drives level, sweep depth
+  and sustain length; envelopes are RC-discharge `setTargetAtTime`
+  curves; monophonic choke on retrigger.
+* Velocity-sensitive pad (tap position = strike strength), six
+  presets (incl. the classic DISCO DROP and audio-rate-vibrato UFO /
+  BUZZ RING voices), oscilloscope.
+* `synth-drum-4/docs/RESEARCH.md` — schematic-derived signal path,
+  panel-to-DSP mapping with per-control confidence, sources.
+
 ## Phase 2.7 — Multi-output bus
 
 * Added four optional stereo aux output buses (`Ch1 Out`…`Ch4 Out`)
