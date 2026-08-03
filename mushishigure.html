@@ -1252,130 +1252,162 @@ function loadSaved(){
 }
 
 /* ---------------- the night canvas ----------------
-   Pure black. Whenever the waveform moves, grains are thrown into a
-   perspective space; they arc, fall, and stay — forever. The floor
-   silts up under each singer. The screen slowly fills with the dust
-   of everything that has sounded. */
+   Weightless space. A nameless ether drifts through it like smoke;
+   the space itself slowly inflates; whatever the sound throws in has
+   nowhere to go — entropy only grows — so grains cling where they
+   meet, and strange bodies condense here and there, tumbling slowly.
+   All of it strictly in time with the sound. */
 const cv = $("#night");
 const cx2 = cv.getContext("2d");
 let anaNode = null, anaBuf = null;
 let W=0, H=0, DPR=1;
 
-/* world: x lateral −1..1 · z depth 0(near)..1(far) · h height up */
-const YH = 0.58;                 // horizon
-const HX = 96, HZ = 24;          // heightmap resolution
-let heights = new Float32Array(HX*HZ);
-let grains = [];                 // airborne
-let burst = 0;                   // extra gush right after a call begins
-let sed = null, sedCtx = null;   // settled dust, baked once
-let lastTs = 0, settledCount = 0;
+/* world: centered at the origin, roughly a sphere of radius ~2 */
+const CAM = 2.6;                  // camera distance
+let free = [];                    // loose grains
+let clusters = [];                // condensed bodies
+let wisps = [];                   // the ether
+let loci = [];                    // where voices sounded recently
+let burst = 0, ampEnv = 0, lastTs = 0, rotY = 0;
+let blobSprite = null;
 
-/* every settled grain is also kept in packed arrays, so the sediment
-   can be re-baked pixel-sharp whenever the window changes size */
-const SCAP = 500000;
-const sX = new Float32Array(SCAP), sZ = new Float32Array(SCAP),
-      sH = new Float32Array(SCAP), sC = new Uint8Array(SCAP);
-
-function zEase(z){ return Math.pow(clamp(z,0,1), 0.85); }
-function zScale(z){ return lerp(1.0, 0.30, zEase(z)); }
-function groundY(z){ return H * lerp(0.90, YH + 0.02, zEase(z)); }
-function toScreen(x, z, h){
-  const s = zScale(z);
-  return [ W*0.5 + x*s*W*0.42, groundY(z) - h*s*H*0.5 ];
-}
-function cellOf(x, z){
-  const ix = clamp(Math.floor((x+1)/2*HX), 0, HX-1);
-  const iz = clamp(Math.floor(z*HZ), 0, HZ-1);
-  return iz*HX + ix;
-}
-
-let rebakeTimer = null;
 function resizeCanvas(){
   DPR = Math.min(2, window.devicePixelRatio||1);
   W = cv.clientWidth; H = cv.clientHeight;
-  const old = sed;
   cv.width = W*DPR; cv.height = H*DPR;
   cx2.setTransform(DPR,0,0,DPR,0,0);
-  sed = document.createElement("canvas");
-  sed.width = W*DPR; sed.height = H*DPR;
-  sedCtx = sed.getContext("2d");
-  sedCtx.setTransform(DPR,0,0,DPR,0,0);
-  // instantly: the old dust, stretched; shortly after: re-baked sharp
-  if(old && old.width) sedCtx.drawImage(old, 0, 0, W, H);
-  clearTimeout(rebakeTimer);
-  rebakeTimer = setTimeout(rebakeSediment, 300);
+  if(!blobSprite){
+    blobSprite = document.createElement("canvas");
+    blobSprite.width = blobSprite.height = 256;
+    const bc = blobSprite.getContext("2d");
+    const rg = bc.createRadialGradient(128,128,0, 128,128,128);
+    rg.addColorStop(0,   "rgba(235,236,237,0.9)");
+    rg.addColorStop(0.45,"rgba(235,236,237,0.28)");
+    rg.addColorStop(1,   "rgba(235,236,237,0)");
+    bc.fillStyle = rg;
+    bc.fillRect(0,0,256,256);
+  }
+  if(wisps.length === 0){
+    for(let i=0;i<34;i++){
+      wisps.push({
+        x: rand(-1.5,1.5), y: rand(-1.1,1.1), z: rand(-1.5,1.5),
+        r: rand(0.28, 0.72), ph: rand(0, Math.PI*2), sp: rand(0.4, 1.1),
+      });
+    }
+  }
 }
 window.addEventListener("resize", resizeCanvas);
 
-function bakeDot(x, z, h, c){
-  const [px, py] = toScreen(x, z, h);
-  const s = zScale(z);
-  sedCtx.fillStyle = `rgba(${c},${c},${c+2},${lerp(0.55, 0.20, zEase(z))})`;
-  sedCtx.fillRect(px, py, 0.5 + s*0.9, 0.5 + s*0.9);
-}
-function rebakeSediment(){
-  if(!sedCtx) return;
-  sedCtx.clearRect(0, 0, W, H);
-  const n = Math.min(settledCount, SCAP);
-  for(let i=0; i<n; i++) bakeDot(sX[i], sZ[i], sH[i], sC[i]);
+/* the ether current — a slow, smoky pseudo-curl field */
+function flowX(x,y,z,t){ return Math.sin(1.7*y + t*0.21) + Math.cos(2.3*z - t*0.17); }
+function flowY(x,y,z,t){ return Math.sin(1.9*z + t*0.16) + Math.cos(2.1*x + t*0.19); }
+function flowZ(x,y,z,t){ return Math.sin(1.6*x - t*0.18) + Math.cos(2.4*y + t*0.15); }
+
+/* projection with a slow drift of the vantage — parallax, no ground */
+function project(x, y, z){
+  const c = Math.cos(rotY), s = Math.sin(rotY);
+  const xr = x*c - z*s, zr = x*s + z*c;
+  const dz = Math.max(0.35, zr + CAM);
+  const k = 0.62*Math.min(W,H)/dz;
+  return [ W*0.5 + xr*k, H*0.5 + y*k, k, dz ];
 }
 
-/* a call just adds pressure — grains gush from everywhere,
-   as long as the waveform is actually moving */
+/* a call marks a place in space and adds pressure */
 function addGlow(sp, ind, when, vel, dur){
   const delay = ctx ? Math.max(0, (when - ctx.currentTime)*1000) : 0;
-  setTimeout(()=>{ burst = Math.min(2.2, burst + 0.5*Math.min(1, vel)); }, delay);
+  setTimeout(()=>{
+    burst = Math.min(2.2, burst + 0.5*Math.min(1, vel));
+    const d = indDist(sp, ind);
+    loci.push({
+      x: ind.pan*1.1,
+      y: rand(-0.7, 0.7),
+      z: (d*2 - 1)*1.1,
+      until: performance.now() + Math.max(400, Math.min(dur, 3)*1000),
+    });
+    if(loci.length > 24) loci.shift();
+  }, delay);
 }
 
-/* debris arrives from everywhere: falling from above, blown in from
-   the sides, pushed out of the depth, erupting from the floor */
-function spawnGrain(pow){
-  if(grains.length >= 1600) return;
-  const m = Math.random();
-  let x, z, h, vx, vy, vz;
-  if(m < 0.34){            // from above
-    x = rand(-1.04, 1.04); z = Math.random(); h = rand(0.45, 0.95);
-    vx = rand(-0.1, 0.1); vz = rand(-0.06, 0.06); vy = -rand(0.05, 0.45);
-  } else if(m < 0.55){     // from the sides
-    const sgn = Math.random() < 0.5 ? 1 : -1;
-    x = sgn * rand(1.0, 1.12); z = Math.random(); h = rand(0.06, 0.55);
-    vx = -sgn * rand(0.45, 1.25); vz = rand(-0.08, 0.08); vy = rand(0.15, 0.8);
-  } else if(m < 0.75){     // out of the depth
-    x = rand(-1, 1); z = rand(0.9, 1); h = rand(0.02, 0.4);
-    vx = rand(-0.12, 0.12); vz = -rand(0.3, 0.95); vy = rand(0.1, 0.7);
-  } else {                 // erupting from the floor itself
-    x = rand(-1, 1); z = Math.random(); h = heights[cellOf(x,z)] + 0.003;
-    vx = rand(-0.2, 0.2); vz = rand(-0.1, 0.1); vy = rand(0.7, 1.7)*(0.6 + pow*3);
+function spawnFree(){
+  if(free.length >= 1200) return;
+  let x, y, z;
+  const active = loci.length && Math.random() < 0.45;
+  if(active){
+    const l = loci[(Math.random()*loci.length)|0];
+    x = l.x + gauss()*0.14; y = l.y + gauss()*0.14; z = l.z + gauss()*0.14;
+  } else {
+    const rr = Math.pow(Math.random(), 0.6)*1.5;
+    const th = rand(0, Math.PI*2), ph = Math.acos(rand(-1,1));
+    x = rr*Math.sin(ph)*Math.cos(th);
+    y = rr*Math.cos(ph)*0.8;
+    z = rr*Math.sin(ph)*Math.sin(th);
   }
-  grains.push({ x, z, h, vx, vz, vy, c: 210 + Math.random()*36 | 0 });
+  free.push({
+    x, y, z,
+    vx: gauss()*0.05, vy: gauss()*0.05, vz: gauss()*0.05,
+    c: 208 + Math.random()*40 | 0,
+  });
 }
 
-/* land: roll a step down any slope (keeps the floor even),
-   remember the grain, bake the dot */
-function settleGrain(g){
-  let ci = cellOf(g.x, g.z);
-  for(let step=0; step<3; step++){
-    const ix = ci % HX, iz = (ci / HX) | 0;
-    let best = ci, bh = heights[ci];
-    for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      const nx = ix+dx, nz = iz+dz;
-      if(nx<0||nx>=HX||nz<0||nz>=HZ) continue;
-      const ni = nz*HX + nx;
-      if(heights[ni] < bh - 0.01){ bh = heights[ni]; best = ni; }
-    }
-    if(best === ci) break;
-    ci = best;
-    g.x = ((ci % HX) + 0.5)/HX*2 - 1 + rand(-0.008, 0.008);
-    g.z = (((ci / HX) | 0) + 0.5)/HZ + rand(-0.015, 0.015);
+/* two loose grains meet → a new body is born */
+function condense(a, b){
+  const cxp = (a.x+b.x)/2, cyp = (a.y+b.y)/2, czp = (a.z+b.z)/2;
+  const axis = (()=>{ // random rotation axis, normalized
+    let x=gauss(), y=gauss(), z=gauss();
+    const n = Math.hypot(x,y,z)||1; return {x:x/n, y:y/n, z:z/n};
+  })();
+  clusters.push({
+    x: cxp, y: cyp, z: czp,
+    vx: (a.vx+b.vx)/2, vy: (a.vy+b.vy)/2, vz: (a.vz+b.vz)/2,
+    axis, ang: 0, w: gauss()*0.5,
+    m: 2, r: 0.03,
+    members: [
+      { x: a.x-cxp, y: a.y-cyp, z: a.z-czp, c: a.c },
+      { x: b.x-cxp, y: b.y-cyp, z: b.z-czp, c: b.c },
+    ],
+  });
+}
+
+/* Rodrigues rotation of member offsets */
+function rotOff(o, axis, ang){
+  const c = Math.cos(ang), s = Math.sin(ang), t = 1-c;
+  const kx = axis.x, ky = axis.y, kz = axis.z;
+  const dot = kx*o.x + ky*o.y + kz*o.z;
+  return [
+    o.x*c + (ky*o.z - kz*o.y)*s + kx*dot*t,
+    o.y*c + (kz*o.x - kx*o.z)*s + ky*dot*t,
+    o.z*c + (kx*o.y - ky*o.x)*s + kz*dot*t,
+  ];
+}
+
+function attach(cl, p){
+  // momentum
+  cl.vx = (cl.vx*cl.m + p.vx)/(cl.m+1);
+  cl.vy = (cl.vy*cl.m + p.vy)/(cl.m+1);
+  cl.vz = (cl.vz*cl.m + p.vz)/(cl.m+1);
+  cl.m++;
+  if(cl.members.length < 240){
+    // world offset → body frame (inverse rotation)
+    const [ox, oy, oz] = rotOff({x:p.x-cl.x, y:p.y-cl.y, z:p.z-cl.z},
+                                cl.axis, -cl.ang);
+    cl.members.push({ x: ox, y: oy, z: oz, c: p.c });
   }
-  const h = Math.min(0.35, heights[ci]);
-  if(settledCount < SCAP){
-    sX[settledCount] = g.x; sZ[settledCount] = g.z;
-    sH[settledCount] = h;   sC[settledCount] = g.c;
+  cl.r = 0.012*Math.pow(cl.m, 0.4) + 0.012;
+}
+
+function absorb(big, small){
+  big.vx = (big.vx*big.m + small.vx*small.m)/(big.m+small.m);
+  big.vy = (big.vy*big.m + small.vy*small.m)/(big.m+small.m);
+  big.vz = (big.vz*big.m + small.vz*small.m)/(big.m+small.m);
+  for(const mo of small.members){
+    if(big.members.length >= 240) break;
+    const [wx, wy, wz] = rotOff(mo, small.axis, small.ang);
+    const [ox, oy, oz] = rotOff({x: small.x+wx-big.x, y: small.y+wy-big.y,
+                                 z: small.z+wz-big.z}, big.axis, -big.ang);
+    big.members.push({ x: ox, y: oy, z: oz, c: mo.c });
   }
-  settledCount++;
-  bakeDot(g.x, g.z, h, g.c);
-  heights[ci] = Math.min(0.35, heights[ci] + 0.00008);
+  big.m += small.m;
+  big.r = 0.012*Math.pow(big.m, 0.4) + 0.012;
 }
 
 function draw(ts){
@@ -1383,8 +1415,9 @@ function draw(ts){
   const dt = clamp((ts - lastTs)/1000 || 0.016, 0.001, 0.05);
   lastTs = ts;
   const nowMs = performance.now();
+  const t = nowMs*0.001;
 
-  // how much is the air actually moving right now
+  // how much the air is moving, with a slow-release envelope
   let amp = 0;
   if(anaNode){
     anaNode.getFloatTimeDomainData(anaBuf);
@@ -1392,48 +1425,156 @@ function draw(ts){
       const v = anaBuf[i]; if(v>amp) amp=v; else if(-v>amp) amp=-v;
     }
   }
+  ampEnv = Math.max(amp, ampEnv*Math.pow(0.3, dt));
 
-  // emit — the whole scene gushes while the waveform moves
+  rotY += dt*0.02;                                  // the vantage drifts
+  const HBL = 0.006 + ampEnv*0.05;                  // inflation, sound-paced
+  const stir = 0.05 + ampEnv*1.1;                   // ether turbulence
+
+  // matter arrives only while the waveform moves
   burst *= Math.pow(0.25, dt);
+  loci = loci.filter(l => l.until > nowMs);
   if(amp > 0.004){
-    let k = Math.min(14, Math.round(amp * 240 * (0.55 + burst)));
-    while(k-- > 0) spawnGrain(amp);
+    let k = Math.min(12, Math.round(amp * 220 * (0.55 + burst)));
+    while(k-- > 0) spawnFree();
   }
 
-  // physics
-  for(let i=grains.length-1; i>=0; i--){
-    const g = grains[i];
-    g.vy -= 4.0*dt;
-    g.x = clamp(g.x + g.vx*dt, -1.15, 1.15);
-    g.z = clamp(g.z + g.vz*dt, 0, 1);
-    g.h += g.vy*dt;
-    if(g.vy < 0 && g.h <= heights[cellOf(g.x, g.z)]){
-      settleGrain(g);
-      grains[i] = grains[grains.length-1];
-      grains.pop();
+  // ---- free grains: drift with the ether, inflate, cling ----
+  for(let i=free.length-1; i>=0; i--){
+    const g = free[i];
+    g.vx += (flowX(g.x,g.y,g.z,t)*stir - g.vx)*0.6*dt;
+    g.vy += (flowY(g.x,g.y,g.z,t)*stir - g.vy)*0.6*dt;
+    g.vz += (flowZ(g.x,g.y,g.z,t)*stir - g.vz)*0.6*dt;
+    // gentle pull of the nearest bodies
+    for(const cl of clusters){
+      const dx = cl.x-g.x, dy = cl.y-g.y, dz = cl.z-g.z;
+      const d2 = dx*dx+dy*dy+dz*dz;
+      if(d2 < 0.2){
+        const f = 0.06*Math.min(1, cl.m/60)/Math.max(d2, 0.004)*dt;
+        g.vx += dx*f; g.vy += dy*f; g.vz += dz*f;
+      }
+    }
+    g.x += g.vx*dt + g.x*HBL*dt;
+    g.y += g.vy*dt + g.y*HBL*dt;
+    g.z += g.vz*dt + g.z*HBL*dt;
+    if(g.x*g.x + g.y*g.y + g.z*g.z > 5.3){          // dispersed, gone
+      free[i] = free[free.length-1]; free.pop(); continue;
+    }
+    // cling to a body it touches
+    for(const cl of clusters){
+      const dx = cl.x-g.x, dy = cl.y-g.y, dz = cl.z-g.z;
+      const rr = cl.r + 0.02;
+      if(dx*dx+dy*dy+dz*dz < rr*rr){
+        attach(cl, g);
+        free[i] = free[free.length-1]; free.pop();
+        break;
+      }
     }
   }
 
-  // render
+  // ---- free–free encounters: spatial hash, then condensation ----
+  if(free.length > 1 && clusters.length < 64){
+    const cell = 0.055, map = new Map();
+    for(let i=0;i<free.length;i++){
+      const g = free[i];
+      const key = ((g.x/cell)|0)*73856093 ^ ((g.y/cell)|0)*19349663 ^ ((g.z/cell)|0)*83492791;
+      let arr = map.get(key);
+      if(!arr){ arr = []; map.set(key, arr); }
+      if(arr.length < 6) arr.push(i);
+    }
+    const dead = new Set();
+    for(const arr of map.values()){
+      for(let a=0;a<arr.length;a++) for(let b=a+1;b<arr.length;b++){
+        const i = arr[a], j = arr[b];
+        if(dead.has(i) || dead.has(j)) continue;
+        const g = free[i], h = free[j];
+        const dx = g.x-h.x, dy = g.y-h.y, dz = g.z-h.z;
+        if(dx*dx+dy*dy+dz*dz < 0.00035){
+          condense(g, h); dead.add(i); dead.add(j);
+        }
+      }
+    }
+    if(dead.size){
+      free = free.filter((_,i)=> !dead.has(i));
+    }
+  }
+
+  // ---- bodies: tumble, drift, inflate, merge ----
+  for(let i=clusters.length-1; i>=0; i--){
+    const cl = clusters[i];
+    const soft = 1/(1 + cl.m*0.06);                 // heavy ones barely stir
+    cl.vx += (flowX(cl.x,cl.y,cl.z,t)*stir*soft - cl.vx)*0.35*dt;
+    cl.vy += (flowY(cl.x,cl.y,cl.z,t)*stir*soft - cl.vy)*0.35*dt;
+    cl.vz += (flowZ(cl.x,cl.y,cl.z,t)*stir*soft - cl.vz)*0.35*dt;
+    cl.x += cl.vx*dt + cl.x*HBL*dt;
+    cl.y += cl.vy*dt + cl.y*HBL*dt;
+    cl.z += cl.vz*dt + cl.z*HBL*dt;
+    cl.ang += cl.w*dt*(0.5 + ampEnv*1.5);           // tumbling in time
+    if(cl.x*cl.x + cl.y*cl.y + cl.z*cl.z > 6.8){
+      clusters[i] = clusters[clusters.length-1]; clusters.pop(); continue;
+    }
+  }
+  for(let i=clusters.length-1; i>=0; i--){
+    for(let j=i-1; j>=0; j--){
+      const a = clusters[i], b = clusters[j];
+      const dx = a.x-b.x, dy = a.y-b.y, dz = a.z-b.z;
+      const rr = (a.r + b.r)*0.6;
+      if(dx*dx+dy*dy+dz*dz < rr*rr){
+        const big = a.m >= b.m ? b : a;   // survivor is at index j or i
+        if(a.m >= b.m){ absorb(a, b); clusters.splice(j,1); i--; }
+        else          { absorb(b, a); clusters.splice(i,1); }
+        break;
+      }
+    }
+  }
+
+  // ---- render ----
   cx2.fillStyle = "#000";
   cx2.fillRect(0,0,W,H);
 
-  // horizon — breathes with 地
-  const hy = Math.round(H*YH) + 0.5;
-  const ha = 0.05 + 0.06*S.drone*(0.5 + 0.5*Math.sin(nowMs*0.00021));
-  cx2.strokeStyle = `rgba(224,225,226,${ha})`;
-  cx2.lineWidth = 1;
-  cx2.beginPath(); cx2.moveTo(0,hy); cx2.lineTo(W,hy); cx2.stroke();
+  // the ether — smoke, thick with 地, stirred by the sound
+  const etherA = 0.045*(0.35 + S.drone*0.65)*(0.6 + ampEnv*1.8);
+  cx2.globalCompositeOperation = "lighter";
+  for(const wp of wisps){
+    wp.x += flowX(wp.x,wp.y,wp.z,t)*stir*0.12*wp.sp*dt + wp.x*HBL*dt*0.5;
+    wp.y += flowY(wp.x,wp.y,wp.z,t)*stir*0.12*wp.sp*dt + wp.y*HBL*dt*0.5;
+    wp.z += flowZ(wp.x,wp.y,wp.z,t)*stir*0.12*wp.sp*dt + wp.z*HBL*dt*0.5;
+    if(wp.x*wp.x + wp.y*wp.y + wp.z*wp.z > 4.6){
+      wp.x = rand(-0.6,0.6); wp.y = rand(-0.5,0.5); wp.z = rand(-0.6,0.6);
+    }
+    const [px, py, k, dz] = project(wp.x, wp.y, wp.z);
+    const R = wp.r*(1 + 0.18*Math.sin(t*0.5*wp.sp + wp.ph))*k;
+    if(R < 4) continue;
+    cx2.globalAlpha = etherA*clamp(2.2/dz, 0.3, 1);
+    cx2.drawImage(blobSprite, px-R, py-R, R*2, R*2);
+  }
+  cx2.globalAlpha = 1;
+  cx2.globalCompositeOperation = "source-over";
 
-  // everything that has already fallen
-  if(sed) cx2.drawImage(sed, 0, 0, W, H);
+  // condensed bodies — strange forms, slowly tumbling
+  for(const cl of clusters){
+    // one rotation matrix per body per frame
+    const ca = Math.cos(cl.ang), sa = Math.sin(cl.ang), ta = 1-ca;
+    const kx = cl.axis.x, ky = cl.axis.y, kz = cl.axis.z;
+    const m00 = ca+kx*kx*ta, m01 = kx*ky*ta-kz*sa, m02 = kx*kz*ta+ky*sa;
+    const m10 = ky*kx*ta+kz*sa, m11 = ca+ky*ky*ta, m12 = ky*kz*ta-kx*sa;
+    const m20 = kz*kx*ta-ky*sa, m21 = kz*ky*ta+kx*sa, m22 = ca+kz*kz*ta;
+    for(const mo of cl.members){
+      const wx = m00*mo.x + m01*mo.y + m02*mo.z;
+      const wy = m10*mo.x + m11*mo.y + m12*mo.z;
+      const wz = m20*mo.x + m21*mo.y + m22*mo.z;
+      const [px, py, k, dz] = project(cl.x+wx, cl.y+wy, cl.z+wz);
+      const size = clamp(k*0.0075, 0.7, 3.4);
+      cx2.fillStyle = `rgba(${mo.c},${mo.c},${mo.c+2},${clamp(1.9/dz, 0.22, 0.85)})`;
+      cx2.fillRect(px, py, size, size);
+    }
+  }
 
-  // what is in the air right now
-  for(const g of grains){
-    const [px, py] = toScreen(g.x, g.z, g.h);
-    const s = zScale(g.z);
-    cx2.fillStyle = `rgba(${g.c},${g.c},${g.c+2},${lerp(0.75, 0.28, zEase(g.z))})`;
-    const size = 0.6 + s*1.0;
+  // loose grains
+  for(const g of free){
+    const [px, py, k, dz] = project(g.x, g.y, g.z);
+    const size = clamp(k*0.006, 0.5, 2.6);
+    cx2.fillStyle = `rgba(${g.c},${g.c},${g.c+2},${clamp(1.5/dz, 0.16, 0.7)})`;
     cx2.fillRect(px, py, size, size);
   }
 }
