@@ -1291,12 +1291,12 @@ function loadSaved(){
 
 /* ---------------- the night canvas ----------------
    Weightless space. A nameless ether drifts through it like smoke;
-   the space itself slowly inflates; whatever the sound throws in has
-   nowhere to go — entropy only grows — so grains cling where they
-   first touch. Some bodies pack into beads, others grow twig by twig
-   into branching things (diffusion-limited aggregation). Every grain
-   is born of the waveform and is the same size at any distance —
-   depth is told only by fog, parallax and order. */
+   the space itself slowly inflates. Nothing sticks, nothing hardens:
+   while the sound moves, the dust aligns — streams, veils, brief
+   threads between near neighbours, constellations that assemble and
+   dissolve. When the sound rests, the order decays back into drift.
+   Every grain is born of the waveform and is the same size at any
+   distance — depth is told only by fog and parallax. */
 const cv = $("#night");
 const cx2 = cv.getContext("2d");
 let anaNode = null, anaBuf = null;
@@ -1304,10 +1304,10 @@ let W=0, H=0, DPR=1;
 
 /* world: centered at the origin, roughly a sphere of radius ~2 */
 const CAM = 2.6;                  // camera distance
-let free = [];                    // loose grains
-let clusters = [];                // condensed bodies
+let free = [];                    // the dust
 let wisps = [];                   // the ether
 let loci = [];                    // where voices sounded recently
+let links = [];                   // this frame's threads
 let burst = 0, ampEnv = 0, lastTs = 0, rotY = 0, frameN = 0;
 let blobSprite = null;
 
@@ -1351,9 +1351,6 @@ function project(x, y, z){
   const k = 0.62*Math.min(W,H)/dz;
   return [ W*0.5 + xr*k, H*0.5 + y*k, k, dz ];
 }
-function depthOf(x, z){          // rotated depth, for painter's order
-  return x*Math.sin(rotY) + z*Math.cos(rotY) + CAM;
-}
 
 /* a call marks a place in space and adds pressure */
 function addGlow(sp, ind, when, vel, dur){
@@ -1392,87 +1389,6 @@ function spawnFree(){
   });
 }
 
-/* two loose grains meet → a new body is born.
-   form 1 grows twig by twig (DLA); form 0 packs into a bead. */
-function condense(a, b){
-  const cxp = (a.x+b.x)/2, cyp = (a.y+b.y)/2, czp = (a.z+b.z)/2;
-  let ax=gauss(), ay=gauss(), az=gauss();
-  const n = Math.hypot(ax,ay,az)||1;
-  clusters.push({
-    x: cxp, y: cyp, z: czp,
-    vx: (a.vx+b.vx)/2, vy: (a.vy+b.vy)/2, vz: (a.vz+b.vz)/2,
-    axis: {x:ax/n, y:ay/n, z:az/n}, ang: 0, w: gauss()*0.5,
-    q00:1,q01:0,q02:0, q10:0,q11:1,q12:0, q20:0,q21:0,q22:1,
-    form: Math.random() < 0.6 ? 1 : 0,
-    m: 2, r: 0.024,
-    members: [
-      { x: a.x-cxp, y: a.y-cyp, z: a.z-czp, c: a.c },
-      { x: b.x-cxp, y: b.y-cyp, z: b.z-czp, c: b.c },
-    ],
-  });
-}
-
-function updateMatrix(cl){
-  const ca = Math.cos(cl.ang), sa = Math.sin(cl.ang), ta = 1-ca;
-  const kx = cl.axis.x, ky = cl.axis.y, kz = cl.axis.z;
-  cl.q00 = ca+kx*kx*ta; cl.q01 = kx*ky*ta-kz*sa; cl.q02 = kx*kz*ta+ky*sa;
-  cl.q10 = ky*kx*ta+kz*sa; cl.q11 = ca+ky*ky*ta; cl.q12 = ky*kz*ta-kx*sa;
-  cl.q20 = kz*kx*ta-ky*sa; cl.q21 = kz*ky*ta+kx*sa; cl.q22 = ca+kz*kz*ta;
-}
-/* world → body frame (transpose) */
-function toBody(cl, wx, wy, wz){
-  const px = wx-cl.x, py = wy-cl.y, pz = wz-cl.z;
-  return [
-    cl.q00*px + cl.q10*py + cl.q20*pz,
-    cl.q01*px + cl.q11*py + cl.q21*pz,
-    cl.q02*px + cl.q12*py + cl.q22*pz,
-  ];
-}
-
-/* does this grain touch one of the body's own grains? (DLA test) */
-function touchesMember(cl, g){
-  const [bx, by, bz] = toBody(cl, g.x, g.y, g.z);
-  const R2 = 0.000256;                       // (0.016)² — open, twiggy links
-  for(const mo of cl.members){
-    const dx = mo.x-bx, dy = mo.y-by, dz = mo.z-bz;
-    if(dx*dx + dy*dy + dz*dz < R2) return true;
-  }
-  return false;
-}
-
-function attach(cl, p){
-  cl.vx = (cl.vx*cl.m + p.vx)/(cl.m+1);
-  cl.vy = (cl.vy*cl.m + p.vy)/(cl.m+1);
-  cl.vz = (cl.vz*cl.m + p.vz)/(cl.m+1);
-  cl.m++;
-  if(cl.members.length < 240){
-    const [ox, oy, oz] = toBody(cl, p.x, p.y, p.z);
-    cl.members.push({ x: ox, y: oy, z: oz, c: p.c });
-    if(cl.form === 1){
-      cl.r = Math.max(cl.r, Math.hypot(ox,oy,oz) + 0.016);
-    }
-  }
-  if(cl.form === 0) cl.r = 0.012*Math.pow(cl.m, 0.4) + 0.012;
-}
-
-function absorb(big, small){
-  big.vx = (big.vx*big.m + small.vx*small.m)/(big.m+small.m);
-  big.vy = (big.vy*big.m + small.vy*small.m)/(big.m+small.m);
-  big.vz = (big.vz*big.m + small.vz*small.m)/(big.m+small.m);
-  for(const mo of small.members){
-    if(big.members.length >= 240) break;
-    // small's member → world → big's body frame
-    const wx = small.x + small.q00*mo.x + small.q01*mo.y + small.q02*mo.z;
-    const wy = small.y + small.q10*mo.x + small.q11*mo.y + small.q12*mo.z;
-    const wz = small.z + small.q20*mo.x + small.q21*mo.y + small.q22*mo.z;
-    const [ox, oy, oz] = toBody(big, wx, wy, wz);
-    big.members.push({ x: ox, y: oy, z: oz, c: mo.c });
-    if(big.form === 1) big.r = Math.max(big.r, Math.hypot(ox,oy,oz) + 0.013);
-  }
-  big.m += small.m;
-  if(big.form === 0) big.r = 0.012*Math.pow(big.m, 0.4) + 0.012;
-}
-
 function draw(ts){
   requestAnimationFrame(draw);
   const dt = clamp((ts - lastTs)/1000 || 0.016, 0.001, 0.05);
@@ -1502,102 +1418,76 @@ function draw(ts){
     while(k-- > 0) spawnFree();
   }
 
-  // ---- free grains: drift with the ether, inflate, cling ----
+  /* ---- the sound organizes the dust ----
+     While the waveform moves, neighbouring grains align their drift
+     (a murmuration in miniature); very close pairs thread together
+     for a moment. No sticking — release the sound and it all decays
+     back into loose drift. */
   frameN++;
-  for(let i=free.length-1; i>=0; i--){
+  links.length = 0;
+  const kAlign  = (0.3 + ampEnv*5.0);               // order comes from sound
+  const kCohere = 0.10 + ampEnv*0.9;                // gentle gathering
+  const kApart  = 1.6;                              // but never a lump
+  const cell = 0.11;
+  const gox = Math.random()*cell, goy = Math.random()*cell, goz = Math.random()*cell;
+  const map = new Map();
+  for(let i=0;i<free.length;i++){
     const g = free[i];
-    // ether steering on alternate frames per grain (cheap, same look)
-    if(((i + frameN) & 1) === 0){
-      g.vx += (flowX(g.x,g.y,g.z,t)*stir - g.vx)*1.2*dt;
-      g.vy += (flowY(g.x,g.y,g.z,t)*stir - g.vy)*1.2*dt;
-      g.vz += (flowZ(g.x,g.y,g.z,t)*stir - g.vz)*1.2*dt;
+    const key = (((g.x+gox)/cell)|0)*73856093
+              ^ (((g.y+goy)/cell)|0)*19349663
+              ^ (((g.z+goz)/cell)|0)*83492791;
+    let arr = map.get(key);
+    if(!arr){ arr = []; map.set(key, arr); }
+    if(arr.length < 14) arr.push(i);
+  }
+  for(const arr of map.values()){
+    const n = arr.length;
+    if(n < 2) continue;
+    // local mean drift and centre
+    let mvx=0, mvy=0, mvz=0, mx=0, my=0, mz=0;
+    for(const i of arr){
+      const g = free[i];
+      mvx+=g.vx; mvy+=g.vy; mvz+=g.vz; mx+=g.x; my+=g.y; mz+=g.z;
     }
-    // one pass over the bodies: pull at range, cling on contact
-    let taken = false;
-    for(const cl of clusters){
-      const dx = cl.x-g.x, dy = cl.y-g.y, dz = cl.z-g.z;
+    mvx/=n; mvy/=n; mvz/=n; mx/=n; my/=n; mz/=n;
+    for(const i of arr){
+      const g = free[i];
+      g.vx += (mvx-g.vx)*kAlign*dt + (mx-g.x)*kCohere*dt;
+      g.vy += (mvy-g.vy)*kAlign*dt + (my-g.y)*kCohere*dt;
+      g.vz += (mvz-g.vz)*kAlign*dt + (mz-g.z)*kCohere*dt;
+    }
+    // short-range: keep apart, and thread the truly near
+    for(let a=0;a<n;a++) for(let b=a+1;b<n;b++){
+      const g = free[arr[a]], h = free[arr[b]];
+      const dx = g.x-h.x, dy = g.y-h.y, dz = g.z-h.z;
       const d2 = dx*dx+dy*dy+dz*dz;
-      const rr = cl.r + 0.02;
-      if(d2 < rr*rr){
-        if(cl.form === 1){
-          if(touchesMember(cl, g)){                  // twig by twig
-            attach(cl, g); taken = true; break;
-          }
-        } else {
-          const rb = cl.r + 0.006;                   // packs onto the bead
-          if(d2 < rb*rb){ attach(cl, g); taken = true; break; }
-        }
-      } else if(d2 < 0.2){
-        // branches barely pull — they wait, like real frost
-        const base = cl.form === 1 ? 0.025 : 0.06;
-        const f = base*Math.min(1, cl.m/60)/Math.max(d2, 0.004)*dt;
+      if(d2 < 0.0025 && links.length < 480){
+        links.push([arr[a], arr[b]]);
+      }
+      if(d2 < 0.0009 && d2 > 1e-8){
+        const f = kApart*dt/Math.sqrt(d2);
         g.vx += dx*f; g.vy += dy*f; g.vz += dz*f;
+        h.vx -= dx*f; h.vy -= dy*f; h.vz -= dz*f;
       }
     }
-    if(taken){
-      free[i] = free[free.length-1]; free.pop(); continue;
+  }
+
+  // ---- integrate: ether, inflation, dissipation ----
+  for(let i=free.length-1; i>=0; i--){
+    const g = free[i];
+    if(((i + frameN) & 1) === 0){
+      g.vx += (flowX(g.x,g.y,g.z,t)*stir - g.vx)*1.0*dt;
+      g.vy += (flowY(g.x,g.y,g.z,t)*stir - g.vy)*1.0*dt;
+      g.vz += (flowZ(g.x,g.y,g.z,t)*stir - g.vz)*1.0*dt;
     }
+    // speed stays contemplative
+    const sp2 = g.vx*g.vx + g.vy*g.vy + g.vz*g.vz;
+    if(sp2 > 0.36){ const s = 0.6/Math.sqrt(sp2); g.vx*=s; g.vy*=s; g.vz*=s; }
     g.x += g.vx*dt + g.x*HBL*dt;
     g.y += g.vy*dt + g.y*HBL*dt;
     g.z += g.vz*dt + g.z*HBL*dt;
     if(g.x*g.x + g.y*g.y + g.z*g.z > 5.3){          // dispersed, gone
       free[i] = free[free.length-1]; free.pop();
-    }
-  }
-
-  // ---- free–free encounters: spatial hash, then condensation ----
-  if(free.length > 1 && clusters.length < 64){
-    const cell = 0.055, map = new Map();
-    for(let i=0;i<free.length;i++){
-      const g = free[i];
-      const key = ((g.x/cell)|0)*73856093 ^ ((g.y/cell)|0)*19349663 ^ ((g.z/cell)|0)*83492791;
-      let arr = map.get(key);
-      if(!arr){ arr = []; map.set(key, arr); }
-      if(arr.length < 6) arr.push(i);
-    }
-    const dead = new Set();
-    for(const arr of map.values()){
-      for(let a=0;a<arr.length;a++) for(let b=a+1;b<arr.length;b++){
-        const i = arr[a], j = arr[b];
-        if(dead.has(i) || dead.has(j)) continue;
-        const g = free[i], h = free[j];
-        const dx = g.x-h.x, dy = g.y-h.y, dz = g.z-h.z;
-        if(dx*dx+dy*dy+dz*dz < 0.00022){
-          condense(g, h); dead.add(i); dead.add(j);
-        }
-      }
-    }
-    if(dead.size){
-      free = free.filter((_,i)=> !dead.has(i));
-    }
-  }
-
-  // ---- bodies: tumble, drift, inflate, merge ----
-  for(let i=clusters.length-1; i>=0; i--){
-    const cl = clusters[i];
-    const soft = 1/(1 + cl.m*0.06);                 // heavy ones barely stir
-    cl.vx += (flowX(cl.x,cl.y,cl.z,t)*stir*soft - cl.vx)*0.35*dt;
-    cl.vy += (flowY(cl.x,cl.y,cl.z,t)*stir*soft - cl.vy)*0.35*dt;
-    cl.vz += (flowZ(cl.x,cl.y,cl.z,t)*stir*soft - cl.vz)*0.35*dt;
-    cl.x += cl.vx*dt + cl.x*HBL*dt;
-    cl.y += cl.vy*dt + cl.y*HBL*dt;
-    cl.z += cl.vz*dt + cl.z*HBL*dt;
-    cl.ang += cl.w*dt*(0.5 + ampEnv*1.5);           // tumbling in time
-    updateMatrix(cl);
-    if(cl.x*cl.x + cl.y*cl.y + cl.z*cl.z > 6.8){
-      clusters[i] = clusters[clusters.length-1]; clusters.pop(); continue;
-    }
-  }
-  for(let i=clusters.length-1; i>=0; i--){
-    for(let j=i-1; j>=0; j--){
-      const a = clusters[i], b = clusters[j];
-      const dx = a.x-b.x, dy = a.y-b.y, dz = a.z-b.z;
-      const rr = (a.r + b.r)*0.6;
-      if(dx*dx+dy*dy+dz*dz < rr*rr){
-        if(a.m >= b.m){ absorb(a, b); clusters.splice(j,1); i--; }
-        else          { absorb(b, a); clusters.splice(i,1); }
-        break;
-      }
     }
   }
 
@@ -1624,25 +1514,25 @@ function draw(ts){
   cx2.globalAlpha = 1;
   cx2.globalCompositeOperation = "source-over";
 
-  // condensed bodies — beads and branches, painted far to near,
-  // every grain the same size; depth is fog and order alone
-  clusters.sort((a,b)=> depthOf(b.x,b.z) - depthOf(a.x,a.z));
-  for(const cl of clusters){
-    for(const mo of cl.members){
-      const wx = cl.q00*mo.x + cl.q01*mo.y + cl.q02*mo.z;
-      const wy = cl.q10*mo.x + cl.q11*mo.y + cl.q12*mo.z;
-      const wz = cl.q20*mo.x + cl.q21*mo.y + cl.q22*mo.z;
-      const [px, py, k, dz] = project(cl.x+wx, cl.y+wy, cl.z+wz);
-      const a = clamp(0.95*Math.pow(1.6/dz, 1.6), 0.08, 0.95);
-      cx2.fillStyle = `rgba(${mo.c},${mo.c},${mo.c+2},${a})`;
-      cx2.fillRect(px, py, 0.9, 0.9);
-    }
+  // threads — constellations that exist for one breath
+  cx2.lineWidth = 0.5;
+  for(const [i, j] of links){
+    const g = free[i], h = free[j];
+    if(!g || !h) continue;
+    const [x1, y1, k1, dz1] = project(g.x, g.y, g.z);
+    const [x2, y2, k2, dz2] = project(h.x, h.y, h.z);
+    const a = clamp(0.34*Math.pow(1.5/((dz1+dz2)/2), 1.6), 0.02, 0.34)
+              * (0.5 + ampEnv*1.6);
+    cx2.strokeStyle = `rgba(215,216,218,${a})`;
+    cx2.beginPath();
+    cx2.moveTo(x1, y1); cx2.lineTo(x2, y2);
+    cx2.stroke();
   }
 
-  // loose grains
+  // the dust — the same size at any depth
   for(const g of free){
     const [px, py, k, dz] = project(g.x, g.y, g.z);
-    const a = clamp(0.7*Math.pow(1.4/dz, 1.7), 0.05, 0.7);
+    const a = clamp(0.8*Math.pow(1.45/dz, 1.7), 0.05, 0.8);
     cx2.fillStyle = `rgba(${g.c},${g.c},${g.c+2},${a})`;
     cx2.fillRect(px, py, 0.8, 0.8);
   }
