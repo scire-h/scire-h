@@ -95,6 +95,111 @@ cd ds4-native/tests
 ./run_all.sh
 ```
 
+## 3. Vinyl noise generator (`vinyl.html`)
+
+A single self-contained `vinyl.html` (no external dependencies, no
+sample files) that procedurally generates the noise of an analog
+record — the *プチプチ / パチパチ* crackle — and loops it forever for
+an ambient listening experience. Drop it onto any browser.
+
+**The model is cyclostationary noise — the noise of a *rotating body*.**
+Real record noise is not stationary randomness: it is random texture
+carried on a periodic clock, the rotation. The platter turns at a fixed
+angular velocity, so every physical imperfection on the disc is read out
+*once per revolution* — the same *パチッ* returns every 1.8 s (33⅓ rpm
+→ 0.556 Hz). The generator therefore layers two things:
+
+1. **A stationary floor** — the three frequency layers the sound
+   decomposes into:
+   * **低音部 / rumble** — brown noise → 95 Hz low-pass (bearing/motor/floor).
+   * **中音域 / surface + hum + pop** — band-passed pink noise, 50/60 Hz
+     mains hum (+2nd harmonic), and stochastic mid-band pops.
+   * **高音 / hiss + crackle** — high-passed white noise + dense fine
+     *チリチリ* crackle.
+2. **Rotation-locked, period-stationary components** — the part that
+   makes it a *record*:
+   * **周回ノイズ / periodic defects** — a per-disc "fingerprint" of clicks
+     pinned to fixed rotational phases, recurring every revolution (with
+     per-pass jitter/dropout so it breathes, not ticks like a clock).
+   * **偏心ワウ / eccentricity wow** — a 0.556 Hz pitch waver (an
+     off-centre hole heard as pitch).
+   * **反り / warp** — a 0.556 Hz infrasonic woofer-pump on the low bus.
+   * **triboelectric buildup** — spinning slowly charges the disc, so
+     crackle density *rises the longer it plays*; **静電気を拭く** (wipe)
+     resets it and presses a fresh disc (new fingerprint).
+
+All impulsive components — fine crackle, dust pops and the
+rotation-locked defects — are produced by a **single unified
+`AudioWorkletNode` (`vinyl-engine`, three mono outputs)** that treats
+the rotational phase θ∈[0,1) as the one master clock and fires impulses
+sample-by-sample in the audio thread (a 3-channel `ScriptProcessor`
+fallback runs the same algorithm) — sample-accurate, jitter-free and
+endless, without any recorded audio. The engine posts a message on
+every phase wrap, so the heartbeat flash and the REV counter are locked
+to the *audio* rotation, not a UI timer. The **RPM toggle** (33⅓ / 45)
+retunes wow, warp and the defect period together. Warmth, a generated
+convolution reverb, four wear presets (クリーン / 埃っぽい / 年代物 /
+深いアンビエント) and a high-band spark visual round it out.
+
+### Radius drift & run-out groove (半径ドリフト)
+
+Because the platter turns at constant *angular* velocity, the linear
+velocity under the stylus falls as it tracks inward — so a record
+changes voice as a side plays. The needle position advances 0→1 over a
+(compressed) five-minute side: a dedicated low-pass closes from 18 kHz
+to 7 kHz, crackle grit rises, and the tonearm visual tracks inward.
+When the side runs out, only the **lead-out groove** remains — a single
+soft thump per revolution — and after four revolutions the arm lifts,
+returns to the outer edge and drops again. The loop is closed; it plays
+forever.
+
+### Material model (物性 → ノイズ)
+
+Orthogonal to the wear presets, a **material selector** derives the
+timbre from real physical properties rather than arbitrary settings.
+Each substrate carries a coefficient of (kinetic) friction μ, an
+effective surface grain size, Mohs hardness, density and an internal
+loss factor; these map monotonically onto the synthesis parameters
+(friction-floor level ∝ μ, click length ∝ grain, brightness ∝ hardness,
+ring Q ∝ 1/loss, low-end weight ∝ density, heavy-tail pops ∝
+brittleness):
+
+| Material | μ (kinetic) | character |
+|---|---|---|
+| **ビニール / PVC** | ≈ 0.30 | soft, smooth, damped — the quiet reference |
+| **SP盤 / shellac** | ≈ 0.50 | abrasive mineral filler → "frying" surface noise |
+| **御影石 / polished granite** | ≈ 0.55 | hard, dense, low-loss → metallic ring |
+| **花崗岩 / coarse granite** | ≈ 0.70 | coarse crystals → loud, gritty, ringing |
+
+Friction coefficients are kept physically plausible — the rock values
+follow **Byerlee's law** (μ ≈ 0.6–0.85 for most rocks); μ is shown live
+in the readout. Picking a material recomputes the surface friction
+floor, crackle grain/decay/brightness, a resonant "material ring", the
+hiss spectral tilt, low-end weight, and presses a fresh per-disc defect
+fingerprint with that material's character.
+
+### Dust & background playback
+
+A **ホコリ / dust** fader controls a sparse population of random
+mid-band pops — the irregular *パチ … パチ* of dust on the surface —
+by scaling the stochastic pop density, level and big-pop probability
+together (static buildup still rides on top of it over time).
+
+For **background playback**, the engine routes its output through a
+`MediaStreamAudioDestinationNode` into a hidden `<audio>` element rather
+than straight to the context destination, so the browser treats it as
+media playback and keeps it alive when the tab is hidden or the screen
+locks. The **Media Session API** exposes play/pause on the OS lock
+screen / notification, and a `visibilitychange` handler resumes the
+context on return. (`.play()` is retried on the next tap if the first
+call is blocked by autoplay policy.)
+
+```
+xdg-open  vinyl.html   # Linux
+open      vinyl.html   # macOS
+start     vinyl.html   # Windows
+```
+
 ## License
 
 MIT. ULT-SOUND, Toyo Gakki and DS-4M are trademarks of their

@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a0a" />
+<title>VINYL — 回転体ノイズ / cyclostationary record-noise engine</title>
+<style>
+  :root {
+    --bg:       #0b0b0d;
+    --panel:    #141417;
+    --panel-2:  #1c1c20;
+    --border:   #2a2a30;
+    --text:     #e9e9ec;
+    --text-dim: #888;
+    --low:      #d98a3a;  /* 低音 = warm amber */
+    --mid:      #6cc06c;  /* 中音 = green   */
+    --high:     #5db6d6;  /* 高音 = cyan    */
+    --rot:      #c66cc0;  /* 回転 = magenta */
+    --accent:   #d98a3a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%;
+    background: radial-gradient(120% 90% at 50% -10%, #16161a 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { display: flex; flex-direction: column; align-items: center; min-height: 100%; padding: 24px 16px 40px; }
+
+  h1 { font-size: 15px; letter-spacing: .35em; font-weight: 600; margin: 4px 0 2px; text-transform: uppercase; }
+  .sub { font-size: 11px; color: var(--text-dim); letter-spacing: .1em; margin-bottom: 6px; }
+  .pulse-readout { font-size: 10px; color: var(--rot); letter-spacing: .12em; margin-bottom: 18px; height: 12px; }
+
+  /* ---- turntable ---- */
+  .deck { position: relative; width: 280px; height: 280px; margin-bottom: 22px; }
+  .disc {
+    position: absolute; inset: 0; border-radius: 50%;
+    background:
+      repeating-radial-gradient(circle at 50% 50%, #0c0c0e 0px, #161618 1px, #0c0c0e 2px, #131315 3px),
+      radial-gradient(circle at 50% 50%, #1a1a1d 0 30%, #0a0a0b 31% 100%);
+    box-shadow: 0 18px 50px rgba(0,0,0,.7), inset 0 0 40px rgba(0,0,0,.8);
+    animation: spin 1.8s linear infinite;
+    animation-play-state: paused;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .disc.spinning { animation-play-state: running; }
+  .defect-mark { position: absolute; top: 14px; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--rot); box-shadow: 0 0 6px var(--rot); }
+  .label {
+    position: absolute; left: 50%; top: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px;
+    border-radius: 50%; background: radial-gradient(circle at 50% 40%, var(--accent), #8a4f17);
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    box-shadow: inset 0 0 14px rgba(0,0,0,.4); transition: background .4s;
+  }
+  .label b { font-size: 11px; letter-spacing: .25em; color: #1a1208; }
+  .label span { font-size: 8px; letter-spacing: .15em; color: #3a2a14; margin-top: 3px; }
+  .spindle { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #ddd; box-shadow: 0 0 6px rgba(0,0,0,.8); z-index: 3; }
+  .heartbeat {
+    position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--rot);
+    opacity: 0; pointer-events: none;
+  }
+  .heartbeat.beat { animation: hb .5s ease-out; }
+  @keyframes hb { 0% { opacity: .8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.08); } }
+  .tonearm {
+    position: absolute; right: -6px; top: 24px; width: 130px; height: 14px;
+    transform-origin: right 7px; transform: rotate(28deg); transition: transform .9s cubic-bezier(.4,0,.2,1); z-index: 4;
+  }
+  .tonearm.down { transform: rotate(13deg); }
+  .tonearm .arm { position: absolute; right: 6px; top: 5px; width: 120px; height: 4px; background: linear-gradient(#9a9a9e, #5a5a5e); border-radius: 3px; }
+  .tonearm .pivot { position: absolute; right: 0; top: 0; width: 16px; height: 16px; border-radius: 50%; background: #6a6a6e; }
+  .tonearm .head { position: absolute; left: 0; top: 1px; width: 14px; height: 12px; background: #2a2a2e; border-radius: 2px; }
+  canvas#spark { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 2; }
+
+  .power {
+    appearance: none; border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    font: inherit; font-size: 13px; letter-spacing: .15em; padding: 12px 30px; border-radius: 30px;
+    cursor: pointer; margin-bottom: 24px; transition: .2s; min-width: 180px;
+  }
+  .power:hover { border-color: var(--accent); }
+  .power.on { background: var(--accent); color: #120c04; border-color: var(--accent); font-weight: 600; }
+
+  .controls { width: 100%; max-width: 460px; }
+  .row { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+  .row label { width: 104px; font-size: 12px; flex-shrink: 0; }
+  .row label small { display: block; color: var(--text-dim); font-size: 10px; letter-spacing: .03em; }
+  .row .val { width: 30px; text-align: right; font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 4px; border-radius: 4px; background: #2a2a30; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--text); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: none; border-radius: 50%; background: var(--text); cursor: pointer; }
+  .r-low::-webkit-slider-thumb { background: var(--low); }   .r-low::-moz-range-thumb { background: var(--low); }
+  .r-mid::-webkit-slider-thumb { background: var(--mid); }   .r-mid::-moz-range-thumb { background: var(--mid); }
+  .r-high::-webkit-slider-thumb{ background: var(--high); }  .r-high::-moz-range-thumb{ background: var(--high); }
+  .r-rot::-webkit-slider-thumb { background: var(--rot); }   .r-rot::-moz-range-thumb { background: var(--rot); }
+
+  .sep-label { font-size: 9px; color: #555; letter-spacing: .2em; text-transform: uppercase; margin: 14px 0 2px; }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  .presets button, .toggle {
+    appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text-dim);
+    font: inherit; font-size: 11px; padding: 7px 13px; border-radius: 8px; cursor: pointer; transition: .15s;
+  }
+  .presets button:hover, .toggle:hover { color: var(--text); border-color: #444; }
+  .presets button.active { color: var(--accent); border-color: var(--accent); }
+  .toggle.on { color: var(--rot); border-color: var(--rot); }
+  .footer { font-size: 10px; color: #555; margin-top: 22px; text-align: center; line-height: 1.7; max-width: 460px; }
+  .footer code { color: #777; }
+  .footer b { color: var(--rot); font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>V I N Y L</h1>
+  <div class="sub">回転体ノイズ &middot; cyclostationary record-noise engine</div>
+  <div class="pulse-readout" id="readout">33⅓ rpm &middot; 周期 1.80 s &middot; f<sub>rot</sub> 0.556 Hz</div>
+
+  <div class="deck">
+    <div class="disc" id="disc">
+      <div class="defect-mark"></div>
+      <div class="label" id="label"><b>SCIRE</b><span>33⅓ RPM</span></div>
+    </div>
+    <div class="heartbeat" id="heartbeat"></div>
+    <div class="spindle"></div>
+    <canvas id="spark" width="280" height="280"></canvas>
+    <div class="tonearm" id="arm">
+      <div class="pivot"></div><div class="arm"></div><div class="head"></div>
+    </div>
+  </div>
+
+  <audio id="sink" playsinline style="display:none"></audio>
+  <button class="power" id="power">▷ NEEDLE DROP</button>
+
+  <div class="controls">
+    <div class="row">
+      <label>マスター<small>master</small></label>
+      <input type="range" id="master" min="0" max="100" value="70">
+      <span class="val" id="master-v">70</span>
+    </div>
+
+    <div class="sep-label">素材 / material — 物性からノイズを導出</div>
+    <div class="presets" id="materials">
+      <button data-m="vinyl" class="active">ビニール</button>
+      <button data-m="shellac">SP盤</button>
+      <button data-m="mikage">御影石</button>
+      <button data-m="granite">花崗岩</button>
+    </div>
+    <div class="pulse-readout" id="matreadout" style="margin:3px 0 4px"></div>
+
+    <div class="sep-label">層 / frequency layers</div>
+    <div class="row">
+      <label style="color:var(--low)">低音部<small>ランブル / rumble</small></label>
+      <input type="range" class="r-low" id="low" min="0" max="100" value="55">
+      <span class="val" id="low-v">55</span>
+    </div>
+    <div class="row">
+      <label style="color:var(--mid)">中音域<small>ハム・サーフェス・パチパチ</small></label>
+      <input type="range" class="r-mid" id="mid" min="0" max="100" value="50">
+      <span class="val" id="mid-v">50</span>
+    </div>
+    <div class="row">
+      <label style="color:var(--high)">高音<small>ヒス・クラックル / チリチリ</small></label>
+      <input type="range" class="r-high" id="high" min="0" max="100" value="60">
+      <span class="val" id="high-v">60</span>
+    </div>
+
+    <div class="sep-label">回転 / rotation — 周期定常成分</div>
+    <div class="row">
+      <label style="color:var(--rot)">周回ノイズ<small>1.8秒ごとの周期欠陥</small></label>
+      <input type="range" class="r-rot" id="rot" min="0" max="100" value="60">
+      <span class="val" id="rot-v">60</span>
+    </div>
+    <div class="row">
+      <label style="color:var(--rot)">偏心ワウ<small>eccentricity wow</small></label>
+      <input type="range" class="r-rot" id="wow" min="0" max="100" value="40">
+      <span class="val" id="wow-v">40</span>
+    </div>
+    <div class="row">
+      <label style="color:var(--rot)">反り<small>warp / woofer pump</small></label>
+      <input type="range" class="r-rot" id="warp" min="0" max="100" value="30">
+      <span class="val" id="warp-v">30</span>
+    </div>
+
+    <div class="sep-label">粒子 / particles</div>
+    <div class="row">
+      <label style="color:var(--high)">ホコリ<small>dust — ランダムなパチパチ</small></label>
+      <input type="range" class="r-high" id="dust" min="0" max="100" value="45">
+      <span class="val" id="dust-v">45</span>
+    </div>
+
+    <div class="sep-label">音色 / tone &amp; space</div>
+    <div class="row">
+      <label>あたたかみ<small>warmth / tone</small></label>
+      <input type="range" id="warmth" min="0" max="100" value="55">
+      <span class="val" id="warmth-v">55</span>
+    </div>
+    <div class="row">
+      <label>空間<small>space / reverb</small></label>
+      <input type="range" id="space" min="0" max="100" value="35">
+      <span class="val" id="space-v">35</span>
+    </div>
+
+    <div class="presets" id="presets">
+      <button data-p="clean">クリーン</button>
+      <button data-p="dusty" class="active">埃っぽい</button>
+      <button data-p="worn">年代物</button>
+      <button data-p="ambient">深いアンビエント</button>
+    </div>
+    <div class="presets">
+      <button class="toggle on" id="rpmToggle">33⅓ RPM</button>
+      <button class="toggle" id="humToggle">HUM 50Hz</button>
+      <button class="toggle" id="wipeBtn">静電気を拭く</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    サンプル音源なし。単一の <code>AudioWorklet</code> エンジンが
+    <b>回転位相をマスタークロック</b>としてクラックル・ホコリポップ・周期欠陥を毎サンプル生成。
+    心拍フラッシュは位相ラップ通知で音と完全同期。偏心ワウ・反りポンプ・摩擦電気による増殖を重ねた
+    <b>サイクロステーショナリ</b>モデルに、素材の物性（動摩擦係数 μ・粒径・硬度・密度・内部損失）から音色を導出。<br>
+    さらに<b>半径ドリフト</b>: 針は5分かけて内周へ進み、HFが痩せグリットが増える。盤面が尽きると
+    <b>リードアウト溝</b>（毎周コトッ）→ 針が自動で外周へ戻り、円環は閉じて永遠に続く。<br>
+    μ: PVC≈0.30 / シェラック≈0.50 / 御影石≈0.55 / 花崗岩≈0.70 ── 岩石は<b>Byerlee則（μ≈0.6–0.85）</b>に準拠。
+  </div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   VinylEngine — 統合 AudioWorklet プロセッサ
+   回転位相 θ∈[0,1) を唯一のマスタークロックとして、
+     out0: 微細クラックル（チリチリ、確率発火＋内部呼吸LFO）
+     out1: ホコリポップ（パチ…パチ、まばらな確率発火）
+     out2: 周期欠陥（盤の指紋。θに固定され毎周回帰する）
+   を毎サンプル生成する。位相ラップ毎に port へ通知（→心拍を音に同期）。
+   ============================================================ */
+const workletCode = `
+class VinylEngine extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [
+      { name: 'rotHz',      defaultValue: 0.5556, minValue: 0.01, maxValue: 5,     automationRate: 'k-rate' },
+      { name: 'crkDensity', defaultValue: 700,    minValue: 0,    maxValue: 40000, automationRate: 'k-rate' },
+      { name: 'crkDecay',   defaultValue: 0.5,    minValue: 0.0,  maxValue: 0.9995,automationRate: 'k-rate' },
+      { name: 'crkAmp',     defaultValue: 0.6,    minValue: 0,    maxValue: 1,     automationRate: 'k-rate' },
+      { name: 'crkBigProb', defaultValue: 0.01,   minValue: 0,    maxValue: 1,     automationRate: 'k-rate' },
+      { name: 'popDensity', defaultValue: 9,      minValue: 0,    maxValue: 200,   automationRate: 'k-rate' },
+      { name: 'popDecay',   defaultValue: 0.93,   minValue: 0.0,  maxValue: 0.9995,automationRate: 'k-rate' },
+      { name: 'popAmp',     defaultValue: 0.9,    minValue: 0,    maxValue: 1,     automationRate: 'k-rate' },
+      { name: 'popBigProb', defaultValue: 0.5,    minValue: 0,    maxValue: 1,     automationRate: 'k-rate' },
+      { name: 'rotAmp',     defaultValue: 0.85,   minValue: 0,    maxValue: 1,     automationRate: 'k-rate' },
+    ];
+  }
+  constructor() {
+    super();
+    this.phase = 0; this.rev = 0; this.t = 0;
+    this.defects = [];
+    this.crk = { y: 0, d: 0.5 };
+    this.pop = { y: 0, d: 0.93 };
+    this.rot = { y: 0, d: 0.9 };
+    this.port.onmessage = (e) => { if (e.data && e.data.defects) this.defects = e.data.defects; };
+  }
+  // 確率発火インパルス: 小粒に偏った振幅 + たまの大粒（重い裾）
+  fire(v, decay, bigProb) {
+    let a = Math.random(); a = a * a;
+    if (Math.random() < bigProb) a = 0.6 + 0.4 * Math.random();
+    v.y = (Math.random() < 0.5 ? -1 : 1) * a;
+    v.d = decay + (Math.random() - 0.5) * 0.05 * (1 - decay);
+  }
+  process(inputs, outputs, P) {
+    const crkOut = outputs[0][0], popOut = outputs[1][0], rotOut = outputs[2][0];
+    if (!crkOut) return true;
+    const sr = sampleRate, dt = 1 / sr;
+    const inc = P.rotHz[0] / sr;
+    // 呼吸: 超低速LFOで密度を揺らし、定常感を消す（worklet内＝ジッタなし）
+    const breathe = 1 + 0.35 * Math.sin(6.28318 * 0.035 * this.t);
+    const pCrk = P.crkDensity[0] * breathe / sr;
+    const pPop = P.popDensity[0] / sr;
+    const crkA = P.crkAmp[0], popA = P.popAmp[0], rotA = P.rotAmp[0];
+    const crkD = P.crkDecay[0], popD = P.popDecay[0];
+    const crkB = P.crkBigProb[0], popB = P.popBigProb[0];
+    const defs = this.defects;
+    for (let i = 0; i < crkOut.length; i++) {
+      /* --- 定常成分: クラックル & ホコリポップ --- */
+      if (Math.random() < pCrk) this.fire(this.crk, crkD, crkB);
+      if (Math.random() < pPop) this.fire(this.pop, popD, popB);
+      /* --- 回転位相を進め、横切った欠陥を発火 --- */
+      const prev = this.phase;
+      let ph = prev + inc;
+      if (ph >= 1) { ph -= 1; this.rev++; this.port.postMessage({ rev: this.rev }); }
+      this.phase = ph;
+      for (let k = 0; k < defs.length; k++) {
+        let dd = defs[k].p - prev; if (dd < 0) dd += 1;
+        if (dd < inc && Math.random() < defs[k].prob) {   // 確率的欠落で機械臭を消す
+          this.rot.y = defs[k].sign * defs[k].a * (0.7 + 0.6 * Math.random());
+          this.rot.d = defs[k].decay;
+        }
+      }
+      crkOut[i] = this.crk.y * crkA;
+      popOut[i] = this.pop.y * popA;
+      rotOut[i] = this.rot.y * rotA;
+      this.crk.y *= this.crk.d;
+      this.pop.y *= this.pop.d;
+      this.rot.y *= this.rot.d;
+      this.t += dt;
+    }
+    return true;
+  }
+}
+registerProcessor('vinyl-engine', VinylEngine);
+`;
+
+/* ============================================================
+   State
+   ============================================================ */
+let ctx = null, started = false, useWorklet = true;
+let nodes = {};
+let humFreq = 50;
+let rpm = 33.333;
+let raf = 0, staticTimer = 0;
+let staticLevel = 0;            // 摩擦電気による帯電 → クラックル/ポップ増殖
+let popBaseDensity = 9;         // ホコリフェーダーが決めるポップ基本密度
+let intendPlaying = false;
+let defects = [];
+let currentMaterial = 'vinyl';
+let matProfile = null;
+/* 半径ドリフト: 針の位置 0(外周)→1(内周)。等角速度ゆえ内周ほど線速度が落ち、
+   HFが痩せ・グリットが増える。終端でリードアウト溝→自動リキューで円環が閉じる */
+const SIDE_SECONDS = 300;       // 片面 5 分（アンビエント用に圧縮）
+const LEADOUT = { p: 0.03, a: 1, sign: 1, decay: 0.97, prob: 1 };  // 1周1回の「コトッ」
+let sidePos = 0, sideTimer = 0, runout = false, runoutRevs = 0, recueTimer = 0;
+
+const $ = id => document.getElementById(id);
+const rotHz = () => rpm / 60;
+const period = () => 60 / rpm;
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+/* ============================================================
+   素材の物性データ（科学準拠）
+   mu   : 動摩擦係数。ポリマーは実測レンジ、岩石は Byerlee 則 μ≈0.6–0.85 に準拠
+   grain: 表面の有効粒径 [µm]
+   mohs : モース硬度 / density: 密度 [kg/m³] / loss: 内部損失係数 η
+   ============================================================ */
+const MATERIALS = {
+  vinyl:   { label: 'ビニール (PVC)',       mu: 0.30, grain: 0.5,  mohs: 2.5, density: 1350, loss: 0.150 },
+  shellac: { label: 'SP盤 (シェラック)',    mu: 0.50, grain: 8,    mohs: 3.5, density: 1800, loss: 0.080 },
+  mikage:  { label: '御影石 (研磨花崗岩)',  mu: 0.55, grain: 300,  mohs: 6.5, density: 2750, loss: 0.012 },
+  granite: { label: '花崗岩 (粗粒)',        mu: 0.70, grain: 2000, mohs: 6.5, density: 2700, loss: 0.010 },
+};
+
+/* 物性 → 合成パラメータ（物理量に対して単調な写像） */
+function deriveMaterial(m) {
+  const logg  = Math.log10(m.grain);
+  const R     = m.mu * m.mohs;                 // 粗さ指数 = グリップ × 硬度
+  const decay = clamp(0.42 + (logg + 0.3) / 3.6 * 0.5, 0.40, 0.96);
+  return {
+    label: m.label, mu: m.mu,
+    surfGain:  0.20 + (m.mu - 0.3) * 1.1,        // 摩擦フロア ∝ μ
+    surfFreq:  500 + m.mohs * 220,
+    hissGain:  0.09 + R * 0.05,
+    hissFreq:  2800 + m.mohs * 450,
+    crkGain:   0.45 + R * 0.10,
+    crkFreq:   1500 + (m.mohs - 2) * 500,        // 硬いほど明るい
+    resFreq:   700 + (m.mohs - 2) * 750,         // 素材リング
+    resQ:      clamp(0.6 + 0.045 / m.loss, 0.6, 6),
+    resGainDb: clamp((m.mohs - 2) * 3 - m.loss * 30, 0, 14),
+    crkDecay:  decay,
+    crkBig:    clamp(0.008 + (m.mohs - 2) * 0.018, 0.005, 0.12),
+    popDecay:  clamp(decay + 0.02, 0.40, 0.97),
+    rumbleGain: 0.6 + (m.density / 2700) * 0.55, // 重い盤は低域が沈む
+    rotQ:      clamp(0.7 + 0.05 / m.loss, 0.7, 7),
+    decayBig:  clamp(decay, 0.40, 0.97),
+    decaySmall: clamp(decay - 0.45, 0.30, 0.70),
+  };
+}
+
+/* ---------- noise beds（色付き定常ノイズ、ループ再生） ---------- */
+function whiteBuffer(seconds) {
+  const len = (ctx.sampleRate * seconds) | 0;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+function pinkBuffer(seconds) {
+  const len = (ctx.sampleRate * seconds) | 0;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;     // Paul Kellet pink filter
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    b0 = 0.99886*b0 + w*0.0555179; b1 = 0.99332*b1 + w*0.0750759;
+    b2 = 0.96900*b2 + w*0.1538520; b3 = 0.86650*b3 + w*0.3104856;
+    b4 = 0.55000*b4 + w*0.5329522; b5 = -0.7616*b5 - w*0.0168980;
+    d[i] = (b0+b1+b2+b3+b4+b5+b6+w*0.5362) * 0.11;
+    b6 = w * 0.115926;
+  }
+  return buf;
+}
+function brownBuffer(seconds) {
+  const len = (ctx.sampleRate * seconds) | 0;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    last = (last + 0.02 * w) / 1.02;
+    d[i] = last * 3.5;
+  }
+  return buf;
+}
+function reverbIR(seconds, decay) {
+  const len = (ctx.sampleRate * seconds) | 0;
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decay);
+  }
+  return ir;
+}
+function loopSource(buf) {
+  const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; return s;
+}
+
+/* ---------- 盤一枚ぶんの指紋: 周期欠陥（素材プロファイル準拠） ---------- */
+function makeDefects(count, prof) {
+  prof = prof || { decayBig: 0.94, decaySmall: 0.5, big: 0.04 };
+  const arr = [];
+  for (let i = 0; i < count; i++) {
+    let a = Math.random(); a = a * a;
+    const big = Math.random() < (0.2 + prof.big * 2);   // 脆い素材ほど目立つ傷
+    if (big) a = 0.55 + 0.45 * Math.random();
+    arr.push({
+      p: Math.random(),                                  // 回転位相 [0,1)
+      a: 0.2 + 0.8 * a,
+      sign: Math.random() < 0.5 ? -1 : 1,
+      decay: big ? prof.decayBig : prof.decaySmall,
+      prob: big ? 0.97 : (0.6 + Math.random() * 0.35),
+    });
+  }
+  return arr;
+}
+
+/* ---------- ScriptProcessor フォールバック（同一アルゴリズム、3ch出力） ---------- */
+function makeEngineFallback() {
+  const node = ctx.createScriptProcessor(1024, 0, 3);
+  const S = {
+    rotHz: rotHz(), crkDensity: 700, crkDecay: 0.5, crkAmp: 0.6, crkBigProb: 0.01,
+    popDensity: 9, popDecay: 0.93, popAmp: 0.9, popBigProb: 0.5, rotAmp: 0.85,
+  };
+  let phase = 0, rev = 0, t = 0;
+  const crk = { y:0, d:0.5 }, pop = { y:0, d:0.93 }, rot = { y:0, d:0.9 };
+  let defs = [];
+  const fire = (v, decay, bigProb) => {
+    let a = Math.random(); a *= a;
+    if (Math.random() < bigProb) a = 0.6 + 0.4 * Math.random();
+    v.y = (Math.random() < 0.5 ? -1 : 1) * a;
+    v.d = decay + (Math.random() - 0.5) * 0.05 * (1 - decay);
+  };
+  node.onaudioprocess = e => {
+    const c = e.outputBuffer.getChannelData(0);
+    const p = e.outputBuffer.getChannelData(1);
+    const r = e.outputBuffer.getChannelData(2);
+    const sr = ctx.sampleRate, inc = S.rotHz / sr;
+    const breathe = 1 + 0.35 * Math.sin(6.28318 * 0.035 * t);
+    const pCrk = S.crkDensity * breathe / sr, pPop = S.popDensity / sr;
+    for (let i = 0; i < c.length; i++) {
+      if (Math.random() < pCrk) fire(crk, S.crkDecay, S.crkBigProb);
+      if (Math.random() < pPop) fire(pop, S.popDecay, S.popBigProb);
+      const prev = phase;
+      phase += inc;
+      if (phase >= 1) { phase -= 1; rev++; if (node.onrev) node.onrev(rev); }
+      for (let k = 0; k < defs.length; k++) {
+        let dd = defs[k].p - prev; if (dd < 0) dd += 1;
+        if (dd < inc && Math.random() < defs[k].prob) {
+          rot.y = defs[k].sign * defs[k].a * (0.7 + 0.6 * Math.random());
+          rot.d = defs[k].decay;
+        }
+      }
+      c[i] = crk.y * S.crkAmp; p[i] = pop.y * S.popAmp; r[i] = rot.y * S.rotAmp;
+      crk.y *= crk.d; pop.y *= pop.d; rot.y *= rot.d;
+      t += 1 / sr;
+    }
+  };
+  node.set = (k, v) => { S[k] = v; };
+  node.setDefects = arr => { defs = arr; };
+  return node;
+}
+
+/* ---------- 統一API（worklet | fallback） ---------- */
+function setEngine(name, v) {
+  const e = nodes.engine;
+  if (e.parameters) e.parameters.get(name).value = v; else e.set(name, v);
+}
+function setDefectsOnEngine(arr) {
+  const e = nodes.engine;
+  if (e.port) e.port.postMessage({ defects: arr }); else e.setDefects(arr);
+}
+// 現在の指紋をエンジンへ送る（リードアウト中はLEADOUT溝を維持）
+function pushDefects() {
+  if (ctx && nodes.engine) setDefectsOnEngine(runout ? defects.concat([LEADOUT]) : defects);
+}
+
+/* ============================================================
+   build — オーディオグラフ構築
+   ============================================================ */
+async function build() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try {
+    const url = URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }));
+    await ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    useWorklet = true;
+  } catch (err) {
+    useWorklet = false;
+    console.warn('AudioWorklet unavailable → ScriptProcessor fallback', err);
+  }
+
+  const N = nodes;
+
+  /* ---- master / output（バックグラウンド再生: MediaStream→<audio>） ---- */
+  N.master = ctx.createGain();   N.master.gain.value = 0.0;
+  N.warmth = ctx.createBiquadFilter(); N.warmth.type='lowpass'; N.warmth.frequency.value=6500; N.warmth.Q.value=0.4;
+  N.dry    = ctx.createGain();   N.dry.gain.value = 1.0;
+  N.wet    = ctx.createGain();   N.wet.gain.value = 0.35;
+  N.reverb = ctx.createConvolver(); N.reverb.buffer = reverbIR(2.6, 2.5);
+  N.pre    = ctx.createGain();   N.pre.gain.value = 1.0;
+  // 半径ドリフト: 内周ほど線速度が落ちHFが痩せる → サイド進行で閉じるLPF
+  N.innerLP = ctx.createBiquadFilter(); N.innerLP.type='lowpass'; N.innerLP.frequency.value=18000; N.innerLP.Q.value=0.4;
+  N.pre.connect(N.innerLP); N.innerLP.connect(N.warmth);
+  N.warmth.connect(N.dry); N.warmth.connect(N.reverb); N.reverb.connect(N.wet);
+  N.dry.connect(N.master); N.wet.connect(N.master);
+  N.analyser = ctx.createAnalyser(); N.analyser.fftSize = 1024;
+  N.master.connect(N.analyser);
+  N.stream = ctx.createMediaStreamDestination();
+  N.analyser.connect(N.stream);
+  $('sink').srcObject = N.stream.stream;
+
+  /* ---- 3層バス ---- */
+  N.lowBus  = ctx.createGain();
+  N.midBus  = ctx.createGain();
+  N.highBus = ctx.createGain();
+  N.lowBus.connect(N.pre); N.midBus.connect(N.pre); N.highBus.connect(N.pre);
+
+  /* ===== LOW: ランブル（ブラウンノイズ → LPF 95Hz） ===== */
+  N.rumbleSrc = loopSource(brownBuffer(8));
+  N.rumbleLP  = ctx.createBiquadFilter(); N.rumbleLP.type='lowpass'; N.rumbleLP.frequency.value=95; N.rumbleLP.Q.value=0.7;
+  N.rumbleGain= ctx.createGain(); N.rumbleGain.gain.value=1.0;
+  N.rumbleSrc.connect(N.rumbleLP); N.rumbleLP.connect(N.rumbleGain); N.rumbleGain.connect(N.lowBus);
+  N.rumbleSrc.start();
+
+  /* ===== MID: サーフェス（ピンクBP）+ ハム ===== */
+  N.surfSrc = loopSource(pinkBuffer(8));
+  N.surfBP  = ctx.createBiquadFilter(); N.surfBP.type='bandpass'; N.surfBP.frequency.value=900; N.surfBP.Q.value=0.5;
+  N.surfGain= ctx.createGain(); N.surfGain.gain.value=0.5;
+  N.surfSrc.connect(N.surfBP); N.surfBP.connect(N.surfGain); N.surfGain.connect(N.midBus);
+  N.surfSrc.start();
+  N.hum1 = ctx.createOscillator(); N.hum1.frequency.value = humFreq;
+  N.hum2 = ctx.createOscillator(); N.hum2.frequency.value = humFreq*2;
+  N.humG = ctx.createGain(); N.humG.gain.value = 0.04;
+  N.hum1.connect(N.humG); N.hum2.connect(N.humG); N.humG.connect(N.midBus);
+  N.hum1.start(); N.hum2.start();
+
+  /* ===== HIGH: ヒス（ホワイトHP） ===== */
+  N.hissSrc = loopSource(whiteBuffer(8));
+  N.hissHP  = ctx.createBiquadFilter(); N.hissHP.type='highpass'; N.hissHP.frequency.value=4500; N.hissHP.Q.value=0.5;
+  N.hissGain= ctx.createGain(); N.hissGain.gain.value=0.18;
+  N.hissSrc.connect(N.hissHP); N.hissHP.connect(N.hissGain); N.hissGain.connect(N.highBus);
+  N.hissSrc.start();
+
+  /* ===== ENGINE: クラックル / ポップ / 周期欠陥（回転位相クロック） ===== */
+  N.engine = useWorklet
+    ? new AudioWorkletNode(ctx, 'vinyl-engine', { numberOfInputs: 0, numberOfOutputs: 3, outputChannelCount: [1,1,1] })
+    : makeEngineFallback();
+  if (useWorklet) {
+    N.engine.port.onmessage = e => { if (e.data && e.data.rev) onRevolution(e.data.rev); };
+    setEngine('rotHz', rotHz());
+  } else {
+    N.engine.onrev = onRevolution;
+  }
+  if (!defects.length) defects = makeDefects(6, matProfile);
+  setDefectsOnEngine(defects);
+
+  // out0: クラックル → HPF → 素材リング → 高音バス
+  N.crkHP   = ctx.createBiquadFilter(); N.crkHP.type='highpass'; N.crkHP.frequency.value=3000; N.crkHP.Q.value=0.4;
+  N.matRes  = ctx.createBiquadFilter(); N.matRes.type='peaking'; N.matRes.frequency.value=2000; N.matRes.Q.value=0.7; N.matRes.gain.value=0;
+  N.crkGain = ctx.createGain(); N.crkGain.gain.value = 0.7;
+  // out1: ホコリポップ → BPF → 中音バス
+  N.popBP   = ctx.createBiquadFilter(); N.popBP.type='bandpass'; N.popBP.frequency.value=750; N.popBP.Q.value=1.1;
+  N.popGain = ctx.createGain(); N.popGain.gain.value = 0.9;
+  // out2: 周期欠陥 → 本体(BP 520Hz) + 先端(HP 2.5kHz)
+  N.rotBody = ctx.createBiquadFilter(); N.rotBody.type='bandpass'; N.rotBody.frequency.value=520; N.rotBody.Q.value=0.9;
+  N.rotTick = ctx.createBiquadFilter(); N.rotTick.type='highpass'; N.rotTick.frequency.value=2500; N.rotTick.Q.value=0.4;
+  N.rotBodyGain = ctx.createGain(); N.rotBodyGain.gain.value = 1.0;
+  N.rotTickGain = ctx.createGain(); N.rotTickGain.gain.value = 0.5;
+
+  if (useWorklet) {
+    N.engine.connect(N.crkHP, 0);
+    N.engine.connect(N.popBP, 1);
+    N.engine.connect(N.rotBody, 2); N.engine.connect(N.rotTick, 2);
+  } else {
+    N.split = ctx.createChannelSplitter(3);
+    N.engine.connect(N.split);
+    N.split.connect(N.crkHP, 0);
+    N.split.connect(N.popBP, 1);
+    N.split.connect(N.rotBody, 2); N.split.connect(N.rotTick, 2);
+  }
+  N.crkHP.connect(N.matRes); N.matRes.connect(N.crkGain); N.crkGain.connect(N.highBus);
+  N.popBP.connect(N.popGain); N.popGain.connect(N.midBus);
+  N.rotBody.connect(N.rotBodyGain); N.rotBodyGain.connect(N.midBus);
+  N.rotTick.connect(N.rotTickGain); N.rotTickGain.connect(N.highBus);
+
+  /* ===== 偏心ワウ（f_rot 同期）+ フラッター ===== */
+  N.wowLFO = ctx.createOscillator(); N.wowLFO.frequency.value = rotHz();
+  N.wowDepth = ctx.createGain(); N.wowDepth.gain.value = 0.0;
+  N.wowLFO.connect(N.wowDepth);
+  N.wowDepth.connect(N.rumbleSrc.playbackRate);
+  N.wowDepth.connect(N.surfSrc.playbackRate);
+  N.wowLFO.start();
+  N.flutLFO = ctx.createOscillator(); N.flutLFO.frequency.value = 7.3;
+  N.flutDepth = ctx.createGain(); N.flutDepth.gain.value = 0.0;
+  N.flutLFO.connect(N.flutDepth); N.flutDepth.connect(N.surfSrc.playbackRate);
+  N.flutLFO.start();
+
+  /* ===== 反り（f_rot 同期の低域AMポンプ） ===== */
+  N.warpLFO = ctx.createOscillator(); N.warpLFO.frequency.value = rotHz();
+  N.warpDepth = ctx.createGain(); N.warpDepth.gain.value = 0.0;
+  N.warpLFO.connect(N.warpDepth); N.warpDepth.connect(N.lowBus.gain);
+  N.warpLFO.start();
+}
+
+/* ---------- 1周回ごと（workletから通知 = 音に正確同期） ---------- */
+function onRevolution(rev) {
+  const h = $('heartbeat');
+  h.classList.remove('beat'); void h.offsetWidth; h.classList.add('beat');
+  const f = rotHz();
+  $('readout').innerHTML = (rpm === 45 ? '45 RPM' : '33⅓ RPM') +
+    ' &middot; 周期 ' + period().toFixed(2) + ' s &middot; f<sub>rot</sub> ' + f.toFixed(3) + ' Hz' +
+    ' &middot; REV ' + rev +
+    (runout ? ' &middot; LEAD-OUT' : ' &middot; 盤面 ' + ((sidePos * 100) | 0) + '%');
+  if (runout && ++runoutRevs >= 4) { runoutRevs = -999; recue(); }   // 4周まわって針上げ
+}
+
+/* ---------- 回転数: ワウ・反り・欠陥周期・盤面アニメが一斉に追従 ---------- */
+function setRpm(v) {
+  rpm = v;
+  const f = rotHz(), t = ctx ? ctx.currentTime : 0;
+  if (ctx && nodes.engine) {
+    setEngine('rotHz', f);
+    nodes.wowLFO.frequency.setTargetAtTime(f, t, 0.05);
+    nodes.warpLFO.frequency.setTargetAtTime(f, t, 0.05);
+  }
+  $('disc').style.animationDuration = period() + 's';
+  const lab = rpm === 45 ? '45 RPM' : '33⅓ RPM';
+  $('rpmToggle').textContent = lab;
+  $('label').querySelector('span').textContent = lab;
+  $('readout').innerHTML = lab + ' &middot; 周期 ' + period().toFixed(2) + ' s &middot; f<sub>rot</sub> ' + f.toFixed(3) + ' Hz';
+}
+
+/* ---------- apply UI ---------- */
+function applyUI() {
+  if (!ctx) return;
+  const N = nodes, t = ctx.currentTime;
+  const v = id => +$(id).value / 100;
+  N.master.gain.setTargetAtTime(v('master') * 0.9, t, 0.05);
+  N.lowBus.gain.setTargetAtTime(v('low') * 1.1, t, 0.08);
+  N.midBus.gain.setTargetAtTime(v('mid') * 1.0, t, 0.08);
+  N.highBus.gain.setTargetAtTime(v('high') * 0.9, t, 0.08);
+  // 回転成分
+  setEngine('rotAmp', v('rot') * 0.95);
+  N.warpDepth.gain.setTargetAtTime(v('warp') * v('low') * 0.9, t, 0.1);
+  const wow = v('wow');
+  N.wowDepth.gain.setTargetAtTime(wow * 0.010, t, 0.1);
+  N.flutDepth.gain.setTargetAtTime(wow * 0.004, t, 0.1);
+  // ホコリ: 密度・音量・大粒確率を連動
+  const dust = v('dust');
+  popBaseDensity = 2 + dust * 34;
+  setEngine('popDensity', popBaseDensity + staticLevel * 14);
+  N.popGain.gain.setTargetAtTime(0.5 + dust * 0.9, t, 0.1);
+  setEngine('popBigProb', 0.25 + dust * 0.45);
+  // 音色
+  const warm = v('warmth');
+  N.warmth.frequency.setTargetAtTime(1800 * Math.pow(14000/1800, warm), t, 0.1);
+  N.wet.gain.setTargetAtTime(v('space') * 0.6, t, 0.1);
+}
+
+/* ---------- ノイズ密度の一元更新（帯電 × 半径の積） ---------- */
+function updateDensities() {
+  if (!ctx || !nodes.engine) return;
+  setEngine('crkDensity', (700 + staticLevel * 2600) * (1 + 0.6 * sidePos));
+  setEngine('popDensity', popBaseDensity + staticLevel * 14);
+}
+
+/* ---------- 摩擦電気: 回すほど帯電してノイズが増殖 ---------- */
+function tickStatic() {
+  staticLevel = Math.min(1, staticLevel + 0.06);
+  updateDensities();
+}
+function wipeStatic() {
+  staticLevel = 0;
+  updateDensities();
+  // 新しい盤 = 新しい指紋（素材は維持）
+  defects = makeDefects(defects.length || 6, matProfile);
+  pushDefects();
+  const b = $('wipeBtn'); b.classList.add('on'); setTimeout(() => b.classList.remove('on'), 250);
+}
+
+/* ---------- 半径ドリフト: 1秒ごとに針が内周へ ---------- */
+function applyRadius() {
+  if (!ctx || !nodes.innerLP) return;
+  // 外周 18kHz → 内周 7kHz（対数で滑らかに閉じる）
+  nodes.innerLP.frequency.setTargetAtTime(18000 * Math.pow(7000 / 18000, sidePos), ctx.currentTime, 0.5);
+  updateDensities();
+  // トーンアーム: 針位置に合わせて内側へ（13°→22°）
+  const arm = $('arm');
+  if (arm.classList.contains('down')) arm.style.transform = 'rotate(' + (13 + 9 * sidePos).toFixed(2) + 'deg)';
+}
+function tickSide() {
+  if (!ctx || !intendPlaying || runout) return;
+  sidePos = Math.min(1, sidePos + 1 / SIDE_SECONDS);
+  applyRadius();
+  if (sidePos >= 1) enterRunout();
+}
+/* 終端: リードアウト溝。毎周「コトッ」だけが残る */
+function enterRunout() {
+  runout = true; runoutRevs = 0;
+  setDefectsOnEngine(defects.concat([LEADOUT]));
+}
+/* 数周まわったら針が上がり、外周へ戻ってまた落ちる（円環が閉じる） */
+function recue() {
+  const arm = $('arm');
+  arm.style.transform = ''; arm.classList.remove('down');     // 針上げ
+  nodes.pre.gain.setTargetAtTime(0, ctx.currentTime, 0.12);   // 無音（回転は続く）
+  clearTimeout(recueTimer);
+  recueTimer = setTimeout(() => {
+    if (!intendPlaying) return;
+    sidePos = 0; runout = false; runoutRevs = 0;
+    pushDefects();
+    applyRadius();
+    arm.classList.add('down');                                // 針落とし
+    nodes.pre.gain.setTargetAtTime(1, ctx.currentTime, 0.25);
+  }, 2200);
+}
+
+/* ---------- 素材適用: 物性 → 合成パラメータ ---------- */
+function applyMaterial(key) {
+  if (!MATERIALS[key]) return;
+  currentMaterial = key;
+  const d = deriveMaterial(MATERIALS[key]);
+  matProfile = { decayBig: d.decayBig, decaySmall: d.decaySmall, big: d.crkBig };
+  document.querySelectorAll('#materials button[data-m]').forEach(b =>
+    b.classList.toggle('active', b.dataset.m === key));
+  $('matreadout').innerHTML = '素材: ' + d.label + ' &middot; 動摩擦係数 μ≈' + d.mu.toFixed(2);
+  if (!ctx) return;
+  const N = nodes, t = ctx.currentTime, T = 0.12;
+  N.surfGain.gain.setTargetAtTime(d.surfGain, t, T);
+  N.surfBP.frequency.setTargetAtTime(d.surfFreq, t, T);
+  N.hissGain.gain.setTargetAtTime(d.hissGain, t, T);
+  N.hissHP.frequency.setTargetAtTime(d.hissFreq, t, T);
+  N.crkGain.gain.setTargetAtTime(d.crkGain, t, T);
+  N.crkHP.frequency.setTargetAtTime(d.crkFreq, t, T);
+  N.matRes.frequency.setTargetAtTime(d.resFreq, t, T);
+  N.matRes.Q.setTargetAtTime(d.resQ, t, T);
+  N.matRes.gain.setTargetAtTime(d.resGainDb, t, T);
+  N.rumbleGain.gain.setTargetAtTime(d.rumbleGain, t, T);
+  N.rotBody.Q.setTargetAtTime(d.rotQ, t, T);
+  setEngine('crkDecay', d.crkDecay);
+  setEngine('crkBigProb', d.crkBig);
+  setEngine('popDecay', d.popDecay);
+  // 素材に応じた指紋を作り直す
+  defects = makeDefects(defects.length || 6, matProfile);
+  pushDefects();
+  if ('mediaSession' in navigator && navigator.mediaSession.metadata) {
+    try { navigator.mediaSession.metadata.album = d.label; } catch (e) {}
+  }
+}
+
+/* ---------- presets ---------- */
+const PRESETS = {
+  clean:   { low:25, mid:30, high:35, rot:30, wow:12, warp:8,  dust:18, warmth:70, space:20, defects:3 },
+  dusty:   { low:55, mid:50, high:60, rot:60, wow:40, warp:30, dust:55, warmth:55, space:35, defects:6 },
+  worn:    { low:70, mid:65, high:75, rot:85, wow:65, warp:60, dust:75, warmth:38, space:45, defects:11 },
+  ambient: { low:60, mid:40, high:45, rot:45, wow:55, warp:50, dust:35, warmth:48, space:80, defects:5 },
+};
+function applyPreset(name) {
+  const p = PRESETS[name]; if (!p) return;
+  ['low','mid','high','rot','wow','warp','dust','warmth','space'].forEach(k => {
+    $(k).value = p[k]; $(k+'-v').textContent = p[k];
+  });
+  defects = makeDefects(p.defects, matProfile);
+  pushDefects();
+  applyUI();
+  document.querySelectorAll('#presets button[data-p]').forEach(b =>
+    b.classList.toggle('active', b.dataset.p === name));
+}
+
+/* ---------- visual: 高域エネルギー → 火花 ---------- */
+const cv = $('spark'), cx = cv.getContext('2d');
+function draw() {
+  raf = requestAnimationFrame(draw);
+  cx.clearRect(0, 0, 280, 280);
+  if (!ctx || !nodes.analyser) return;
+  const a = nodes.analyser, bins = a.frequencyBinCount;
+  const data = new Uint8Array(bins);
+  a.getByteFrequencyData(data);
+  let hi = 0; for (let i = (bins*0.5)|0; i < bins; i++) hi += data[i];
+  hi /= (bins*0.5);
+  const n = (hi / 12) | 0;
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const r = 50 + Math.random() * 88;
+    const x = 140 + Math.cos(ang) * r, y = 140 + Math.sin(ang) * r;
+    const s = Math.random() * 1.6 + 0.3;
+    cx.fillStyle = `rgba(${180+Math.random()*60|0},${200+Math.random()*40|0},255,${Math.random()*0.5+0.2})`;
+    cx.fillRect(x, y, s, s);
+  }
+}
+
+/* ============================================================
+   start / stop + バックグラウンド再生
+   ============================================================ */
+function ensureSinkPlaying() {
+  const sink = $('sink');
+  const p = sink.play();
+  if (p && p.catch) p.catch(() => {
+    document.addEventListener('pointerdown', () => {
+      sink.play().catch(() => {});
+      if (ctx) ctx.resume().catch(() => {});
+    }, { once: true });             // 自動再生が弾かれたら次のタップで開始
+  });
+}
+function setupMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'VINYL — record noise', artist: 'scire-h',
+      album: (MATERIALS[currentMaterial] || {}).label || '',
+    });
+    navigator.mediaSession.setActionHandler('play',  () => start());
+    navigator.mediaSession.setActionHandler('pause', () => stop());
+    navigator.mediaSession.setActionHandler('stop',  () => stop());
+    navigator.mediaSession.playbackState = 'playing';
+  } catch (e) {}
+}
+
+async function start() {
+  if (!started) { await build(); applyUI(); applyMaterial(currentMaterial); started = true; }
+  intendPlaying = true;
+  await ctx.resume();
+  // トランスポートを正常な再生状態へ正規化（recue途中でstopされても確実に復帰）
+  clearTimeout(recueTimer);
+  if (runout) { runout = false; sidePos = 0; }   // リードアウトで止めた場合は頭出し
+  runoutRevs = 0;
+  nodes.pre.gain.setTargetAtTime(1, ctx.currentTime, 0.1);
+  pushDefects();
+  ensureSinkPlaying();
+  setupMediaSession();
+  nodes.master.gain.setTargetAtTime((+$('master').value/100) * 0.9, ctx.currentTime, 0.6);
+  $('disc').classList.add('spinning');
+  $('disc').style.animationDuration = period() + 's';
+  $('arm').classList.add('down');
+  const btn = $('power'); btn.classList.add('on'); btn.textContent = '■ STOP';
+  if (!raf) draw();
+  applyRadius();
+  clearInterval(staticTimer); staticTimer = setInterval(tickStatic, 3500);
+  clearInterval(sideTimer);   sideTimer   = setInterval(tickSide, 1000);
+}
+async function stop() {
+  if (!ctx) return;
+  intendPlaying = false;
+  nodes.master.gain.setTargetAtTime(0, ctx.currentTime, 0.25);
+  setTimeout(() => { if (!intendPlaying) { ctx.suspend(); $('sink').pause(); } }, 500);
+  $('disc').classList.remove('spinning');
+  const arm = $('arm'); arm.style.transform = ''; arm.classList.remove('down');
+  clearInterval(staticTimer); clearInterval(sideTimer);
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+  const btn = $('power'); btn.classList.remove('on'); btn.textContent = '▷ NEEDLE DROP';
+}
+// バックグラウンドから復帰した時、寝ていたら起こす
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && intendPlaying && ctx) {
+    ctx.resume().catch(() => {});
+    $('sink').play().catch(() => {});
+  }
+});
+
+/* ============================================================
+   wiring
+   ============================================================ */
+$('power').addEventListener('click', () => {
+  if (started && ctx && ctx.state === 'running') stop(); else start();
+});
+['master','low','mid','high','rot','wow','warp','dust','warmth','space'].forEach(id => {
+  const el = $(id);
+  el.addEventListener('input', () => { $(id+'-v').textContent = el.value; applyUI(); });
+});
+document.querySelectorAll('#presets button[data-p]').forEach(b =>
+  b.addEventListener('click', () => applyPreset(b.dataset.p)));
+document.querySelectorAll('#materials button[data-m]').forEach(b =>
+  b.addEventListener('click', () => applyMaterial(b.dataset.m)));
+$('rpmToggle').addEventListener('click', () => setRpm(rpm === 33.333 ? 45 : 33.333));
+$('humToggle').addEventListener('click', () => {
+  humFreq = humFreq === 50 ? 60 : 50;
+  $('humToggle').textContent = 'HUM ' + humFreq + 'Hz';
+  $('humToggle').classList.toggle('on', humFreq === 60);
+  if (nodes.hum1) {
+    nodes.hum1.frequency.setTargetAtTime(humFreq, ctx.currentTime, 0.05);
+    nodes.hum2.frequency.setTargetAtTime(humFreq*2, ctx.currentTime, 0.05);
+  }
+});
+$('wipeBtn').addEventListener('click', wipeStatic);
+
+// 初期状態
+applyPreset('dusty');
+applyMaterial('vinyl');
+</script>
+</body>
+</html>
