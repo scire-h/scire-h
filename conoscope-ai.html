@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#08090b" />
+<title>CONOSCOPE.RESONANCE / V6.0 · LATENT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0b0d;
+    --ink:#cdd2d8;
+    --ink-dim:#6b7178;
+    --ink-faint:#3a3e44;
+    --line:#1c1f24;
+    --line2:#262a31;
+    --accent:#e8eaed;
+    --rec:#ff3b30;
+    --signal:#7ec8ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+  html,body{height:100%;background:#000;color:var(--ink);font-family:'IBM Plex Mono',ui-monospace,monospace;overflow:hidden}
+  body{
+    display:flex;align-items:center;justify-content:center;
+    background:
+      radial-gradient(ellipse at 20% 20%, #14161c 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, #0c0e12 0%, transparent 50%),
+      #000;
+  }
+
+  .device{
+    width:min(1480px,98vw);
+    aspect-ratio:16/10;
+    max-height:96vh;
+    background:linear-gradient(180deg,#0c0e12 0%,#08090b 100%);
+    border:1px solid var(--line2);
+    border-radius:14px;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.02) inset,
+      0 1px 0 rgba(255,255,255,0.04) inset;
+    display:flex;flex-direction:column;
+    overflow:hidden;position:relative;
+  }
+  .device::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,0.006) 3px 4px);
+    mix-blend-mode:overlay;z-index:50;
+  }
+
+  header{
+    height:36px;flex:none;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 18px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#11141a,#0b0d11);
+    font-size:10.5px;letter-spacing:0.18em;color:var(--ink-dim);
+  }
+  .h-l, .h-r{display:flex;align-items:center;gap:14px}
+  .dots{display:inline-flex;gap:5px}
+  .dots i{width:5px;height:5px;border-radius:50%;background:var(--ink-faint);display:inline-block}
+  .dots i:nth-child(1){background:#5a5e64}
+  .title{color:var(--ink);font-weight:500;letter-spacing:0.22em}
+  .title em{color:var(--ink-dim);font-style:normal;margin-left:8px;font-weight:400}
+  .led{width:6px;height:6px;border-radius:50%;background:#5dffa6;box-shadow:0 0 6px #5dffa6;animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:0.5}}
+  .h-r span{color:var(--ink-dim)}
+  .h-r .ch{color:var(--ink)}
+  .rec-led{width:7px;height:7px;border-radius:50%;background:#2a2c30;transition:all 0.15s}
+  .rec-led.on{background:var(--rec);box-shadow:0 0 8px var(--rec);animation:recpulse 1s ease-in-out infinite}
+  @keyframes recpulse{50%{opacity:0.4}}
+
+  .body{flex:1;display:grid;grid-template-columns:240px 1fr;min-height:0}
+
+  aside{
+    border-right:1px solid var(--line);
+    padding:12px 14px;
+    display:flex;flex-direction:column;gap:12px;
+    font-size:10px;letter-spacing:0.12em;color:var(--ink-dim);
+    background:linear-gradient(180deg,#0a0c10 0%,#08090c 100%);
+    overflow:hidden;
+  }
+  .ink-box{
+    aspect-ratio:1/1;
+    border:1px solid var(--line2);position:relative;cursor:crosshair;
+    background:radial-gradient(circle at 50% 50%, #0d1014 0%, #07080a 100%);
+    overflow:hidden;touch-action:none;flex:none;
+  }
+  .ink-box .label{position:absolute;top:6px;left:8px;font-size:9px;letter-spacing:0.2em;color:var(--ink-dim);z-index:2}
+  .ink-box .meta{position:absolute;top:6px;right:8px;font-size:9px;letter-spacing:0.16em;color:var(--ink-faint);z-index:2}
+  .ink-box .hint{position:absolute;bottom:8px;left:8px;font-size:8.5px;letter-spacing:0.22em;color:var(--ink-faint);z-index:2;line-height:1.3}
+  .ink-box .corner{position:absolute;width:8px;height:8px;border-color:var(--ink-faint);z-index:2}
+  .ink-box .corner.tl{top:0;left:0;border-top:1px solid;border-left:1px solid}
+  .ink-box .corner.tr{top:0;right:0;border-top:1px solid;border-right:1px solid}
+  .ink-box .corner.bl{bottom:0;left:0;border-bottom:1px solid;border-left:1px solid}
+  .ink-box .corner.br{bottom:0;right:0;border-bottom:1px solid;border-right:1px solid}
+  #ink{position:absolute;inset:0;width:100%;height:100%}
+
+  .prompt-box{display:flex;flex-direction:column;gap:5px}
+  .prompt-box .h{color:var(--ink-faint);letter-spacing:0.24em;font-size:9px}
+  .prompt-box input{
+    background:#07080a;border:1px solid var(--line2);
+    color:var(--signal);font-family:inherit;font-size:11px;
+    padding:7px 9px;letter-spacing:0.04em;outline:none;
+    width:100%;
+  }
+  .prompt-box input::placeholder{color:var(--ink-faint);letter-spacing:0.18em;font-size:9px}
+  .prompt-box input:focus{border-color:var(--signal);box-shadow:0 0 0 1px rgba(126,200,255,0.2)}
+  .prompt-box .hint{color:var(--ink-faint);font-size:8.5px;letter-spacing:0.18em}
+
+  .src-box{display:flex;flex-direction:column;gap:4px}
+  .src-box .h{color:var(--ink-faint);letter-spacing:0.24em;font-size:9px}
+  .src-btns{display:flex;gap:4px}
+  .src-btn{
+    flex:1;background:transparent;border:1px solid var(--line2);color:var(--ink-dim);
+    font-family:inherit;font-size:10px;letter-spacing:0.18em;padding:5px 4px;cursor:pointer;
+    transition:all 0.15s ease;
+  }
+  .src-btn.active{background:#1a1e25;color:var(--signal);border-color:#3a6c95;box-shadow:0 0 8px rgba(126,200,255,0.18) inset}
+  .src-btn:hover:not(.active){color:var(--ink)}
+  .src-status{
+    font-size:8.5px;letter-spacing:0.14em;color:var(--ink-faint);
+    min-height:11px;line-height:1.3;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .src-status.err{color:#ff8b7a}
+  .src-status.ok{color:var(--signal)}
+
+  .tlm{display:flex;flex-direction:column;gap:5px;font-size:10px;flex:1;min-height:0}
+  .tlm .h{color:var(--ink-faint);letter-spacing:0.24em;font-size:9px;margin-bottom:2px}
+  .tlm .row{display:flex;justify-content:space-between;align-items:center;border-bottom:1px dashed var(--line);padding:2px 0}
+  .tlm .row:last-child{border-bottom:none}
+  .tlm .k{color:var(--ink-dim)}
+  .tlm .v{color:var(--ink);font-weight:500;letter-spacing:0.08em}
+  .tlm .v.signal{color:var(--signal)}
+
+  .clear-btn{
+    border:1px solid var(--line2);background:transparent;color:var(--ink-dim);
+    font-family:inherit;font-size:10px;letter-spacing:0.22em;padding:7px;cursor:pointer;
+    transition:all 0.15s ease;flex:none;
+  }
+  .clear-btn:hover{border-color:var(--ink-dim);color:var(--ink)}
+
+  main{position:relative;overflow:hidden;background:#06070a}
+  #gl{display:block;width:100%;height:100%}
+  .labels{position:absolute;inset:0;pointer-events:none;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;z-index:3}
+  .slot{position:relative}
+  .slot .sl-id{position:absolute;top:10px;left:14px;font-size:10px;letter-spacing:0.18em;color:var(--ink-dim)}
+  .slot .sl-id b{color:var(--ink);font-weight:500;margin-right:10px}
+  .slot .sl-meta{position:absolute;top:10px;right:14px;font-size:9.5px;letter-spacing:0.18em;color:var(--ink-faint)}
+  .slot .c{position:absolute;width:10px;height:10px;border-color:var(--ink-faint);opacity:0.5}
+  .slot .c.tl{top:6px;left:6px;border-top:1px solid;border-left:1px solid}
+  .slot .c.tr{top:6px;right:6px;border-top:1px solid;border-right:1px solid}
+  .slot .c.bl{bottom:6px;left:6px;border-bottom:1px solid;border-left:1px solid}
+  .slot .c.br{bottom:6px;right:6px;border-bottom:1px solid;border-right:1px solid}
+
+  .grid-overlay{
+    position:absolute;inset:0;pointer-events:none;z-index:2;
+    background:
+      linear-gradient(90deg,transparent calc(33.333% - 0.5px),var(--line) calc(33.333% - 0.5px),var(--line) calc(33.333% + 0.5px),transparent calc(33.333% + 0.5px)),
+      linear-gradient(90deg,transparent calc(66.666% - 0.5px),var(--line) calc(66.666% - 0.5px),var(--line) calc(66.666% + 0.5px),transparent calc(66.666% + 0.5px)),
+      linear-gradient(0deg,transparent calc(50% - 0.5px),var(--line) calc(50% - 0.5px),var(--line) calc(50% + 0.5px),transparent calc(50% + 0.5px));
+  }
+
+  footer{
+    height:48px;flex:none;
+    border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:12px;
+    padding:0 18px;
+    font-size:9.5px;letter-spacing:0.18em;color:var(--ink-dim);
+    background:linear-gradient(180deg,#0a0c10,#070809);
+  }
+  .mode-group{display:flex;align-items:center;gap:5px;flex:none}
+  .mode-group .label{color:var(--ink-faint);margin-right:4px;font-size:9px}
+  .mode-btn{
+    border:1px solid var(--line2);background:transparent;color:var(--ink-dim);
+    font-family:inherit;font-size:10px;letter-spacing:0.22em;padding:6px 9px;cursor:pointer;
+    transition:all 0.15s ease;
+  }
+  .mode-btn.active{background:#1a1e25;color:var(--ink);border-color:#2e3440;box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset}
+  .mode-btn:hover:not(.active){color:var(--ink)}
+  .mode-btn.rec.active{
+    background:rgba(255,59,48,0.18);border-color:var(--rec);color:#ffd0cb;
+    box-shadow:0 0 12px rgba(255,59,48,0.25) inset;
+  }
+  .mode-btn.drift.active{
+    background:rgba(126,200,255,0.13);border-color:#3a6c95;color:#cfe6ff;
+    box-shadow:0 0 12px rgba(126,200,255,0.2) inset;
+  }
+
+  .slider{display:flex;align-items:center;gap:6px;min-width:0;flex:1;max-width:180px}
+  .slider .name{color:var(--ink-faint);min-width:20px;font-size:9.5px}
+  .slider .track{
+    flex:1;height:22px;position:relative;border:1px solid var(--line);
+    background:linear-gradient(180deg,#0a0c10,#08090b);
+    display:flex;align-items:center;padding:0 6px;cursor:pointer;user-select:none;touch-action:none;
+  }
+  .slider .track::before{content:"";position:absolute;left:6px;right:6px;height:1px;background:var(--line2);top:50%}
+  .slider .knob{
+    position:absolute;width:10px;height:14px;background:#1d2128;border:1px solid #2e3440;
+    box-shadow:0 0 0 1px rgba(255,255,255,0.04) inset, 0 2px 4px rgba(0,0,0,0.6);
+    z-index:2;top:50%;transform:translateY(-50%);
+  }
+  .slider .val{color:var(--ink);min-width:34px;text-align:right;font-weight:500;letter-spacing:0.05em;font-size:10px}
+
+  .grain-toggle{
+    width:24px;height:22px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;color:var(--ink-dim);flex:none;
+  }
+  .grain-toggle.on{color:var(--ink);border-color:#2e3440;background:#15181d}
+
+  .signoff{
+    position:absolute;bottom:8px;right:14px;font-size:8px;letter-spacing:0.22em;color:var(--ink-faint);opacity:0.5;z-index:60;
+  }
+
+  .slot.s1{grid-column:1;grid-row:1}
+  .slot.s2{grid-column:2;grid-row:1}
+  .slot.s3{grid-column:3;grid-row:1}
+  .slot.s4{grid-column:1;grid-row:2}
+  .slot.s5{grid-column:2;grid-row:2}
+  .slot.s6{grid-column:3;grid-row:2}
+
+  .download-toast{
+    position:absolute;top:50px;right:20px;
+    background:#15181d;border:1px solid #2e3440;
+    padding:10px 14px;font-size:10px;letter-spacing:0.12em;color:var(--ink);
+    z-index:100;display:none;cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,0.6);
+  }
+  .download-toast.show{display:block}
+  .download-toast a{color:var(--signal);text-decoration:underline;margin-left:6px}
+
+  /* hamburger (hidden on desktop, shown on mobile) */
+  .menu-btn{
+    display:none;align-items:center;justify-content:center;
+    width:30px;height:24px;background:transparent;border:1px solid var(--line2);
+    color:var(--ink-dim);cursor:pointer;padding:0;
+  }
+  .menu-btn:active{color:var(--ink)}
+
+  /* drawer backdrop (only on mobile) */
+  .backdrop{
+    position:absolute;inset:0;background:rgba(0,0,0,0.55);
+    z-index:70;opacity:0;pointer-events:none;
+    transition:opacity 0.2s ease;
+  }
+  .backdrop.show{opacity:1;pointer-events:auto}
+
+  @media (max-width:900px) and (orientation:landscape){
+    .device{aspect-ratio:auto;height:96vh;width:96vw}
+    .body{grid-template-columns:200px 1fr}
+    footer{flex-wrap:wrap;height:auto;padding:10px 12px;gap:8px}
+    .slider{max-width:none;min-width:130px}
+  }
+
+  /* ─────── PHONE PORTRAIT ─────── */
+  @media (max-width:720px), (orientation:portrait) and (max-width:900px){
+    body{background:#000}
+    .device{
+      width:100vw;height:100vh;height:100dvh;max-height:100dvh;
+      aspect-ratio:auto;border-radius:0;border:none;box-shadow:none;
+      padding-top:env(safe-area-inset-top);
+      padding-bottom:env(safe-area-inset-bottom);
+      padding-left:env(safe-area-inset-left);
+      padding-right:env(safe-area-inset-right);
+    }
+    .menu-btn{display:flex}
+    .title em{display:none}
+    header{padding:0 12px;font-size:9.5px;gap:8px}
+    .h-r{gap:8px}
+    .h-r span:nth-child(3),  /* "ONLINE" */
+    .h-r .ch{display:none}
+
+    /* drawer side panel */
+    .body{grid-template-columns:1fr;position:relative}
+    aside{
+      position:absolute;left:0;top:0;bottom:0;width:min(280px,82vw);
+      transform:translateX(-100%);
+      transition:transform 0.25s ease;
+      z-index:80;border-right:1px solid var(--line2);
+      box-shadow:8px 0 24px rgba(0,0,0,0.55);
+      overflow-y:auto;
+    }
+    aside.open{transform:translateX(0)}
+
+    /* portrait grid: 2 cols × 3 rows */
+    .labels{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr 1fr}
+    .slot.s1{grid-column:1;grid-row:1}
+    .slot.s2{grid-column:2;grid-row:1}
+    .slot.s3{grid-column:1;grid-row:2}
+    .slot.s4{grid-column:2;grid-row:2}
+    .slot.s5{grid-column:1;grid-row:3}
+    .slot.s6{grid-column:2;grid-row:3}
+    .grid-overlay{
+      background:
+        linear-gradient(0deg,transparent calc(33.333% - 0.5px),var(--line) calc(33.333% - 0.5px),var(--line) calc(33.333% + 0.5px),transparent calc(33.333% + 0.5px)),
+        linear-gradient(0deg,transparent calc(66.666% - 0.5px),var(--line) calc(66.666% - 0.5px),var(--line) calc(66.666% + 0.5px),transparent calc(66.666% + 0.5px)),
+        linear-gradient(90deg,transparent calc(50% - 0.5px),var(--line) calc(50% - 0.5px),var(--line) calc(50% + 0.5px),transparent calc(50% + 0.5px));
+    }
+    .slot .sl-id{top:6px;left:10px;font-size:9px}
+    .slot .sl-meta{top:6px;right:10px;font-size:8.5px}
+
+    /* footer: two rows, sliders horizontally scrollable strip */
+    footer{
+      height:auto;flex-wrap:wrap;padding:8px 10px;gap:8px;
+      row-gap:6px;
+    }
+    .mode-group{width:100%;justify-content:space-between}
+    .mode-group .label{display:none}
+    .mode-btn{padding:7px 10px;flex:1;min-width:0}
+    .mode-btn.rec{flex:none;padding:7px 14px;margin-left:auto}
+    .slider{
+      max-width:none;min-width:0;flex:1 1 calc(50% - 4px);
+    }
+    .slider .name{min-width:22px}
+    .grain-toggle{margin-left:auto}
+
+    /* signoff hidden on phone (no room) */
+    .signoff{display:none}
+
+    /* prevent INK pad from being huge in the drawer */
+    .ink-box{max-width:220px}
+  }
+</style>
+</head>
+<body>
+
+<div class="device">
+  <header>
+    <div class="h-l">
+      <button class="menu-btn" id="menu-btn" aria-label="Menu">
+        <svg width="14" height="12" viewBox="0 0 14 12"><rect y="0"  width="14" height="1.4" fill="currentColor"/><rect y="5.3" width="14" height="1.4" fill="currentColor"/><rect y="10.6" width="14" height="1.4" fill="currentColor"/></svg>
+      </button>
+      <span class="dots"><i></i><i></i><i></i></span>
+      <span class="title">CONOSCOPE.RESONANCE <em>/ V6.0 · LATENT</em></span>
+    </div>
+    <div class="h-r">
+      <span class="rec-led" id="rec-led"></span>
+      <span class="led"></span>
+      <span>ONLINE</span>
+      <span class="ch">// CH·25B</span>
+      <span>LATENT-DRIFT</span>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside>
+      <div class="ink-box" id="inkbox">
+        <span class="label">INK</span>
+        <span class="meta" id="ink-meta">01 · 10° · A24</span>
+        <span class="corner tl"></span><span class="corner tr"></span>
+        <span class="corner bl"></span><span class="corner br"></span>
+        <span class="hint">DRAG TO<br>MODULATE</span>
+        <canvas id="ink"></canvas>
+      </div>
+
+      <div class="prompt-box">
+        <span class="h">// PROMPT</span>
+        <input id="prompt" type="text" maxlength="64" placeholder="ENTER PROMPT  ↩" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="src-box">
+        <span class="h">// SOURCE</span>
+        <div class="src-btns">
+          <button class="src-btn active" data-src="LOCAL" title="fbm noise">LOCAL</button>
+          <button class="src-btn" data-src="WEATHER" title="Open-Meteo">WX</button>
+          <button class="src-btn" data-src="MARKET" title="CoinGecko">$</button>
+        </div>
+        <div class="src-status" id="src-status">fbm latent walk</div>
+      </div>
+
+      <div class="tlm">
+        <div class="h">// TLM</div>
+        <div class="row"><span class="k">STAGE</span><span class="v" id="v-stage">ON · LIVE</span></div>
+        <div class="row"><span class="k">MODE</span><span class="v" id="v-mode">DRIFT</span></div>
+        <div class="row"><span class="k">SRC</span><span class="v signal" id="v-src">LOCAL</span></div>
+        <div class="row"><span class="k">SEED</span><span class="v signal" id="v-seed">0x0000</span></div>
+        <div class="row"><span class="k">EPOCH</span><span class="v" id="v-epoch">0000</span></div>
+        <div class="row"><span class="k">L·X</span><span class="v signal" id="v-lx">+0.00</span></div>
+        <div class="row"><span class="k">L·Y</span><span class="v signal" id="v-ly">+0.00</span></div>
+        <div class="row"><span class="k">L·Z</span><span class="v signal" id="v-lz">+0.00</span></div>
+        <div class="row"><span class="k">L·W</span><span class="v signal" id="v-lw">+0.00</span></div>
+        <div class="row"><span class="k">DIFF</span><span class="v" id="v-diff">0.00</span></div>
+        <div class="row"><span class="k">FX</span><span class="v" id="v-fx">FB+GRAIN</span></div>
+      </div>
+
+      <button class="clear-btn" id="reseed">RESEED ⟳</button>
+    </aside>
+
+    <main>
+      <canvas id="gl"></canvas>
+      <div class="grid-overlay"></div>
+      <div class="labels">
+        <div class="slot s1"><span class="sl-id"><b>R1</b></span><span class="sl-meta">10° · A24</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s2"><span class="sl-id"><b>R2</b></span><span class="sl-meta">20° · A24</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s3"><span class="sl-id"><b>R3</b></span><span class="sl-meta">30° · A24</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s4"><span class="sl-id"><b>R4</b></span><span class="sl-meta">10° · A49</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s5"><span class="sl-id"><b>R5</b></span><span class="sl-meta">20° · A49</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+        <div class="slot s6"><span class="sl-id"><b>R6</b></span><span class="sl-meta">30° · A49</span><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+      </div>
+      <div class="download-toast" id="dl-toast">RECORDING SAVED <a id="dl-link" href="#" download="conoscope-ai.webm">DOWNLOAD</a></div>
+    </main>
+  </div>
+
+  <footer>
+    <div class="mode-group">
+      <span class="label">MODE</span>
+      <button class="mode-btn" data-mode="SOLO">SOLO</button>
+      <button class="mode-btn" data-mode="SYM">SYM</button>
+      <button class="mode-btn drift active" data-mode="DRIFT">DRIFT</button>
+    </div>
+
+    <div class="slider" data-key="V2"><span class="name">2V</span><div class="track"><span class="knob"></span></div><span class="val">39°</span></div>
+    <div class="slider" data-key="A1"><span class="name">A</span><div class="track"><span class="knob"></span></div><span class="val">49°</span></div>
+    <div class="slider" data-key="FB"><span class="name">FB</span><div class="track"><span class="knob"></span></div><span class="val">065</span></div>
+    <div class="slider" data-key="WRP"><span class="name">WRP</span><div class="track"><span class="knob"></span></div><span class="val">050</span></div>
+    <div class="slider" data-key="GAIN"><span class="name">GAIN</span><div class="track"><span class="knob"></span></div><span class="val">040</span></div>
+
+    <div class="grain-toggle on" id="grain-toggle" title="GRAIN">
+      <svg width="12" height="12" viewBox="0 0 12 12"><circle cx="2" cy="2" r="0.7" fill="currentColor"/><circle cx="7" cy="3" r="0.6" fill="currentColor"/><circle cx="10" cy="6" r="0.7" fill="currentColor"/><circle cx="4" cy="6" r="0.5" fill="currentColor"/><circle cx="8" cy="9" r="0.7" fill="currentColor"/><circle cx="3" cy="10" r="0.6" fill="currentColor"/></svg>
+    </div>
+
+    <button class="mode-btn rec" id="rec-btn" title="Record WebM (R)">REC</button>
+  </footer>
+
+  <div class="signoff">conoscope.engine // latent·v6 // 60Hz feedback</div>
+  <div class="backdrop" id="backdrop"></div>
+</div>
+
+<!-- shared vertex shader -->
+<script id="vs" type="x-shader/x-vertex">#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main(){
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+</script>
+
+<!-- FIELD pass: conoscope + feedback into FBO -->
+<script id="fs_field" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 outColor;
+
+uniform vec2  u_res;
+uniform float u_time;
+uniform sampler2D u_prev;
+
+uniform float u_2V, u_A, u_gain;
+uniform float u_sym, u_auto, u_drift;
+uniform vec2  u_ink;
+uniform float u_inkAmp;
+
+uniform float u_fb;
+uniform float u_warpRot;
+uniform float u_warpZoom;
+uniform vec2  u_warpOff;
+uniform float u_seed;
+uniform vec4  u_latent;
+uniform float u_diffusion;
+uniform float u_cols;
+uniform float u_rows;
+
+const float PI = 3.14159265359;
+
+// ── helpers ──
+float hash21(vec2 p){
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+vec3 hash33(vec2 p){
+  return vec3(hash21(p), hash21(p + 17.3), hash21(p + 31.7));
+}
+
+vec2 applySym(vec2 p){
+  float r = length(p);
+  float th = atan(p.y, p.x);
+  th = mod(th + PI, PI*0.5);
+  th = abs(th - PI*0.25);
+  return vec2(cos(th), sin(th)) * r;
+}
+
+vec3 isochromatic(vec2 pr, vec2 oa1, vec2 oa2, float order, float palette){
+  float d1 = length(pr - oa1);
+  float d2 = length(pr - oa2);
+  float r  = length(pr);
+  float gamma = d1 * d2 * order * (1.0 + 0.30 * r * r);
+  float retard = gamma * 2200.0;
+  // palette shifts the three reference wavelengths
+  vec3 lam = vec3(615.0, 540.0, 465.0) + palette * vec3(40.0, -10.0, -30.0);
+  vec3 I = sin(PI * retard / lam);
+  I = I * I;
+  float ordFade = clamp(retard / 5500.0, 0.0, 1.0);
+  vec3 gray = vec3(dot(I, vec3(0.299, 0.587, 0.114)));
+  vec3 col = mix(I, gray * vec3(1.05, 1.0, 0.92), ordFade * 0.45);
+  col *= vec3(1.10 + palette*0.04, 1.02, 0.92 - palette*0.05);
+  return col;
+}
+
+float isogyre(vec2 pr, vec2 oa1, vec2 oa2){
+  float a1 = atan(pr.y - oa1.y, pr.x - oa1.x);
+  float a2 = atan(pr.y - oa2.y, pr.x - oa2.x);
+  float vib = 0.5 * (a1 + a2);
+  float ext = sin(2.0 * vib);
+  ext = ext * ext;
+  return mix(ext, 1.0, 0.18);
+}
+
+vec3 conoscopeColor(vec2 p, float V_half, float azim, float order, float palette){
+  float ca = cos(azim), sa = sin(azim);
+  vec2 pr = vec2(ca*p.x - sa*p.y, sa*p.x + ca*p.y);
+  float oaR = clamp(sin(V_half) * 1.55, 0.0, 0.92);
+  vec2 oa1 = vec2( oaR, 0.0);
+  vec2 oa2 = vec2(-oaR, 0.0);
+  vec3  iso  = isochromatic(pr, oa1, oa2, order, palette);
+  float ext  = isogyre(pr, oa1, oa2);
+  float d1 = length(pr - oa1);
+  float d2 = length(pr - oa2);
+  float melatope = smoothstep(0.0, 0.045, min(d1, d2));
+  vec3 col = iso * ext * melatope;
+  float r = length(pr);
+  col += exp(-r * r * 1.6) * 0.045;
+  return col;
+}
+
+void main(){
+  // ── per-slot uv / disc coords ──
+  vec2 cellSize = vec2(1.0/u_cols, 1.0/u_rows);
+  vec2 slotIdx  = floor(v_uv / cellSize);
+  vec2 slotCenter = (slotIdx + 0.5) * cellSize;
+  vec2 inSlotUV = (v_uv - slotCenter) / (cellSize * 0.5); // -1..1
+
+  vec2 cellPx = u_res * cellSize;
+  float side = min(cellPx.x, cellPx.y) * 0.86;
+  vec2 px = inSlotUV * cellPx * 0.5;
+  vec2 p = px / (side * 0.5);
+
+  float idx = slotIdx.y * u_cols + slotIdx.x;
+  float r0 = length(p);
+
+  // ── feedback warp (sample previous frame at distorted slot-UV) ──
+  vec2 wsU = inSlotUV;
+  {
+    float a = u_warpRot;
+    float ca = cos(a), sa = sin(a);
+    wsU = mat2(ca,-sa,sa,ca) * wsU;
+    wsU *= (1.0 - u_warpZoom);
+    wsU += u_warpOff + u_ink * 0.03 * u_inkAmp + 0.02 * vec2(u_latent.x, u_latent.y) * u_drift;
+  }
+  vec2 prevUV = slotCenter + wsU * cellSize * 0.5;
+  vec2 slotMin = slotCenter - cellSize * 0.5;
+  vec2 slotMax = slotCenter + cellSize * 0.5;
+  vec2 texel = 1.0 / u_res;
+  prevUV = clamp(prevUV, slotMin + texel, slotMax - texel);
+  vec3 prevCol = texture(u_prev, prevUV).rgb;
+
+  // ── outside disc → frame bg, but allow soft trails to remain ──
+  if (r0 > 1.0){
+    vec3 bg = vec3(0.018, 0.020, 0.024);
+    vec3 fadedTrail = prevCol * 0.90;
+    outColor = vec4(mix(bg, fadedTrail, u_fb * 0.35), 1.0);
+    return;
+  }
+
+  // ── slot-specific defaults ──
+  float col_i = mod(idx, 3.0);
+  float row_i = floor(idx / 3.0);
+  float V2_local = (10.0 + col_i * 10.0) * (PI/180.0);
+  float A_local  = (row_i > 0.5 ? 49.0 : 24.0) * (PI/180.0);
+
+  // ── parameter latent biasing (DRIFT mode pulls hard, others gently) ──
+  float V_half = 0.5 * V2_local
+               + (u_2V * PI/180.0) * 0.22
+               + u_latent.x * 0.35 * u_drift;
+  float azim   = A_local
+               + u_A * PI/180.0 * 0.30
+               + u_latent.y * 1.30 * u_drift
+               + idx * 0.10 * u_seed;
+  float palette = u_latent.w * u_drift + (u_seed - 0.5) * 0.4;
+
+  if (u_inkAmp > 0.001){
+    p += u_ink * 0.20 * u_inkAmp;
+    azim += u_ink.x * 0.70 * u_inkAmp;
+    V_half += u_ink.y * 0.30 * u_inkAmp;
+  }
+  if (u_sym > 0.5) p = applySym(p);
+
+  // breathing (auto adds amplitude)
+  float autoG = 1.0 + u_auto * 3.0 + u_drift * 1.5;
+  V_half += 0.045 * sin(u_time * 0.27 + idx * 0.9) * autoG;
+  azim   += 0.090 * sin(u_time * 0.19 + idx * 1.7) * autoG;
+
+  float orderBase = 1.55 + 0.05 * sin(u_time*0.31);
+  float order = orderBase * (0.78 + 0.34 * (col_i / 2.0))
+              + u_latent.z * 0.45 * u_drift
+              + 0.06 * sin(u_time * 0.41 + idx * 2.3) * autoG;
+  order = clamp(order, 0.35, 4.0);
+
+  // ── render subject ──
+  vec3 baseCol = conoscopeColor(p, V_half, azim, order, palette);
+  baseCol *= (0.85 + u_gain * 1.5);
+
+  float discMask = 1.0 - smoothstep(0.95, 1.0, r0);
+  baseCol *= discMask;
+  float ring = smoothstep(0.985, 1.0, r0) - smoothstep(1.0, 1.012, r0);
+  baseCol += ring * vec3(0.05, 0.06, 0.08);
+
+  // ── diffusion-style noise burst (decays over a few seconds) ──
+  if (u_diffusion > 0.001){
+    vec3 noise = hash33(gl_FragCoord.xy + u_seed*1000.0);
+    // structured noise — biased toward the palette
+    noise = mix(noise, baseCol * 1.4, 0.3);
+    baseCol = mix(baseCol, noise, u_diffusion);
+  }
+
+  // ── feedback blend (with decay so trails fade out) ──
+  vec3 prevDecayed = prevCol * 0.965;
+  vec3 finalCol = mix(baseCol, prevDecayed, u_fb);
+  // keep fresh subject visible
+  finalCol = max(finalCol, baseCol * (1.0 - u_fb * 0.55));
+
+  outColor = vec4(finalCol, 1.0);
+}
+</script>
+
+<!-- SCREEN pass: read FBO, apply grain, output to default framebuffer -->
+<script id="fs_screen" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 outColor;
+
+uniform sampler2D u_field;
+uniform float u_time;
+uniform float u_grain;
+
+float hash21(vec2 p){
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+void main(){
+  vec3 col = texture(u_field, v_uv).rgb;
+
+  // tiny chromatic offset at edges (lens feel)
+  // skipped to keep speed; rely on field-pass detail.
+
+  if (u_grain > 0.5){
+    float g = hash21(gl_FragCoord.xy + vec2(u_time * 60.0, u_time * 31.7));
+    col += (g - 0.5) * 0.045;
+  }
+  col = pow(max(col, vec3(0.0)), vec3(0.92));
+  outColor = vec4(col, 1.0);
+}
+</script>
+
+<script>
+(() => {
+'use strict';
+
+// ───────── WebGL2 bootstrap ─────────
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', {antialias:false, alpha:false, premultipliedAlpha:false, preserveDrawingBuffer:true});
+if (!gl){
+  document.body.innerHTML = '<p style="color:#fff;font-family:monospace;padding:20px">WebGL2 not available.</p>';
+  return;
+}
+const colorFloatExt = gl.getExtension('EXT_color_buffer_float');
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src.trim());
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+    console.error(gl.getShaderInfoLog(s));
+    throw new Error('shader compile fail');
+  }
+  return s;
+}
+function link(vs, fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, vs); gl.attachShader(p, fs);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)){
+    console.error(gl.getProgramInfoLog(p));
+    throw new Error('link fail');
+  }
+  return p;
+}
+
+const VS  = compile(gl.VERTEX_SHADER, document.getElementById('vs').textContent);
+const FS_FIELD  = compile(gl.FRAGMENT_SHADER, document.getElementById('fs_field').textContent);
+const FS_SCREEN = compile(gl.FRAGMENT_SHADER, document.getElementById('fs_screen').textContent);
+
+const progField  = link(VS, FS_FIELD);
+const progScreen = link(VS, FS_SCREEN);
+
+// shared quad
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+
+function bindQuad(prog){
+  const aPos = gl.getAttribLocation(prog, 'a_pos');
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+}
+
+// uniform locations
+function locs(prog, names){
+  const out = {};
+  for (const n of names) out[n] = gl.getUniformLocation(prog, n);
+  return out;
+}
+const U_F = locs(progField, [
+  'u_res','u_time','u_prev','u_2V','u_A','u_gain','u_sym','u_auto','u_drift',
+  'u_ink','u_inkAmp','u_fb','u_warpRot','u_warpZoom','u_warpOff','u_seed','u_latent','u_diffusion',
+  'u_cols','u_rows'
+]);
+const U_S = locs(progScreen, ['u_field','u_time','u_grain']);
+
+// ───────── FBO ping-pong ─────────
+let fbo = [null, null];
+let tex = [null, null];
+let fbW = 0, fbH = 0;
+
+function createFB(w, h){
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  if (colorFloatExt){
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+  } else {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  }
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const f = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  // clear to black
+  gl.viewport(0, 0, w, h);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return {tex:t, fb:f};
+}
+
+function recreateFBOs(){
+  if (tex[0]) gl.deleteTexture(tex[0]);
+  if (tex[1]) gl.deleteTexture(tex[1]);
+  if (fbo[0]) gl.deleteFramebuffer(fbo[0]);
+  if (fbo[1]) gl.deleteFramebuffer(fbo[1]);
+  const a = createFB(fbW, fbH); tex[0] = a.tex; fbo[0] = a.fb;
+  const b = createFB(fbW, fbH); tex[1] = b.tex; fbo[1] = b.fb;
+}
+
+let pingPong = 0; // index of FBO to write into this frame
+
+// ── grid layout (3×2 desktop / landscape, 2×3 portrait phone) ──
+let layoutCols = 3, layoutRows = 2;
+function pickLayout(){
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (h > w * 1.15){ layoutCols = 2; layoutRows = 3; }
+  else              { layoutCols = 3; layoutRows = 2; }
+}
+
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  const newW = Math.max(2, Math.floor(w * dpr));
+  const newH = Math.max(2, Math.floor(h * dpr));
+  pickLayout();
+  if (newW === canvas.width && newH === canvas.height) return;
+  canvas.width = newW;
+  canvas.height = newH;
+  fbW = newW; fbH = newH;
+  recreateFBOs();
+}
+new ResizeObserver(resize).observe(canvas);
+window.addEventListener('orientationchange', () => setTimeout(resize, 100));
+resize();
+
+// ───────── state ─────────
+const state = {
+  mode: 'DRIFT',
+  V2: 39, A1: 49, GAIN: 40,
+  FB: 65, WRP: 50,
+  grain: 1,
+  ink: {x:0, y:0, amp:0},
+  inkTarget: {x:0, y:0},
+  seed: 0.137,
+  seedHex: '0x0000',
+  latent: [0,0,0,0],
+  diffusion: 0,
+  epoch: 0,
+  source: 'LOCAL',
+  latentTarget: [0,0,0,0],  // smoothed real-data target
+  latentSmooth: [0,0,0,0],  // EMA of target
+  lastFetchTs: 0,
+};
+
+// ───────── INK pad (same as v5.1) ─────────
+const inkCanvas = document.getElementById('ink');
+const inkCtx = inkCanvas.getContext('2d');
+const inkBox = document.getElementById('inkbox');
+let inkDragging = false;
+
+function sizeInk(){
+  const r = inkBox.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  inkCanvas.width = Math.floor(r.width * dpr);
+  inkCanvas.height = Math.floor(r.height * dpr);
+  inkCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+new ResizeObserver(sizeInk).observe(inkBox);
+sizeInk();
+
+function drawInk(){
+  const w = inkBox.clientWidth, h = inkBox.clientHeight;
+  inkCtx.clearRect(0,0,w,h);
+  inkCtx.save();
+  inkCtx.translate(w/2, h/2);
+  inkCtx.strokeStyle = 'rgba(180,190,205,0.55)';
+  inkCtx.lineWidth = 0.7;
+  const R = Math.min(w,h) * 0.32;
+  for (let i = 0; i < 3; i++){
+    const a = (i/3) * Math.PI;
+    inkCtx.save(); inkCtx.rotate(a);
+    inkCtx.beginPath();
+    inkCtx.ellipse(0, 0, R, R*0.55, 0, 0, Math.PI*2);
+    inkCtx.stroke(); inkCtx.restore();
+  }
+  inkCtx.strokeStyle = 'rgba(180,190,205,0.35)';
+  inkCtx.beginPath();
+  inkCtx.moveTo(-R*1.2, 0); inkCtx.lineTo(R*1.2, 0);
+  inkCtx.moveTo(0, -R*1.2); inkCtx.lineTo(0, R*1.2);
+  inkCtx.stroke();
+  const mx = state.ink.x * (w*0.42);
+  const my = -state.ink.y * (h*0.42);
+  inkCtx.fillStyle = '#e8eaed';
+  inkCtx.beginPath(); inkCtx.arc(mx, my, 2.4, 0, Math.PI*2); inkCtx.fill();
+  inkCtx.strokeStyle = 'rgba(232,234,237,0.4)';
+  inkCtx.lineWidth = 0.6;
+  inkCtx.beginPath(); inkCtx.arc(mx, my, 7, 0, Math.PI*2); inkCtx.stroke();
+  inkCtx.restore();
+}
+
+function inkPos(e){
+  const r = inkBox.getBoundingClientRect();
+  const x = ((e.clientX - r.left) / r.width  - 0.5) * 2;
+  const y = -((e.clientY - r.top)  / r.height - 0.5) * 2;
+  return {x:Math.max(-1,Math.min(1,x)), y:Math.max(-1,Math.min(1,y))};
+}
+inkBox.addEventListener('pointerdown', e => {
+  inkDragging = true; inkBox.setPointerCapture(e.pointerId);
+  state.inkTarget = inkPos(e); state.ink.amp = 1;
+});
+inkBox.addEventListener('pointermove', e => { if (inkDragging) state.inkTarget = inkPos(e); });
+inkBox.addEventListener('pointerup', () => { inkDragging = false; });
+inkBox.addEventListener('pointercancel', () => { inkDragging = false; });
+
+// ───────── sliders ─────────
+const ranges = {
+  V2:   {min:0,  max:90,  fmt:v=>Math.round(v)+'°'},
+  A1:   {min:0,  max:90,  fmt:v=>Math.round(v)+'°'},
+  FB:   {min:0,  max:95,  fmt:v=>String(Math.round(v)).padStart(3,'0')},
+  WRP:  {min:0,  max:100, fmt:v=>String(Math.round(v)).padStart(3,'0')},
+  GAIN: {min:0,  max:100, fmt:v=>String(Math.round(v)).padStart(3,'0')},
+};
+
+document.querySelectorAll('.slider').forEach(sl => {
+  const key = sl.dataset.key;
+  const track = sl.querySelector('.track');
+  const knob  = sl.querySelector('.knob');
+  const val   = sl.querySelector('.val');
+  const range = ranges[key];
+
+  function place(){
+    const tr = track.getBoundingClientRect();
+    const tw = tr.width - 24;
+    const pct = (state[key] - range.min) / (range.max - range.min);
+    knob.style.left = (6 + tw * pct) + 'px';
+    val.textContent = range.fmt(state[key]);
+  }
+  new ResizeObserver(place).observe(track);
+  sl._refresh = place;
+  setTimeout(place, 0);
+
+  let dragging = false;
+  function moveTo(clientX){
+    const tr = track.getBoundingClientRect();
+    const x = clientX - tr.left - 6;
+    const tw = tr.width - 12;
+    const pct = Math.max(0, Math.min(1, x / tw));
+    state[key] = range.min + pct * (range.max - range.min);
+    place();
+  }
+  track.addEventListener('pointerdown', e => { dragging = true; track.setPointerCapture(e.pointerId); moveTo(e.clientX); });
+  track.addEventListener('pointermove', e => { if (dragging) moveTo(e.clientX); });
+  track.addEventListener('pointerup',   () => { dragging = false; });
+  track.addEventListener('pointercancel', () => { dragging = false; });
+});
+function refreshAllSliders(){ document.querySelectorAll('.slider').forEach(sl => sl._refresh && sl._refresh()); }
+
+// ───────── mode buttons ─────────
+document.querySelectorAll('.mode-btn[data-mode]').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn[data-mode]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    state.mode = b.dataset.mode;
+    document.getElementById('v-mode').textContent = state.mode;
+  });
+});
+
+// grain
+const grainT = document.getElementById('grain-toggle');
+grainT.addEventListener('click', () => {
+  state.grain = state.grain ? 0 : 1;
+  grainT.classList.toggle('on', !!state.grain);
+  document.getElementById('v-fx').textContent = state.grain ? 'FB+GRAIN' : 'FB';
+});
+
+// menu drawer (mobile only — CSS hides menu-btn on desktop)
+const menuBtn  = document.getElementById('menu-btn');
+const backdrop = document.getElementById('backdrop');
+const asideEl  = document.querySelector('aside');
+function openDrawer(){ asideEl.classList.add('open');  backdrop.classList.add('show'); }
+function closeDrawer(){ asideEl.classList.remove('open'); backdrop.classList.remove('show'); }
+menuBtn.addEventListener('click', () => {
+  asideEl.classList.contains('open') ? closeDrawer() : openDrawer();
+});
+backdrop.addEventListener('click', closeDrawer);
+// auto-close drawer when user picks a source button on mobile
+document.querySelectorAll('.src-btn').forEach(b =>
+  b.addEventListener('click', () => {
+    if (window.matchMedia('(max-width:720px), (orientation:portrait) and (max-width:900px)').matches) {
+      closeDrawer();
+    }
+  })
+);
+
+// ───────── PROMPT → seed (FNV-1a) ─────────
+function hashPrompt(s){
+  if (!s || !s.length) return Math.random();
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++){
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h;
+}
+function seedFromPrompt(s){
+  const h = hashPrompt(s) >>> 0;
+  const hex = '0x' + h.toString(16).toUpperCase().padStart(8,'0').slice(-4);
+  const f = (h % 100000) / 100000;
+  return {seed:f, hex};
+}
+
+function triggerDiffusion(){
+  state.diffusion = 1;
+  state.epoch++;
+  document.getElementById('v-epoch').textContent = String(state.epoch).padStart(4,'0');
+}
+
+const promptEl = document.getElementById('prompt');
+function applyPrompt(){
+  const {seed, hex} = seedFromPrompt(promptEl.value);
+  state.seed = seed;
+  state.seedHex = hex;
+  document.getElementById('v-seed').textContent = hex;
+  triggerDiffusion();
+  // re-query the active data source so the new prompt takes effect immediately
+  if (state.source === 'WEATHER') fetchWeather();
+  else if (state.source === 'MARKET') fetchMarket();
+}
+promptEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); applyPrompt(); promptEl.blur(); }
+});
+promptEl.addEventListener('blur', applyPrompt);
+
+// reseed (random)
+document.getElementById('reseed').addEventListener('click', () => {
+  promptEl.value = '';
+  state.seed = Math.random();
+  state.seedHex = '0x' + Math.floor(state.seed * 65536).toString(16).toUpperCase().padStart(4,'0');
+  document.getElementById('v-seed').textContent = state.seedHex;
+  triggerDiffusion();
+});
+
+// ───────── recording ─────────
+const recBtn = document.getElementById('rec-btn');
+const recLed = document.getElementById('rec-led');
+const dlToast = document.getElementById('dl-toast');
+const dlLink  = document.getElementById('dl-link');
+let recorder = null, recChunks = [], recording = false;
+
+function startRecord(){
+  if (recording) return;
+  if (!('MediaRecorder' in window) || typeof canvas.captureStream !== 'function'){
+    alert('MediaRecorder / captureStream not supported.');
+    return;
+  }
+  const stream = canvas.captureStream(60);
+  const candidates = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  let mime = '';
+  for (const c of candidates) if (MediaRecorder.isTypeSupported(c)){ mime = c; break; }
+  if (!mime){ alert('No supported WebM codec.'); return; }
+  recChunks = [];
+  recorder = new MediaRecorder(stream, {mimeType: mime, videoBitsPerSecond: 8_000_000});
+  recorder.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+  recorder.onstop = () => {
+    const blob = new Blob(recChunks, {type: 'video/webm'});
+    const url  = URL.createObjectURL(blob);
+    if (dlLink._url) URL.revokeObjectURL(dlLink._url);
+    dlLink._url = url; dlLink.href = url;
+    const ts = new Date().toISOString().replace(/[:.]/g,'-');
+    dlLink.download = `conoscope-ai-${ts}.webm`;
+    dlToast.classList.add('show');
+    dlLink.click();
+    setTimeout(() => dlToast.classList.remove('show'), 8000);
+  };
+  recorder.start(1000);
+  recording = true;
+  recBtn.classList.add('active');
+  recBtn.textContent = 'STOP';
+  recLed.classList.add('on');
+  document.getElementById('v-stage').textContent = 'REC · ' + (mime.split(';')[1] || 'WEBM').trim();
+}
+function stopRecord(){
+  if (!recording || !recorder) return;
+  recorder.stop();
+  recording = false;
+  recBtn.classList.remove('active');
+  recBtn.textContent = 'REC';
+  recLed.classList.remove('on');
+  document.getElementById('v-stage').textContent = 'ON · LIVE';
+}
+recBtn.addEventListener('click', () => { recording ? stopRecord() : startRecord(); });
+
+// shortcuts
+window.addEventListener('keydown', e => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  const k = e.key.toLowerCase();
+  if (k === 'r')        recBtn.click();
+  else if (k === 'd')   document.querySelector('.mode-btn[data-mode="DRIFT"]').click();
+  else if (k === 's')   document.querySelector('.mode-btn[data-mode="SYM"]').click();
+  else if (k === ' '){ e.preventDefault(); document.querySelector('.mode-btn[data-mode="SOLO"]').click(); }
+  else if (k === 'g')   grainT.click();
+  else if (k === 'n')   document.getElementById('reseed').click();
+});
+
+// ───────── readouts ─────────
+const vEpoch = document.getElementById('v-epoch');
+const vLx = document.getElementById('v-lx');
+const vLy = document.getElementById('v-ly');
+const vLz = document.getElementById('v-lz');
+const vLw = document.getElementById('v-lw');
+const vDiff = document.getElementById('v-diff');
+const inkMeta = document.getElementById('ink-meta');
+
+function fmtSigned(v){ return (v>=0?'+':'') + v.toFixed(2); }
+
+// ───────── latent walk (1D smooth fbm × 4) ─────────
+function hash11(p){
+  p = (Math.sin(p * 12.9898) * 43758.5453);
+  return p - Math.floor(p);
+}
+function vnoise1(x){
+  const i = Math.floor(x);
+  const f = x - i;
+  const a = hash11(i);
+  const b = hash11(i + 1);
+  const u = f*f*(3 - 2*f);
+  return a + (b - a) * u;
+}
+function fbm1(x){
+  let v = 0, amp = 0.5;
+  for (let i = 0; i < 4; i++){
+    v += amp * vnoise1(x);
+    x *= 2;
+    amp *= 0.5;
+  }
+  return (v - 0.5) * 2; // ~ -1..1
+}
+function computeLatent(t){
+  const s = state.seed;
+  const fx = fbm1(t * 0.07 + s * 137.31);
+  const fy = fbm1(t * 0.11 + s * 271.71);
+  const fz = fbm1(t * 0.05 + s * 314.59);
+  const fw = fbm1(t * 0.09 + s * 466.13);
+
+  if (state.source === 'LOCAL'){
+    state.latent[0] = fx;
+    state.latent[1] = fy;
+    state.latent[2] = fz;
+    state.latent[3] = fw;
+  } else {
+    // EMA-smooth the API target so visuals drift toward fresh data
+    for (let i = 0; i < 4; i++){
+      state.latentSmooth[i] += (state.latentTarget[i] - state.latentSmooth[i]) * 0.012;
+    }
+    // small fbm jitter keeps the figure breathing between updates
+    state.latent[0] = state.latentSmooth[0] + 0.18 * fx;
+    state.latent[1] = state.latentSmooth[1] + 0.18 * fy;
+    state.latent[2] = state.latentSmooth[2] + 0.18 * fz;
+    state.latent[3] = state.latentSmooth[3] + 0.18 * fw;
+  }
+}
+
+// ───────── data sources (Open-Meteo + CoinGecko, keyless + CORS-open) ─────────
+const srcStatus = document.getElementById('src-status');
+const vSrc      = document.getElementById('v-src');
+let fetchTimer = null;
+let fetchInFlight = false;
+
+function setStatus(text, cls){
+  srcStatus.classList.remove('err', 'ok');
+  if (cls) srcStatus.classList.add(cls);
+  srcStatus.textContent = text;
+}
+
+function norm(v, lo, hi){
+  if (v == null || !isFinite(v)) return 0;
+  return Math.max(-1, Math.min(1, ((v - lo) / (hi - lo)) * 2 - 1));
+}
+
+async function fetchWeather(){
+  if (fetchInFlight) return;
+  fetchInFlight = true;
+  try {
+    const q = (promptEl.value || 'tokyo').trim();
+    let lat, lon, label;
+    // accept "35.68,139.69" as raw coordinates
+    const m = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (m){
+      lat = parseFloat(m[1]); lon = parseFloat(m[2]);
+      label = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+    } else {
+      const g = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`);
+      const gj = await g.json();
+      const r = gj.results && gj.results[0];
+      if (!r) throw new Error(`no match: ${q}`);
+      lat = r.latitude; lon = r.longitude;
+      label = r.name;
+    }
+    const wx = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,pressure_msl,cloud_cover`);
+    const wj = await wx.json();
+    const c = wj.current;
+    if (!c) throw new Error('no current data');
+    state.latentTarget[0] = norm(c.temperature_2m,  -10, 40);
+    state.latentTarget[1] = norm(c.wind_speed_10m,   0, 25);
+    state.latentTarget[2] = norm(c.pressure_msl,   985, 1030);
+    state.latentTarget[3] = norm(c.cloud_cover,      0, 100);
+    state.lastFetchTs = performance.now();
+    setStatus(`${label} ${c.temperature_2m.toFixed(1)}°C  ${c.wind_speed_10m.toFixed(0)}m/s  ${Math.round(c.pressure_msl)}hPa  ${Math.round(c.cloud_cover)}%`, 'ok');
+    triggerDiffusion();
+  } catch (e){
+    setStatus('WX fail: ' + (e.message || e), 'err');
+  } finally {
+    fetchInFlight = false;
+  }
+}
+
+async function fetchMarket(){
+  if (fetchInFlight) return;
+  fetchInFlight = true;
+  try {
+    const defaults = ['bitcoin','ethereum','solana','dogecoin'];
+    let ids = (promptEl.value || '').toLowerCase()
+      .split(/[,\s]+/).filter(Boolean).slice(0,4);
+    while (ids.length < 4) ids.push(defaults[ids.length]);
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('http ' + r.status);
+    const j = await r.json();
+    const ch = id => (j[id] && j[id].usd_24h_change) || 0;
+    const pr = id => (j[id] && j[id].usd) || 0;
+    state.latentTarget[0] = norm(ch(ids[0]), -10, 10);
+    state.latentTarget[1] = norm(ch(ids[1]), -10, 10);
+    state.latentTarget[2] = norm(ch(ids[2]), -10, 10);
+    state.latentTarget[3] = norm(ch(ids[3]), -10, 10);
+    state.lastFetchTs = performance.now();
+    const top = ids[0].slice(0,3).toUpperCase();
+    const c0 = ch(ids[0]);
+    setStatus(`${top} $${pr(ids[0]).toFixed(2)}  ${c0 >= 0 ? '+' : ''}${c0.toFixed(2)}% / 24h`, 'ok');
+    triggerDiffusion();
+  } catch (e){
+    setStatus('$ fail: ' + (e.message || e), 'err');
+  } finally {
+    fetchInFlight = false;
+  }
+}
+
+function setSource(src){
+  state.source = src;
+  vSrc.textContent = src;
+  if (fetchTimer){ clearInterval(fetchTimer); fetchTimer = null; }
+  // reset target so we don't keep stale data when switching
+  state.latentTarget = [0,0,0,0];
+
+  if (src === 'WEATHER'){
+    promptEl.placeholder = 'city / "lat,lon" ↩';
+    setStatus('fetching weather…');
+    fetchWeather();
+    fetchTimer = setInterval(fetchWeather, 30000);
+  } else if (src === 'MARKET'){
+    promptEl.placeholder = 'bitcoin,ethereum,sol,doge ↩';
+    setStatus('fetching market…');
+    fetchMarket();
+    fetchTimer = setInterval(fetchMarket, 15000);
+  } else {
+    promptEl.placeholder = 'ENTER PROMPT  ↩';
+    setStatus('fbm latent walk');
+  }
+}
+
+document.querySelectorAll('.src-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.src-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    setSource(b.dataset.src);
+  });
+});
+
+// initial seed from default empty prompt → random
+state.seed = Math.random();
+state.seedHex = '0x' + Math.floor(state.seed * 65536).toString(16).toUpperCase().padStart(4,'0');
+document.getElementById('v-seed').textContent = state.seedHex;
+triggerDiffusion();
+
+// ───────── render loop ─────────
+let t0 = performance.now();
+let lastT = 0;
+function frame(now){
+  const dt = (now - t0) / 1000;
+  const frameDt = Math.min(0.05, Math.max(0.0001, dt - lastT));
+  lastT = dt;
+
+  // smooth ink follow
+  state.ink.x += (state.inkTarget.x - state.ink.x) * 0.12;
+  state.ink.y += (state.inkTarget.y - state.ink.y) * 0.12;
+  if (!inkDragging) state.ink.amp += (0 - state.ink.amp) * 0.005;
+  else              state.ink.amp += (1 - state.ink.amp) * 0.15;
+
+  // diffusion decay (~ 1.5 sec)
+  state.diffusion = Math.max(0, state.diffusion - frameDt * 0.7);
+
+  // latent walk
+  computeLatent(dt);
+
+  // readouts
+  vLx.textContent = fmtSigned(state.latent[0]);
+  vLy.textContent = fmtSigned(state.latent[1]);
+  vLz.textContent = fmtSigned(state.latent[2]);
+  vLw.textContent = fmtSigned(state.latent[3]);
+  vDiff.textContent = state.diffusion.toFixed(2);
+  inkMeta.textContent = `${state.seedHex} · L${(state.latent[0]).toFixed(1)}`;
+
+  drawInk();
+
+  // ── pass 1: render field into FBO[pingPong] sampling FBO[1-pingPong] ──
+  const writeIdx = pingPong;
+  const readIdx  = 1 - pingPong;
+
+  gl.useProgram(progField);
+  bindQuad(progField);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[writeIdx]);
+  gl.viewport(0, 0, fbW, fbH);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, tex[readIdx]);
+  gl.uniform1i(U_F.u_prev, 0);
+
+  gl.uniform2f(U_F.u_res, fbW, fbH);
+  gl.uniform1f(U_F.u_time, dt);
+  gl.uniform1f(U_F.u_2V, state.V2);
+  gl.uniform1f(U_F.u_A,  state.A1);
+  gl.uniform1f(U_F.u_gain, state.GAIN/100);
+  gl.uniform1f(U_F.u_sym,    state.mode === 'SYM'   ? 1 : 0);
+  gl.uniform1f(U_F.u_auto,   state.mode === 'AUTO'  ? 1 : 0);
+  gl.uniform1f(U_F.u_drift,  state.mode === 'DRIFT' ? 1 : 0.0);
+  gl.uniform2f(U_F.u_ink, state.ink.x, state.ink.y);
+  gl.uniform1f(U_F.u_inkAmp, state.ink.amp);
+  gl.uniform1f(U_F.u_fb, state.FB/100);
+
+  // warp depends on WRP slider + latent drift
+  const wrpAmt = state.WRP / 100;
+  const driftBoost = (state.mode === 'DRIFT' ? 1.0 : 0.35);
+  gl.uniform1f(U_F.u_warpRot, (0.002 + state.latent[3] * 0.006) * wrpAmt * driftBoost);
+  gl.uniform1f(U_F.u_warpZoom, (state.latent[2] * 0.008 + 0.001) * wrpAmt * driftBoost);
+  gl.uniform2f(U_F.u_warpOff,
+    state.latent[0] * 0.004 * wrpAmt * driftBoost,
+    state.latent[1] * 0.004 * wrpAmt * driftBoost);
+  gl.uniform1f(U_F.u_seed, state.seed);
+  gl.uniform4f(U_F.u_latent, state.latent[0], state.latent[1], state.latent[2], state.latent[3]);
+  gl.uniform1f(U_F.u_diffusion, state.diffusion);
+  gl.uniform1f(U_F.u_cols, layoutCols);
+  gl.uniform1f(U_F.u_rows, layoutRows);
+
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  // ── pass 2: read FBO, post-process, output to default framebuffer ──
+  gl.useProgram(progScreen);
+  bindQuad(progScreen);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, tex[writeIdx]);
+  gl.uniform1i(U_S.u_field, 0);
+  gl.uniform1f(U_S.u_time, dt);
+  gl.uniform1f(U_S.u_grain, state.grain);
+
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  // swap
+  pingPong = 1 - pingPong;
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(now => { t0 = now; requestAnimationFrame(frame); });
+
+})();
+</script>
+</body>
+</html>
