@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#0a0d0a" />
+<title>Oscilloscope Animator</title>
+<style>
+  :root {
+    --bg: #0a0d0a;
+    --panel: #14181a;
+    --panel-2: #1c2124;
+    --ink: #e8efe8;
+    --muted: #9aa6a0;
+    --accent: #38f7c4;
+    --accent-d: #1ac49a;
+    --border: #2a3032;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    overflow: hidden;
+    height: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    display: flex;
+    flex-direction: row;
+    height: 100vh;
+    height: 100dvh;
+  }
+  #controls {
+    width: 340px;
+    max-width: 100%;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 14px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  #stage {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(ellipse at center, #181c1a 0%, #07090a 70%, #000 100%);
+    overflow: hidden;
+  }
+  #screen {
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+    image-rendering: auto;
+    box-shadow: 0 0 80px rgba(0,0,0,0.7), inset 0 0 60px rgba(0,0,0,0.6);
+    border-radius: 12px;
+  }
+  h1 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  h2 {
+    margin: 14px 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  h2:first-of-type { border-top: 0; padding-top: 0; }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 8px 0 4px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .row > * { flex: 1; min-width: 0; }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  textarea { resize: vertical; min-height: 60px; }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  input[type="color"] {
+    width: 100%;
+    height: 32px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+  }
+  input[type="file"] {
+    color: var(--muted);
+    font-size: 12px;
+    width: 100%;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  button:hover { background: #232a2d; }
+  button:active { background: #2c3437; }
+  button.primary {
+    background: var(--accent);
+    color: #052418;
+    border-color: var(--accent);
+  }
+  button.primary:hover { background: var(--accent-d); }
+  button.danger {
+    background: #c4423c;
+    color: #fff;
+    border-color: #c4423c;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .val {
+    display: inline-block;
+    min-width: 48px;
+    text-align: right;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+  }
+  .source-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .source-tabs button {
+    flex: 1;
+    padding: 6px;
+    font-size: 12px;
+  }
+  .source-tabs button.active {
+    background: var(--accent);
+    color: #052418;
+    border-color: var(--accent);
+  }
+  .source-pane { display: none; }
+  .source-pane.active { display: block; }
+  #status {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    min-height: 14px;
+  }
+  #recDot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #c4423c;
+    margin-right: 6px;
+    vertical-align: middle;
+    animation: pulse 1s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  #toggleControls {
+    display: none;
+    position: absolute;
+    top: 10px; left: 10px;
+    z-index: 10;
+    padding: 8px 12px;
+    background: rgba(20,24,26,0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  @media (max-width: 720px) {
+    body { flex-direction: column; }
+    #controls {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      width: 100%;
+      z-index: 5;
+      transform: translateY(-100%);
+      transition: transform 0.25s ease;
+    }
+    #controls.open { transform: translateY(0); }
+    #toggleControls { display: block; }
+  }
+</style>
+</head>
+<body>
+
+<aside id="controls">
+  <h1>Oscilloscope Animator</h1>
+
+  <h2>入力ソース</h2>
+  <div class="source-tabs">
+    <button id="tabText" class="active" type="button">テキスト</button>
+    <button id="tabImage" type="button">画像 (PNG)</button>
+  </div>
+
+  <div id="paneText" class="source-pane active">
+    <label>表示テキスト</label>
+    <textarea id="textInput" placeholder="hello">hello</textarea>
+    <label>フォント</label>
+    <select id="fontFamily">
+      <option value='"Brush Script MT", "Snell Roundhand", cursive'>Script (筆記体)</option>
+      <option value='"Helvetica Neue", Arial, sans-serif'>Sans-serif</option>
+      <option value='Georgia, "Times New Roman", serif'>Serif</option>
+      <option value='"Courier New", monospace'>Monospace</option>
+      <option value='"Hiragino Sans", "Noto Sans JP", sans-serif'>日本語 Sans</option>
+      <option value='"Hiragino Mincho ProN", "Noto Serif JP", serif'>日本語 Serif</option>
+    </select>
+    <div class="row">
+      <div>
+        <label>太さ</label>
+        <select id="fontWeight">
+          <option value="400">Regular</option>
+          <option value="700" selected>Bold</option>
+          <option value="900">Black</option>
+        </select>
+      </div>
+      <div>
+        <label>スタイル</label>
+        <select id="fontStyle">
+          <option value="normal">Normal</option>
+          <option value="italic">Italic</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="paneImage" class="source-pane">
+    <label>PNG/JPG 画像</label>
+    <input id="imageInput" type="file" accept="image/*" />
+    <label>しきい値 <span class="val" id="thresholdVal">128</span></label>
+    <input id="threshold" type="range" min="0" max="255" value="128" />
+    <label>
+      <input id="invert" type="checkbox" /> 白黒反転
+    </label>
+    <label>
+      <input id="useAlpha" type="checkbox" checked /> 透過チャンネルを優先
+    </label>
+  </div>
+
+  <h2>アニメーション</h2>
+  <label>描画時間 <span class="val" id="drawTimeVal">3.0s</span></label>
+  <input id="drawTime" type="range" min="0.3" max="15" step="0.1" value="3.0" />
+  <label>保持時間 <span class="val" id="holdTimeVal">2.0s</span></label>
+  <input id="holdTime" type="range" min="0" max="15" step="0.1" value="2.0" />
+  <label>
+    <input id="loop" type="checkbox" checked /> ループ再生
+  </label>
+
+  <h2>ビーム</h2>
+  <label>色</label>
+  <input id="beamColor" type="color" value="#38f7c4" />
+  <label>線の太さ <span class="val" id="lineWidthVal">1.8</span></label>
+  <input id="lineWidth" type="range" min="0.5" max="6" step="0.1" value="1.8" />
+  <label>輝度 <span class="val" id="intensityVal">1.00</span></label>
+  <input id="intensity" type="range" min="0.2" max="2.5" step="0.05" value="1.0" />
+  <label>ブルーム <span class="val" id="bloomVal">1.00</span></label>
+  <input id="bloom" type="range" min="0" max="3" step="0.05" value="1.0" />
+
+  <h2>震え (リアリティ)</h2>
+  <label>線の震え <span class="val" id="jitterVal">1.00</span></label>
+  <input id="jitter" type="range" min="0" max="4" step="0.05" value="1.0" />
+  <label>画面の揺れ <span class="val" id="shakeVal">0.40</span></label>
+  <input id="shake" type="range" min="0" max="3" step="0.05" value="0.4" />
+  <label>残光 <span class="val" id="persistVal">0.92</span></label>
+  <input id="persist" type="range" min="0.0" max="0.99" step="0.01" value="0.92" />
+
+  <h2>CRT エフェクト</h2>
+  <label>走査線 <span class="val" id="scanlinesVal">0.35</span></label>
+  <input id="scanlines" type="range" min="0" max="1" step="0.01" value="0.35" />
+  <label>グラティキュール <span class="val" id="graticuleVal">0.30</span></label>
+  <input id="graticule" type="range" min="0" max="1" step="0.01" value="0.30" />
+  <label>ビネット <span class="val" id="vignetteVal">0.50</span></label>
+  <input id="vignette" type="range" min="0" max="1" step="0.01" value="0.50" />
+  <label>色収差 <span class="val" id="aberrationVal">0.40</span></label>
+  <input id="aberration" type="range" min="0" max="2" step="0.05" value="0.4" />
+
+  <h2>出力解像度</h2>
+  <select id="resolution">
+    <option value="960x540">540p (プレビュー)</option>
+    <option value="1280x720">720p HD</option>
+    <option value="1920x1080" selected>1080p Full HD</option>
+    <option value="2560x1440">1440p QHD</option>
+    <option value="3840x2160">2160p 4K UHD</option>
+  </select>
+
+  <h2>録画</h2>
+  <div class="row">
+    <button id="recBtn" type="button">● 録画開始</button>
+    <button id="recOneLoop" type="button">1ループ録画</button>
+  </div>
+  <div id="status"></div>
+
+</aside>
+
+<button id="toggleControls" type="button">≡ コントロール</button>
+
+<div id="stage">
+  <canvas id="screen"></canvas>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ========================================================================
+// State
+// ========================================================================
+const state = {
+  contours: null,           // { polylines: [[{x,y},...]], width, height }
+  totalLength: 0,
+  segments: null,           // flat list of segments with cumulative length
+  sourceType: 'text',
+  // animation
+  cycleStart: performance.now(),
+  // recording
+  recorder: null,
+  recordChunks: [],
+  recordOneLoop: false,
+  recordStartTime: 0,
+};
+
+// ========================================================================
+// DOM
+// ========================================================================
+const $ = id => document.getElementById(id);
+const canvas = $('screen');
+const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+
+// Offscreen layers
+const beamCanvas = document.createElement('canvas');
+const beamCtx = beamCanvas.getContext('2d', { alpha: true });
+const glowCanvas = document.createElement('canvas');
+const glowCtx = glowCanvas.getContext('2d', { alpha: true });
+const phosphorCanvas = document.createElement('canvas');
+const phosphorCtx = phosphorCanvas.getContext('2d', { alpha: true });
+
+// ========================================================================
+// Param getters
+// ========================================================================
+const params = {
+  drawTime: () => parseFloat($('drawTime').value),
+  holdTime: () => parseFloat($('holdTime').value),
+  loop:     () => $('loop').checked,
+  beamColor:() => $('beamColor').value,
+  lineWidth:() => parseFloat($('lineWidth').value),
+  intensity:() => parseFloat($('intensity').value),
+  bloom:    () => parseFloat($('bloom').value),
+  jitter:   () => parseFloat($('jitter').value),
+  shake:    () => parseFloat($('shake').value),
+  persist:  () => parseFloat($('persist').value),
+  scanlines:() => parseFloat($('scanlines').value),
+  graticule:() => parseFloat($('graticule').value),
+  vignette: () => parseFloat($('vignette').value),
+  aberration:() => parseFloat($('aberration').value),
+  resolution:() => $('resolution').value.split('x').map(Number),
+  threshold:() => parseInt($('threshold').value, 10),
+  invert:   () => $('invert').checked,
+  useAlpha: () => $('useAlpha').checked,
+};
+
+// ========================================================================
+// Wire up live value labels
+// ========================================================================
+const valueBindings = {
+  drawTime:   v => v.toFixed(1) + 's',
+  holdTime:   v => v.toFixed(1) + 's',
+  lineWidth:  v => v.toFixed(1),
+  intensity:  v => v.toFixed(2),
+  bloom:      v => v.toFixed(2),
+  jitter:     v => v.toFixed(2),
+  shake:      v => v.toFixed(2),
+  persist:    v => v.toFixed(2),
+  scanlines:  v => v.toFixed(2),
+  graticule:  v => v.toFixed(2),
+  vignette:   v => v.toFixed(2),
+  aberration: v => v.toFixed(2),
+  threshold:  v => String(v|0),
+};
+for (const k in valueBindings) {
+  const inp = $(k), out = $(k + 'Val');
+  if (!inp || !out) continue;
+  const update = () => { out.textContent = valueBindings[k](parseFloat(inp.value)); };
+  inp.addEventListener('input', update);
+  update();
+}
+
+// ========================================================================
+// Tabs
+// ========================================================================
+$('tabText').addEventListener('click', () => switchSource('text'));
+$('tabImage').addEventListener('click', () => switchSource('image'));
+
+function switchSource(which) {
+  state.sourceType = which;
+  $('tabText').classList.toggle('active', which === 'text');
+  $('tabImage').classList.toggle('active', which === 'image');
+  $('paneText').classList.toggle('active', which === 'text');
+  $('paneImage').classList.toggle('active', which === 'image');
+  rebuildSource();
+}
+
+// ========================================================================
+// Mobile toggle
+// ========================================================================
+$('toggleControls').addEventListener('click', () => {
+  $('controls').classList.toggle('open');
+});
+
+// ========================================================================
+// Resolution / canvas sizing
+// ========================================================================
+function applyResolution() {
+  const [w, h] = params.resolution();
+  canvas.width = w;
+  canvas.height = h;
+  beamCanvas.width = w;
+  beamCanvas.height = h;
+  glowCanvas.width = w;
+  glowCanvas.height = h;
+  phosphorCanvas.width = w;
+  phosphorCanvas.height = h;
+  // Hard-clear phosphor
+  phosphorCtx.clearRect(0, 0, w, h);
+  // Segment coordinates are baked in canvas pixels (see buildSegments),
+  // so a resolution change invalidates them. Rebuild from the existing
+  // contour cache, no need to re-trace the source.
+  if (state.contours) buildSegments();
+  fitCanvasToStage();
+}
+function fitCanvasToStage() {
+  const stage = $('stage');
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  if (sw === 0 || sh === 0) return;
+  const ar = canvas.width / canvas.height;
+  let dw = sw, dh = sw / ar;
+  if (dh > sh) { dh = sh; dw = sh * ar; }
+  canvas.style.width = dw + 'px';
+  canvas.style.height = dh + 'px';
+}
+window.addEventListener('resize', fitCanvasToStage);
+$('resolution').addEventListener('change', applyResolution);
+
+// ========================================================================
+// Source rebuild on parameter changes
+// ========================================================================
+const sourceTriggers = ['textInput','fontFamily','fontWeight','fontStyle','threshold','invert','useAlpha'];
+sourceTriggers.forEach(id => {
+  const el = $(id);
+  if (!el) return;
+  const evt = el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input';
+  el.addEventListener(evt, debounce(rebuildSource, 200));
+});
+
+function debounce(fn, ms) {
+  let t = null;
+  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+let lastImageBitmap = null;
+$('imageInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const bmp = await createImageBitmap(file);
+  lastImageBitmap = bmp;
+  switchSource('image');
+  rebuildSource();
+});
+
+// ========================================================================
+// Source -> mask -> contours pipeline
+// ========================================================================
+
+async function rebuildSource() {
+  setStatus('変換中...');
+  await new Promise(r => requestAnimationFrame(r));
+  try {
+    let mask, w, h;
+    if (state.sourceType === 'text') {
+      const t = $('textInput').value || ' ';
+      ({ mask, w, h } = textToMask(t));
+    } else {
+      if (!lastImageBitmap) {
+        setStatus('画像を選択してください');
+        state.contours = null;
+        state.segments = null;
+        return;
+      }
+      ({ mask, w, h } = imageToMask(lastImageBitmap));
+    }
+    const polylines = extractContours(mask, w, h);
+    state.contours = { polylines, width: w, height: h };
+    buildSegments();
+    setStatus(`${polylines.length} ストローク / ${state.totalLength.toFixed(0)} units`);
+    state.cycleStart = performance.now();
+  } catch (err) {
+    console.error(err);
+    setStatus('エラー: ' + err.message);
+  }
+}
+
+function setStatus(msg) { $('status').textContent = msg; }
+
+function textToMask(text) {
+  const family = $('fontFamily').value;
+  const weight = $('fontWeight').value;
+  const style = $('fontStyle').value;
+  const lines = text.split('\n');
+
+  // Render at a high enough resolution for clean contours.
+  const PX = 220;
+  const font = `${style} ${weight} ${PX}px ${family}`;
+  const measure = document.createElement('canvas').getContext('2d');
+  measure.font = font;
+  let maxW = 0;
+  for (const ln of lines) {
+    const m = measure.measureText(ln || ' ');
+    if (m.width > maxW) maxW = m.width;
+  }
+  const pad = PX * 0.4;
+  const lineH = PX * 1.25;
+  const w = Math.max(64, Math.ceil(maxW + pad * 2));
+  const h = Math.ceil(lineH * lines.length + pad * 2);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cx = c.getContext('2d', { willReadFrequently: true });
+  cx.fillStyle = '#ffffff';
+  cx.fillRect(0, 0, w, h);
+  cx.fillStyle = '#000000';
+  cx.font = font;
+  cx.textBaseline = 'middle';
+  for (let i = 0; i < lines.length; i++) {
+    cx.fillText(lines[i], pad, pad + lineH * (i + 0.5));
+  }
+  const img = cx.getImageData(0, 0, w, h);
+  const data = img.data;
+  const mask = new Uint8Array(w * h);
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    const lum = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+    mask[j] = lum < 128 ? 1 : 0;
+  }
+  return { mask, w, h };
+}
+
+function imageToMask(bmp) {
+  // Resize to a manageable processing size.
+  const MAX = 700;
+  let w = bmp.width, h = bmp.height;
+  const s = Math.min(1, MAX / Math.max(w, h));
+  w = Math.max(32, Math.round(w * s));
+  h = Math.max(32, Math.round(h * s));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cx = c.getContext('2d', { willReadFrequently: true });
+  cx.drawImage(bmp, 0, 0, w, h);
+  const img = cx.getImageData(0, 0, w, h);
+  const data = img.data;
+
+  let hasAlpha = false;
+  if (params.useAlpha()) {
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] < 250) { hasAlpha = true; break; }
+    }
+  }
+  const thr = params.threshold();
+  const inv = params.invert();
+  const mask = new Uint8Array(w * h);
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    let v;
+    if (hasAlpha) {
+      v = data[i + 3] > 128 ? 1 : 0;
+    } else {
+      const lum = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+      v = lum < thr ? 1 : 0;
+    }
+    if (inv) v = 1 - v;
+    mask[j] = v;
+  }
+  return { mask, w, h };
+}
+
+// Extract 4-neighbour boundary, then walk it as 8-connected polylines.
+function extractContours(mask, w, h) {
+  const boundary = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x;
+      if (mask[idx] !== 1) continue;
+      const isBnd =
+        x === 0 || x === w - 1 || y === 0 || y === h - 1 ||
+        !mask[(y - 1) * w + x] ||
+        !mask[(y + 1) * w + x] ||
+        !mask[y * w + (x - 1)] ||
+        !mask[y * w + (x + 1)];
+      if (isBnd) boundary[idx] = 1;
+    }
+  }
+
+  const visited = new Uint8Array(w * h);
+  const polylines = [];
+
+  function countN(x, y) {
+    let n = 0;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < w && ny < h && boundary[ny * w + nx]) n++;
+      }
+    return n;
+  }
+
+  function trace(sx, sy) {
+    const path = [{ x: sx, y: sy }];
+    visited[sy * w + sx] = 1;
+    let cx = sx, cy = sy;
+    let prevDx = 0, prevDy = 0;
+    const safety = w * h * 2;
+    for (let s = 0; s < safety; s++) {
+      // Find best unvisited neighbour, prefer continuing straight.
+      let best = null, bestScore = -Infinity;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const ni = ny * w + nx;
+          if (!boundary[ni] || visited[ni]) continue;
+          const straight = dx * prevDx + dy * prevDy;
+          const diag = (dx !== 0 && dy !== 0) ? -0.3 : 0;
+          const score = straight + diag;
+          if (score > bestScore) { bestScore = score; best = { x: nx, y: ny, dx, dy }; }
+        }
+      }
+      if (!best) break;
+      cx = best.x; cy = best.y;
+      prevDx = best.dx; prevDy = best.dy;
+      visited[cy * w + cx] = 1;
+      path.push({ x: cx, y: cy });
+    }
+    return path;
+  }
+
+  // Pass 1: endpoints first (open curves)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x;
+      if (boundary[idx] && !visited[idx] && countN(x, y) === 1) {
+        const p = trace(x, y);
+        if (p.length >= 6) polylines.push(p);
+      }
+    }
+  }
+  // Pass 2: loops
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x;
+      if (boundary[idx] && !visited[idx]) {
+        const p = trace(x, y);
+        if (p.length >= 6) {
+          // Close the loop visually
+          p.push({ x: p[0].x, y: p[0].y });
+          polylines.push(p);
+        }
+      }
+    }
+  }
+
+  // Simplify each polyline (subsample) to reduce point count without losing shape.
+  const simplified = polylines.map(p => simplifyPolyline(p, 1.2));
+
+  // Sort polylines for a more natural draw order: largest first, then nearest-next.
+  simplified.sort((a, b) => b.length - a.length);
+  const ordered = greedyOrder(simplified);
+
+  return ordered;
+}
+
+// Douglas-Peucker on an open polyline. The classic algorithm assumes
+// start != end so the reference line has a non-zero direction; closed
+// loops must be split into two open halves first (see simplifyPolyline).
+function dpSimplify(pts, tol) {
+  if (pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length);
+  keep[0] = 1; keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    let maxD = 0, idx = -1;
+    const ax = pts[a].x, ay = pts[a].y, bx = pts[b].x, by = pts[b].y;
+    const dx = bx - ax, dy = by - ay;
+    const len = Math.hypot(dx, dy) || 1;
+    for (let i = a + 1; i < b; i++) {
+      const px = pts[i].x, py = pts[i].y;
+      const d = Math.abs((dy * px - dx * py + bx * ay - by * ax)) / len;
+      if (d > maxD) { maxD = d; idx = i; }
+    }
+    if (maxD > tol && idx !== -1) {
+      keep[idx] = 1;
+      stack.push([a, idx]);
+      stack.push([idx, b]);
+    }
+  }
+  const out = [];
+  for (let i = 0; i < pts.length; i++) if (keep[i]) out.push(pts[i]);
+  return out;
+}
+
+function simplifyPolyline(pts, tol) {
+  if (pts.length < 3) return pts;
+  const last = pts.length - 1;
+  const closed = pts[0].x === pts[last].x && pts[0].y === pts[last].y;
+  if (closed) {
+    if (pts.length < 5) return pts;
+    // Anchor the second cut at the point farthest from pts[0]; otherwise
+    // the start->end reference line is zero-length and every interior
+    // point gets distance zero, collapsing the loop to a single point.
+    let farIdx = 1, farD = 0;
+    for (let i = 1; i < last; i++) {
+      const dx = pts[i].x - pts[0].x;
+      const dy = pts[i].y - pts[0].y;
+      const d = dx * dx + dy * dy;
+      if (d > farD) { farD = d; farIdx = i; }
+    }
+    if (farD < 4) return pts;
+    const h1 = dpSimplify(pts.slice(0, farIdx + 1), tol);
+    const h2 = dpSimplify(pts.slice(farIdx), tol);
+    return h1.concat(h2.slice(1));
+  }
+  return dpSimplify(pts, tol);
+}
+
+function greedyOrder(polylines) {
+  if (polylines.length <= 1) return polylines;
+  const used = new Array(polylines.length).fill(false);
+  const out = [polylines[0]];
+  used[0] = true;
+  let cur = polylines[0][polylines[0].length - 1];
+  for (let k = 1; k < polylines.length; k++) {
+    let best = -1, bestDist = Infinity, reverse = false;
+    for (let i = 0; i < polylines.length; i++) {
+      if (used[i]) continue;
+      const p = polylines[i];
+      const dStart = (p[0].x - cur.x) ** 2 + (p[0].y - cur.y) ** 2;
+      const dEnd = (p[p.length - 1].x - cur.x) ** 2 + (p[p.length - 1].y - cur.y) ** 2;
+      if (dStart < bestDist) { bestDist = dStart; best = i; reverse = false; }
+      if (dEnd < bestDist)   { bestDist = dEnd;   best = i; reverse = true; }
+    }
+    if (best === -1) break;
+    used[best] = true;
+    const next = reverse ? polylines[best].slice().reverse() : polylines[best];
+    out.push(next);
+    cur = next[next.length - 1];
+  }
+  return out;
+}
+
+// Flatten contours into segments with cumulative length, in screen space.
+function buildSegments() {
+  if (!state.contours) { state.segments = null; state.totalLength = 0; return; }
+  const { polylines, width: srcW, height: srcH } = state.contours;
+  const [W, H] = params.resolution();
+  // Fit source into 88% of screen, preserving aspect.
+  const margin = 0.10;
+  const fitW = W * (1 - margin * 2);
+  const fitH = H * (1 - margin * 2);
+  const scale = Math.min(fitW / srcW, fitH / srcH);
+  const offX = (W - srcW * scale) / 2;
+  const offY = (H - srcH * scale) / 2;
+
+  const segs = [];
+  let total = 0;
+  for (let pi = 0; pi < polylines.length; pi++) {
+    const poly = polylines[pi];
+    const pts = poly.map(p => ({ x: p.x * scale + offX, y: p.y * scale + offY }));
+    const segStart = total;
+    const subSegs = [];
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 0.001) continue;
+      subSegs.push({ a, b, len, startLen: total, endLen: total + len });
+      total += len;
+    }
+    if (subSegs.length) {
+      segs.push({ polyIndex: pi, sub: subSegs, startLen: segStart, endLen: total });
+    }
+  }
+  state.segments = segs;
+  state.totalLength = total;
+}
+
+// ========================================================================
+// Rendering
+// ========================================================================
+
+function hexToRgb(hex) {
+  const m = hex.replace('#','');
+  return {
+    r: parseInt(m.slice(0,2), 16),
+    g: parseInt(m.slice(2,4), 16),
+    b: parseInt(m.slice(4,6), 16),
+  };
+}
+
+function clearAll() {
+  const [W, H] = [canvas.width, canvas.height];
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  phosphorCtx.clearRect(0, 0, W, H);
+}
+
+function drawGraticule(t) {
+  const amt = params.graticule();
+  if (amt < 0.01) return;
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
+  // Scope screen area: tight around centre, ~84% of screen
+  const scopeW = Math.min(W, H * 1.25) * 0.88;
+  const scopeH = scopeW * 0.78;
+  const left = cx - scopeW / 2, top = cy - scopeH / 2;
+  ctx.save();
+  ctx.globalAlpha = amt * 0.5;
+  ctx.strokeStyle = 'rgba(120,160,140,0.5)';
+  ctx.lineWidth = Math.max(1, W / 1920);
+  // Grid: 10x8 divisions
+  const cols = 10, rows = 8;
+  for (let i = 0; i <= cols; i++) {
+    const x = left + (scopeW / cols) * i;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, top + scopeH);
+    ctx.stroke();
+  }
+  for (let j = 0; j <= rows; j++) {
+    const y = top + (scopeH / rows) * j;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(left + scopeW, y);
+    ctx.stroke();
+  }
+  // Centre crosshair ticks
+  ctx.globalAlpha = amt * 0.8;
+  ctx.strokeStyle = 'rgba(160,200,180,0.6)';
+  ctx.lineWidth = Math.max(1, W / 1280);
+  const ticks = 50;
+  for (let k = 0; k <= ticks; k++) {
+    const x = left + (scopeW / ticks) * k;
+    ctx.beginPath();
+    ctx.moveTo(x, cy - 6);
+    ctx.lineTo(x, cy + 6);
+    ctx.stroke();
+  }
+  for (let k = 0; k <= ticks * 0.8; k++) {
+    const y = top + (scopeH / (ticks * 0.8)) * k;
+    ctx.beginPath();
+    ctx.moveTo(cx - 6, y);
+    ctx.lineTo(cx + 6, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Sample a polyline up to cumLen along its sub-segments and apply per-vertex wobble.
+function samplePolylineUpTo(poly, cumLen, jitterAmt, t) {
+  const out = [];
+  for (let i = 0; i < poly.sub.length; i++) {
+    const s = poly.sub[i];
+    if (s.endLen <= cumLen) {
+      out.push(jitterPt(s.a, t, jitterAmt));
+      if (i === poly.sub.length - 1) out.push(jitterPt(s.b, t, jitterAmt));
+    } else if (s.startLen < cumLen) {
+      const f = (cumLen - s.startLen) / s.len;
+      out.push(jitterPt(s.a, t, jitterAmt));
+      const px = s.a.x + (s.b.x - s.a.x) * f;
+      const py = s.a.y + (s.b.y - s.a.y) * f;
+      out.push(jitterPt({ x: px, y: py }, t, jitterAmt));
+      break;
+    } else {
+      break;
+    }
+  }
+  return out;
+}
+
+function samplePolylineFull(poly, jitterAmt, t) {
+  const out = [];
+  for (let i = 0; i < poly.sub.length; i++) {
+    const s = poly.sub[i];
+    out.push(jitterPt(s.a, t, jitterAmt));
+    if (i === poly.sub.length - 1) out.push(jitterPt(s.b, t, jitterAmt));
+  }
+  return out;
+}
+
+function jitterPt(p, t, amt) {
+  // Two-frequency organic wobble in screen space, scaled by resolution
+  if (amt <= 0) return p;
+  const W = canvas.width;
+  const k = (W / 1920) * amt;
+  const a = Math.sin(t * 5.13 + p.x * 0.041 + p.y * 0.023) * 1.2 * k;
+  const b = Math.cos(t * 3.71 + p.x * 0.029 + p.y * 0.037) * 0.9 * k;
+  const c = Math.sin(t * 17.3 + p.x * 0.1) * 0.4 * k;
+  const d = Math.cos(t * 13.9 + p.y * 0.1) * 0.4 * k;
+  return { x: p.x + a + c, y: p.y + b + d };
+}
+
+function drawPath(targetCtx, poly, sampled, lineWidth, strokeStyle, glow) {
+  if (sampled.length < 2) return;
+  targetCtx.strokeStyle = strokeStyle;
+  targetCtx.lineWidth = lineWidth;
+  targetCtx.lineCap = 'round';
+  targetCtx.lineJoin = 'round';
+  if (glow > 0) {
+    targetCtx.shadowColor = strokeStyle;
+    targetCtx.shadowBlur = glow;
+  } else {
+    targetCtx.shadowBlur = 0;
+  }
+  targetCtx.beginPath();
+  targetCtx.moveTo(sampled[0].x, sampled[0].y);
+  for (let i = 1; i < sampled.length; i++) {
+    targetCtx.lineTo(sampled[i].x, sampled[i].y);
+  }
+  targetCtx.stroke();
+  targetCtx.shadowBlur = 0;
+}
+
+function renderBeam(progress, tSeconds) {
+  const W = canvas.width, H = canvas.height;
+  const segs = state.segments;
+  if (!segs || !segs.length) return;
+
+  const total = state.totalLength;
+  const cumLen = total * Math.min(1, Math.max(0, progress));
+  const jitter = params.jitter();
+  const lwBase = params.lineWidth() * (W / 1920);
+  const colorHex = params.beamColor();
+  const rgb = hexToRgb(colorHex);
+  const inten = params.intensity();
+  const bloom = params.bloom();
+  const aber = params.aberration() * (W / 1920);
+
+  beamCtx.clearRect(0, 0, W, H);
+
+  // For each polyline, draw the part within cumLen.
+  for (let i = 0; i < segs.length; i++) {
+    const poly = segs[i];
+    if (poly.startLen >= cumLen) break;
+    const sampled = (poly.endLen <= cumLen)
+      ? samplePolylineFull(poly, jitter, tSeconds)
+      : samplePolylineUpTo(poly, cumLen, jitter, tSeconds);
+    if (sampled.length < 2) continue;
+
+    // Chromatic aberration: offset RGB channels slightly
+    if (aber > 0.05) {
+      const dx = aber * Math.sin(tSeconds * 0.7);
+      const dy = aber * Math.cos(tSeconds * 0.5);
+      beamCtx.save();
+      beamCtx.globalCompositeOperation = 'lighter';
+      // Red ghost
+      beamCtx.translate(dx, dy);
+      drawPath(beamCtx, poly, sampled, lwBase, `rgba(255,80,80,${0.35 * inten})`, lwBase * 2.5 * bloom);
+      beamCtx.restore();
+      beamCtx.save();
+      beamCtx.globalCompositeOperation = 'lighter';
+      beamCtx.translate(-dx, -dy);
+      drawPath(beamCtx, poly, sampled, lwBase, `rgba(80,80,255,${0.35 * inten})`, lwBase * 2.5 * bloom);
+      beamCtx.restore();
+    }
+
+    beamCtx.globalCompositeOperation = 'lighter';
+    // Outer halo
+    drawPath(beamCtx, poly, sampled, lwBase * 4.0,
+      `rgba(${rgb.r},${rgb.g},${rgb.b},${0.18 * inten})`,
+      lwBase * 14 * bloom);
+    // Middle glow
+    drawPath(beamCtx, poly, sampled, lwBase * 2.0,
+      `rgba(${rgb.r},${rgb.g},${rgb.b},${0.5 * inten})`,
+      lwBase * 6 * bloom);
+    // Core
+    drawPath(beamCtx, poly, sampled, lwBase * 1.0,
+      `rgba(255,255,255,${Math.min(1, 0.95 * inten)})`,
+      lwBase * 2 * bloom);
+    // Tint core slightly toward beam colour
+    drawPath(beamCtx, poly, sampled, lwBase * 1.3,
+      `rgba(${Math.min(255, rgb.r + 80)},${Math.min(255, rgb.g + 80)},${Math.min(255, rgb.b + 80)},${0.7 * inten})`,
+      lwBase * 1.5 * bloom);
+
+    // Bright "head" dot at the leading edge while drawing
+    if (poly.endLen > cumLen && sampled.length) {
+      const head = sampled[sampled.length - 1];
+      beamCtx.globalCompositeOperation = 'lighter';
+      const grad = beamCtx.createRadialGradient(head.x, head.y, 0, head.x, head.y, lwBase * 12);
+      grad.addColorStop(0, `rgba(255,255,255,${Math.min(1, inten)})`);
+      grad.addColorStop(0.2, `rgba(${rgb.r},${rgb.g},${rgb.b},${0.7 * inten})`);
+      grad.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`);
+      beamCtx.fillStyle = grad;
+      beamCtx.beginPath();
+      beamCtx.arc(head.x, head.y, lwBase * 12, 0, Math.PI * 2);
+      beamCtx.fill();
+    }
+  }
+}
+
+function compositeFrame(tSeconds) {
+  const W = canvas.width, H = canvas.height;
+
+  // Decay phosphor
+  const persist = params.persist();
+  phosphorCtx.save();
+  phosphorCtx.globalCompositeOperation = 'destination-in';
+  phosphorCtx.fillStyle = `rgba(0,0,0,${persist})`;
+  phosphorCtx.fillRect(0, 0, W, H);
+  phosphorCtx.restore();
+
+  // Accumulate beam into phosphor
+  phosphorCtx.globalCompositeOperation = 'lighter';
+  phosphorCtx.drawImage(beamCanvas, 0, 0);
+
+  // Background: pure black (CRT is unlit unless phosphor active)
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // Graticule drawn very dim, behind beam
+  drawGraticule(tSeconds);
+
+  // Apply screen shake to phosphor composition.
+  const shakeAmt = params.shake() * (W / 1920);
+  const sx = (Math.sin(tSeconds * 2.7) + Math.sin(tSeconds * 5.1) * 0.4) * shakeAmt * 3;
+  const sy = (Math.cos(tSeconds * 3.1) + Math.cos(tSeconds * 4.3) * 0.4) * shakeAmt * 3;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.translate(sx, sy);
+  ctx.drawImage(phosphorCanvas, 0, 0);
+  ctx.restore();
+
+  // Scanlines overlay
+  const slAmt = params.scanlines();
+  if (slAmt > 0.01) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    const period = Math.max(2, Math.round(H / 540));
+    ctx.fillStyle = `rgba(0,0,0,${slAmt})`;
+    for (let y = 0; y < H; y += period * 2) {
+      ctx.fillRect(0, y, W, period);
+    }
+    ctx.restore();
+  }
+
+  // Vignette
+  const vAmt = params.vignette();
+  if (vAmt > 0.01) {
+    const grad = ctx.createRadialGradient(W/2, H/2, Math.min(W,H) * 0.2, W/2, H/2, Math.max(W,H) * 0.7);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, `rgba(0,0,0,${0.95 * vAmt})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// ========================================================================
+// Main animation loop
+// ========================================================================
+let rafId = 0;
+function frame(now) {
+  rafId = requestAnimationFrame(frame);
+  const tSec = now / 1000;
+
+  if (!state.segments) {
+    // Idle: just clear screen so nothing stale shows
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawGraticule(tSec);
+    const vAmt = params.vignette();
+    if (vAmt > 0.01) {
+      const W = canvas.width, H = canvas.height;
+      const grad = ctx.createRadialGradient(W/2, H/2, Math.min(W,H) * 0.2, W/2, H/2, Math.max(W,H) * 0.7);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, `rgba(0,0,0,${0.95 * vAmt})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+    }
+    return;
+  }
+
+  const drawT = params.drawTime();
+  const holdT = params.holdTime();
+  const cycleT = drawT + holdT;
+
+  const elapsed = (now - state.cycleStart) / 1000;
+  let progress;
+  if (elapsed < drawT) {
+    progress = elapsed / drawT;
+    // soft ease at the very end to avoid abrupt finish
+    progress = progress * progress * (3 - 2 * progress);
+  } else if (elapsed < cycleT) {
+    progress = 1.0;
+  } else {
+    if (params.loop()) {
+      state.cycleStart = now;
+      progress = 0;
+    } else {
+      progress = 1.0;
+    }
+  }
+
+  renderBeam(progress, tSec);
+  compositeFrame(tSec);
+
+  // One-loop record stop handling
+  if (state.recordOneLoop && state.recorder && state.recorder.state === 'recording') {
+    const recElapsed = (now - state.recordStartTime) / 1000;
+    if (recElapsed >= cycleT + 0.05) {
+      stopRecording();
+    }
+  }
+}
+
+// ========================================================================
+// Recording
+// ========================================================================
+function pickMimeType() {
+  const candidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+    'video/mp4',
+  ];
+  for (const m of candidates) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return '';
+}
+
+function startRecording(oneLoop) {
+  if (typeof MediaRecorder === 'undefined') {
+    setStatus('お使いのブラウザは録画に対応していません');
+    return;
+  }
+  if (state.recorder && state.recorder.state === 'recording') return;
+  const mime = pickMimeType();
+  const stream = canvas.captureStream(60);
+  const opts = {};
+  if (mime) opts.mimeType = mime;
+  // Aim high for 4K
+  const [W, H] = [canvas.width, canvas.height];
+  const pixels = W * H;
+  opts.videoBitsPerSecond = Math.min(40_000_000, Math.max(8_000_000, Math.round(pixels * 0.20 * 60)));
+  state.recordChunks = [];
+  try {
+    state.recorder = new MediaRecorder(stream, opts);
+  } catch (e) {
+    setStatus('録画の初期化に失敗: ' + e.message);
+    return;
+  }
+  state.recorder.ondataavailable = (ev) => {
+    if (ev.data && ev.data.size) state.recordChunks.push(ev.data);
+  };
+  state.recorder.onstop = () => {
+    const blob = new Blob(state.recordChunks, { type: state.recorder.mimeType || 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const ext = (state.recorder.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+    const a = document.createElement('a');
+    a.href = url;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    a.download = `oscilloscope-${W}x${H}-${stamp}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    $('recBtn').textContent = '● 録画開始';
+    $('recBtn').classList.remove('danger');
+    setStatus(`保存しました (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+  };
+  state.recordOneLoop = !!oneLoop;
+  state.recordStartTime = performance.now();
+  // Restart cycle to capture from beginning
+  state.cycleStart = state.recordStartTime;
+  state.recorder.start(250);
+  $('recBtn').innerHTML = '<span id="recDot"></span>停止';
+  $('recBtn').classList.add('danger');
+  setStatus(oneLoop ? '1ループを録画中...' : '録画中...');
+}
+
+function stopRecording() {
+  if (state.recorder && state.recorder.state !== 'inactive') {
+    state.recorder.stop();
+  }
+}
+
+$('recBtn').addEventListener('click', () => {
+  if (state.recorder && state.recorder.state === 'recording') {
+    stopRecording();
+  } else {
+    startRecording(false);
+  }
+});
+$('recOneLoop').addEventListener('click', () => startRecording(true));
+
+// ========================================================================
+// Boot
+// ========================================================================
+applyResolution();
+rebuildSource();
+rafId = requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
