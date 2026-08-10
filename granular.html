@@ -1455,7 +1455,26 @@ async function ensureAudio(){
   G.ana2.fftSize = 4096; G.ana2.smoothingTimeConstant = 0.78;
   G.master.connect(G.ana);
   G.master.connect(G.ana2);
-  G.master.connect(G.ctx.destination);
+
+  // ---- safety chain (transparent at normal levels) ----
+  //   master → DC blocker → brick-wall limiter → destination
+  // The DC blocker is a 15 Hz HPF: strips any accumulated DC / sub-sonic
+  // offset (protects amps and voice coils) without touching the audible
+  // band. The limiter uses DynamicsCompressor as a 20:1 peak stop at
+  // -0.5 dB with 1 ms attack — signals below the threshold pass through
+  // untouched; peaks that would otherwise clip 0 dB and damage speakers
+  // are pinned instead.
+  G.dcBlock = G.ctx.createBiquadFilter();
+  G.dcBlock.type = "highpass";
+  G.dcBlock.frequency.value = 15;
+  G.dcBlock.Q.value = 0.7;
+  G.limiter = G.ctx.createDynamicsCompressor();
+  G.limiter.threshold.value = -0.5;
+  G.limiter.ratio.value     = 20;
+  G.limiter.attack.value    = 0.001;
+  G.limiter.release.value   = 0.05;
+  G.limiter.knee.value      = 0;
+  G.master.connect(G.dcBlock).connect(G.limiter).connect(G.ctx.destination);
 
   // per-track buses with FX chain
   for(const t of tracks){
@@ -2682,15 +2701,16 @@ $("bgBtn").addEventListener("click", async ()=>{
 function setupBackground(){
   if(G_bgDest) return;
   G_bgDest = G.ctx.createMediaStreamDestination();
-  G.master.connect(G_bgDest);
+  // tap post-limiter so the stream is peak-safe too
+  G.limiter.connect(G_bgDest);
   G_bgAudio = document.createElement("audio");
   G_bgAudio.srcObject = G_bgDest.stream;
   G_bgAudio.autoplay = true;
   G_bgAudio.playsInline = true;
   G_bgAudio.style.display = "none";
   document.body.appendChild(G_bgAudio);
-  // detach the silent web-audio output so we don't double the level
-  try{ G.master.disconnect(G.ctx.destination); }catch(_){}
+  // detach the direct web-audio output so we don't double the level
+  try{ G.limiter.disconnect(G.ctx.destination); }catch(_){}
   G_bgAudio.play().catch(()=>{});
   if("mediaSession" in navigator){
     navigator.mediaSession.metadata = new MediaMetadata({
@@ -2702,8 +2722,8 @@ function setupBackground(){
 }
 function teardownBackground(){
   if(G_bgAudio){ try{ G_bgAudio.pause(); }catch(_){} G_bgAudio.remove(); G_bgAudio = null; }
-  if(G_bgDest){ try{ G.master.disconnect(G_bgDest); }catch(_){} G_bgDest = null; }
-  try{ G.master.connect(G.ctx.destination); }catch(_){}
+  if(G_bgDest){ try{ G.limiter.disconnect(G_bgDest); }catch(_){} G_bgDest = null; }
+  try{ G.limiter.connect(G.ctx.destination); }catch(_){}
   if("mediaSession" in navigator){
     try{ navigator.mediaSession.setActionHandler("play",  null); }catch(_){}
     try{ navigator.mediaSession.setActionHandler("pause", null); }catch(_){}
@@ -2752,9 +2772,14 @@ function schedTick(){
 
 function schedTrack(t, now){
   if(t.voice === "granular" && !t.buffer) return;
+  // Catch-up cap — if the tab was backgrounded / paused and now returns,
+  // t.nextGrainTime can be far in the past, which would fire hundreds of
+  // grains synchronously and freeze / crash the tab. Cap the burst.
+  const MAX_ITERS = 200;
+  let iters = 0;
   if(t.seq.enabled){
     const stepDur = 60 / (G.bpm * G.seq.rate / 4);
-    while(t.nextGrainTime < now + G.scheduleAheadTime){
+    while(t.nextGrainTime < now + G.scheduleAheadTime && iters++ < MAX_ITERS){
       t.seq.currentStep = (t.seq.currentStep + 1) % G.seq.steps;
       const idx = t.seq.currentStep;
       if(t.seq.active[idx]){
@@ -2770,10 +2795,14 @@ function schedTrack(t, now){
       t.nextGrainTime += stepDur;
     }
   } else {
-    while(t.nextGrainTime < now + G.scheduleAheadTime){
+    while(t.nextGrainTime < now + G.scheduleAheadTime && iters++ < MAX_ITERS){
       fireGrain(t, t.nextGrainTime);
       advanceGrainTime(t);
     }
+  }
+  if(iters >= MAX_ITERS){
+    // fell far behind — resync so we don't keep clawing at the past
+    t.nextGrainTime = now + G.scheduleAheadTime;
   }
 }
 
@@ -4008,7 +4037,7 @@ async function startRecording(){
         const sr   = (G.ctx.sampleRate/1000).toFixed(0)+"k";
         downloadBlob(blob, `granular-${tStamp()}-MASTER-${sr}-${tag}.wav`);
       };
-      G.master.connect(G.rec.masterRecNode);
+      G.limiter.connect(G.rec.masterRecNode);   // tap post-limiter so the WAV is safe too
       G.rec.masterRecNode.port.postMessage("start");
     } catch(e){
       console.error("master recorder failed", e);
@@ -4034,7 +4063,7 @@ function stopRecording(){
   if(G.rec.masterRecNode){
     try{ G.rec.masterRecNode.port.postMessage("stop"); } catch(_){}
     const node = G.rec.masterRecNode; G.rec.masterRecNode = null;
-    setTimeout(()=>{ try{ G.master.disconnect(node); }catch(_){} try{ node.disconnect(); }catch(_){} }, 600);
+    setTimeout(()=>{ try{ G.limiter.disconnect(node); }catch(_){} try{ node.disconnect(); }catch(_){} }, 600);
   }
   G.rec.active = false;
   $("recBtn").disabled = false;
