@@ -1456,32 +1456,16 @@ async function ensureAudio(){
   G.master.connect(G.ana);
   G.master.connect(G.ana2);
 
-  // ---- safety chain (transparent at normal levels) ----
-  //   master → DC blocker → brick-wall limiter → destination
-  // The DC blocker is a 15 Hz HPF: strips any accumulated DC / sub-sonic
-  // offset (protects amps and voice coils) without touching the audible
-  // band. The limiter uses DynamicsCompressor as a 20:1 peak stop at
-  // -0.5 dB with 1 ms attack — signals below the threshold pass through
-  // untouched; peaks that would otherwise clip 0 dB and damage speakers
-  // are pinned instead.
-  G.dcBlock = G.ctx.createBiquadFilter();
-  G.dcBlock.type = "highpass";
-  G.dcBlock.frequency.value = 15;
-  G.dcBlock.Q.value = 0.7;
-  G.limiter = G.ctx.createDynamicsCompressor();
-  // safer settings — some browsers (older Safari) produce silence with
-  // extreme threshold/knee combos on DynamicsCompressor. These are still
-  // limiter-style but within well-tested ranges.
-  G.limiter.threshold.value = -1;
-  G.limiter.ratio.value     = 12;
-  G.limiter.attack.value    = 0.003;
-  G.limiter.release.value   = 0.1;
-  G.limiter.knee.value      = 6;
-  // unchained connect calls — older iOS Safari doesn't return the
-  // destination node from connect(), so chaining silently dropped links.
-  G.master.connect(G.dcBlock);
-  G.dcBlock.connect(G.limiter);
-  G.limiter.connect(G.ctx.destination);
+  // Safety chain removed — the DynamicsCompressor was likely producing
+  // silence in the user's browser. Master routes directly to the output
+  // again. The scheduler catchup cap in schedTrack still stands as a
+  // runaway-grain guard. A softer peak safety will be re-added once we
+  // can verify the audio path works.
+  G.master.connect(G.ctx.destination);
+  // Aliases kept so setupBackground / recording code that references
+  // G.limiter still works — they behave as identity.
+  G.dcBlock = G.master;
+  G.limiter = G.master;
 
   // per-track buses with FX chain
   for(const t of tracks){
