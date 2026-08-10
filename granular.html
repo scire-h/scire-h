@@ -1340,7 +1340,9 @@ const G = {
   master_db: -6, lpfHz: 8000, revMix: 25, revTail: 3,
 
   curTrack: 0,
-  scheduleAheadTime: 0.12, lookahead: 25,
+  // 0.25 s of grains pre-queued / 40 ms tick: survives main-thread stalls
+  // (screen recording, GC) without the schedule running dry.
+  scheduleAheadTime: 0.25, lookahead: 40,
   beat: 1, bar: 1, lastBeat: 0, tapTimes: [],
 
   // global pattern config (steps/slices/rate apply to all 4 tracks)
@@ -1421,14 +1423,18 @@ function CT(){ return tracks[G.curTrack]; }
 async function ensureAudio(){
   if(G.ctx) return;
   let ctx = null;
+  // latencyHint "playback" = larger hardware buffer. All our triggering is
+  // lookahead-scheduled (not live-input), so pattern timing is unaffected —
+  // but the bigger buffer makes the audio thread survive CPU spikes from
+  // screen recording / app switching without underrun crackle ("bababa").
   try{
     ctx = new (window.AudioContext || window.webkitAudioContext)({
       sampleRate: G.requestedSampleRate,
-      latencyHint: "interactive",
+      latencyHint: "playback",
     });
   } catch(e){
     ctx = new (window.AudioContext || window.webkitAudioContext)({
-      latencyHint: "interactive",
+      latencyHint: "playback",
     });
   }
   G.ctx = ctx;
@@ -2775,14 +2781,27 @@ function tap(){
 /* ============================================================
    SCHEDULER
    ============================================================ */
+// Only push automation events when the value actually changed — the old
+// code fired 4 setTargetAtTime calls every tick (~160 events/sec) even at
+// rest, flooding the audio thread's automation timelines for nothing.
+const _sent = { master_db: null, lpfHz: null, revMix: null };
 function schedTick(){
   if(!G.running) return;
   const now = G.ctx.currentTime;
 
-  G.master.gain.setTargetAtTime(db2lin(G.master_db), now, 0.02);
-  G.lpf.frequency.setTargetAtTime(G.lpfHz, now, 0.02);
-  G.dry.gain.setTargetAtTime(1 - G.revMix/100, now, 0.05);
-  G.wet.gain.setTargetAtTime(G.revMix/100, now, 0.05);
+  if(_sent.master_db !== G.master_db){
+    G.master.gain.setTargetAtTime(db2lin(G.master_db), now, 0.02);
+    _sent.master_db = G.master_db;
+  }
+  if(_sent.lpfHz !== G.lpfHz){
+    G.lpf.frequency.setTargetAtTime(G.lpfHz, now, 0.02);
+    _sent.lpfHz = G.lpfHz;
+  }
+  if(_sent.revMix !== G.revMix){
+    G.dry.gain.setTargetAtTime(1 - G.revMix/100, now, 0.05);
+    G.wet.gain.setTargetAtTime(G.revMix/100, now, 0.05);
+    _sent.revMix = G.revMix;
+  }
   if(G.conv.buffer && Math.abs(G.conv.buffer.duration - G.revTail) > 0.25) buildIR(G.revTail);
 
   for(const t of tracks){ schedTrack(t, now); }
@@ -2862,12 +2881,18 @@ function fireGrain(t, when, posOverride){
   const g   = db2lin(t.grainGain);
 
   const src = G.ctx.createBufferSource();
+  src.playbackRate.value = rate;
+  let startOffset = offset;
   if(reverse){
-    src.buffer = makeReverseSlice(t.buffer, offset, dur*rate);
-    src.playbackRate.value = rate;
+    // play the same slice from a cached fully-reversed copy of the buffer —
+    // identical samples to the old per-grain reverse-copy, but the copy
+    // happens once per buffer instead of on every reverse grain (the old
+    // path allocated + copied a fresh AudioBuffer per grain, a GC/CPU spike
+    // that showed up as crackle under load).
+    src.buffer = getReversedBuffer(t.buffer);
+    startOffset = Math.max(0, t.bufferDuration - offset - dur*rate);
   } else {
     src.buffer = t.buffer;
-    src.playbackRate.value = rate;
   }
   const env = G.ctx.createGain();
   applyEnvelope(env.gain, when, dur, g, t.env);
@@ -2875,29 +2900,27 @@ function fireGrain(t, when, posOverride){
   panner.pan.setValueAtTime(pan, when);
 
   src.connect(env).connect(panner).connect(t.grainBus);
-  if(reverse) src.start(when, 0, dur*rate);
-  else        src.start(when, offset, dur*rate);
+  src.start(when, startOffset, dur*rate);
   src.stop(when + dur + 0.05);
 
   t.grainHistory.push({pos: posN, t: performance.now(), pan});
   if(t.grainHistory.length > 240) t.grainHistory.shift();
 }
 
-function makeReverseSlice(buf, offsetSec, durSec){
-  const sr = G.ctx.sampleRate;
-  const ch = buf.numberOfChannels;
-  const N  = Math.max(1, Math.floor(durSec*sr));
-  const start = Math.floor(offsetSec*sr);
-  const ob = G.ctx.createBuffer(ch, N, sr);
-  for(let c=0; c<ch; c++){
-    const src = buf.getChannelData(c);
-    const dst = ob.getChannelData(c);
-    for(let i=0; i<N; i++){
-      const j = start + (N - 1 - i);
-      dst[i] = (j>=0 && j<src.length) ? src[j] : 0;
-    }
+// Full reversed copy, cached per source buffer (WeakMap keeps it from
+// leaking when a track's buffer is replaced).
+const _reversedCache = new WeakMap();
+function getReversedBuffer(buf){
+  let rb = _reversedCache.get(buf);
+  if(rb) return rb;
+  rb = G.ctx.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate);
+  for(let c=0; c<buf.numberOfChannels; c++){
+    const s = buf.getChannelData(c);
+    const d = rb.getChannelData(c);
+    for(let i=0, N=s.length; i<N; i++) d[i] = s[N-1-i];
   }
-  return ob;
+  _reversedCache.set(buf, rb);
+  return rb;
 }
 
 /* ===== drum voice synthesis (TR-808 style) ===== */
@@ -3068,6 +3091,16 @@ function synthCow(when, tune, dec, amp, out){
 }
 
 
+// Normalized 64-point hann window, computed once. setValueCurveAtTime
+// interpolates linearly between points, so 64 points is smoother than the
+// old 12 linearRamp segments — and it costs ONE automation event per grain
+// instead of twelve. At high grain densities that was thousands of
+// automation events per second hammering the audio thread.
+const _HANN64 = (() => {
+  const c = new Float32Array(64);
+  for(let i=0;i<64;i++) c[i] = 0.5 - 0.5*Math.cos(2*Math.PI*i/63);
+  return c;
+})();
 function applyEnvelope(p, when, dur, g, shape){
   const half = dur*0.5, start = when, mid = when+half, end = when+dur;
   p.cancelScheduledValues(start);
@@ -3088,11 +3121,12 @@ function applyEnvelope(p, when, dur, g, shape){
       break;
     case "hann":
     default: {
-      const N = 12;
-      for(let i=1;i<=N;i++){
-        const tt = start + (i/N)*dur;
-        const w  = 0.5 - 0.5*Math.cos(2*Math.PI*(i/N));
-        p.linearRampToValueAtTime(g*w, tt);
+      if(g === 1){
+        p.setValueCurveAtTime(_HANN64, start, dur);
+      } else {
+        const c = new Float32Array(64);
+        for(let i=0;i<64;i++) c[i] = _HANN64[i]*g;
+        p.setValueCurveAtTime(c, start, dur);
       }
     }
   }
