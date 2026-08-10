@@ -1456,16 +1456,38 @@ async function ensureAudio(){
   G.master.connect(G.ana);
   G.master.connect(G.ana2);
 
-  // Safety chain removed — the DynamicsCompressor was likely producing
-  // silence in the user's browser. Master routes directly to the output
-  // again. The scheduler catchup cap in schedTrack still stands as a
-  // runaway-grain guard. A softer peak safety will be re-added once we
-  // can verify the audio path works.
-  G.master.connect(G.ctx.destination);
-  // Aliases kept so setupBackground / recording code that references
-  // G.limiter still works — they behave as identity.
-  G.dcBlock = G.master;
-  G.limiter = G.master;
+  // ---- master safety chain (WaveShaper-based, no compressor) ----
+  //   master → DC block (15 Hz HPF) → soft-clip WaveShaper → destination
+  // The WaveShaper applies a hand-built curve sample-by-sample: it is
+  // strictly linear (identity) for |x| < 0.92 (≈ -0.72 dB) and asymptotes
+  // to ±1.0 above that with a tanh soft-clip. Because the curve is fixed
+  // and applied elementwise, there is no browser corner case that can
+  // make it produce silence — it is either transparent or gently
+  // saturated, never gone.
+  G.dcBlock = G.ctx.createBiquadFilter();
+  G.dcBlock.type = "highpass";
+  G.dcBlock.frequency.value = 15;
+  G.dcBlock.Q.value = 0.7;
+  G.limiter = G.ctx.createWaveShaper();
+  const _CLIP_N = 8192;
+  const _CLIP_T = 0.92;
+  const _clipCurve = new Float32Array(_CLIP_N);
+  for(let i=0; i<_CLIP_N; i++){
+    const x = (i/(_CLIP_N-1))*2 - 1;
+    const a = Math.abs(x);
+    if(a < _CLIP_T){
+      _clipCurve[i] = x;                                   // transparent
+    } else {
+      const excess = a - _CLIP_T;
+      const range  = 1 - _CLIP_T;                          // 0.08
+      _clipCurve[i] = Math.sign(x) * (_CLIP_T + range * Math.tanh(excess / range));
+    }
+  }
+  G.limiter.curve = _clipCurve;
+  G.limiter.oversample = "2x";
+  G.master.connect(G.dcBlock);
+  G.dcBlock.connect(G.limiter);
+  G.limiter.connect(G.ctx.destination);
 
   // per-track buses with FX chain
   for(const t of tracks){
