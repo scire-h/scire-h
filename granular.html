@@ -916,8 +916,10 @@
     .knob-grid{ grid-template-columns: repeat(3, 1fr); gap: 14px 6px; }
     .fx-params{ grid-template-columns: repeat(3, 1fr); }
     .knob svg{ width: 42px; height: 42px; }
-    .pattern-row{ grid-template-columns: 30px 24px 34px 1fr; gap: 2px; }
+    .pattern-row{ grid-template-columns: 26px 20px 28px minmax(0, 1fr); gap: 1px; overflow: hidden; }
     .pattern-row .lbl, .pattern-row .ena, .pattern-row .modet{ font-size: 9px; }
+    .pattern-row .cells{ min-width: 0; overflow: hidden; }
+    .strip{ overflow: hidden; }
     .xy-pad{ height: 150px; }
     .xy-toolbar{ gap: 4px; }
     .xy-toolbar select{ max-width: 90px; font-size: 10px; }
@@ -1443,9 +1445,9 @@ async function ensureAudio(){
   G.lpf.connect(G.conv).connect(G.wet).connect(G.master);
 
   G.ana = G.ctx.createAnalyser();
-  G.ana.fftSize = 2048; G.ana.smoothingTimeConstant = 0.1;
+  G.ana.fftSize = 1024; G.ana.smoothingTimeConstant = 0.1;   // scope — halved from 2048 for cheaper paint
   G.ana2 = G.ctx.createAnalyser();
-  G.ana2.fftSize = 4096; G.ana2.smoothingTimeConstant = 0.78;
+  G.ana2.fftSize = 2048; G.ana2.smoothingTimeConstant = 0.78; // spectrum — halved from 4096
   G.master.connect(G.ana);
   G.master.connect(G.ana2);
 
@@ -3332,7 +3334,7 @@ function drawSpec(){
   const data = new Uint8Array(N);
   G.ana2.getByteFrequencyData(data);
   const sr = G.ctx.sampleRate; const nyq = sr/2;
-  const bars = Math.min(180, Math.floor(w/3));
+  const bars = Math.min(90, Math.floor(w/6));   // spectrum bars — halved for mobile heat
   const fMin=20, fMax=Math.min(20000, nyq);
   for(let b=0;b<bars;b++){
     const t0 = b/bars, t1 = (b+1)/bars;
@@ -4478,15 +4480,24 @@ document.addEventListener("keydown", e=>{
 /* ============================================================
    MAIN LOOP
    ============================================================ */
-// Beat tick + meters run every rAF for smooth response.
-// Canvas visualisers (wave / scope / spec) are the expensive ones —
-// throttle those to ~30 fps to keep the phone cool without visible lag.
-let _lastVizTime = 0;
+// Throttled render loop — visualisers are the biggest CPU / heat source
+// on mobile. Audio scheduling is completely independent (setTimeout-based),
+// so nothing in this loop affects what you hear.
+//
+//   beat pulse:     every rAF                (near-zero cost)
+//   VU meters:      ~30 fps                  (light — 12 analyser reads + style writes)
+//   wave / scope / spectrum canvas:  ~15 fps  (heavy 2D paint)
+//
+// When the tab is hidden (locked screen, backgrounded, other app on top),
+// rAF stops firing on most browsers anyway; when it does fire we skip
+// visual work entirely because there's nobody watching.
+let _lastVizTime = 0, _lastMeterTime = 0;
 function frame(now){
   now = now || performance.now();
   updateBeat();
-  updateMeters();
-  if(now - _lastVizTime >= 33){
+  if(document.hidden) { requestAnimationFrame(frame); return; }
+  if(now - _lastMeterTime >= 33){ updateMeters(); _lastMeterTime = now; }
+  if(now - _lastVizTime   >= 66){                          // ~15 fps
     drawWaveOverlay();
     drawScope();
     drawSpec();
