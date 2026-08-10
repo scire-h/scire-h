@@ -1271,7 +1271,8 @@
         <button class="on" data-armm="1">Armed</button>
       </div>
       <div class="meta" style="margin-top: 6px;">
-        ● REC in toolbar · per-track arm = strip [R]<br>
+        ● REC in toolbar · records the master mix by default<br>
+        arm stems with strip [R] (each adds CPU) · max 10 min take<br>
         sample rate locks at first ▶ Play — restart page to change
       </div>
     </div>
@@ -1375,7 +1376,10 @@ function makeTrack(idx){
   const isDrum = p.voice !== "granular";
   return {
     idx, name: p.name,
-    mute: false, solo: false, armed: true,
+    // armed defaults OFF — recording 13 simultaneous streams (12 stems +
+    // master) was crushing the audio thread. Master-mix capture is on by
+    // default; arm individual stems via the strip [R] when needed.
+    mute: false, solo: false, armed: false,
     evolve: false,
     gain_db: isDrum ? -6 : -8,
     pan: p.pan ?? 0,
@@ -3435,6 +3439,10 @@ function updateBeat(){
     const sec = now - G.rec.startTime;
     const m = Math.floor(sec/60), s = sec%60;
     $("recStatus").textContent = "rec · "+m.toString().padStart(2,"0")+":"+s.toFixed(2).padStart(5,"0");
+    // 10-min hard stop — recorded audio lives in RAM until stop; an
+    // unattended REC would otherwise grow without bound and eventually
+    // glitch or kill the tab.
+    if(sec > 600){ stopRecording(); }
   }
 }
 
@@ -3977,25 +3985,62 @@ function knobifySlider(sliderId, opts){
 /* ============================================================
    RECORDING — AudioWorklet, 32-bit float WAV per track + master
    ============================================================ */
+// Block-buffered recorder. The old version allocated two fresh
+// Float32Arrays per 128-frame quantum (≈1500 allocs/sec/node at 96 kHz) —
+// with several armed tracks that meant tens of thousands of allocations
+// per second inside the audio rendering thread, whose GC pauses chopped
+// the output into the overlapping "jabber" the user heard. This version
+// fills preallocated ~0.34 s blocks (2 allocs per block instead of ~500)
+// and hands the data back with transferables, so stop doesn't deep-copy.
 const RECORDER_WORKLET = `
 class RecP extends AudioWorkletProcessor {
   constructor(){ super();
-    this.bL = []; this.bR = []; this.rec = false;
+    this.rec = false;
+    this.BS = 32768;
+    this.curL = null; this.curR = null; this.fill = 0;
+    this.blocksL = []; this.blocksR = [];
     this.port.onmessage = e => {
-      if(e.data === "start"){ this.bL = []; this.bR = []; this.rec = true; }
-      else if(e.data === "stop"){
+      if(e.data === "start"){
+        this.blocksL = []; this.blocksR = [];
+        this.curL = new Float32Array(this.BS);
+        this.curR = new Float32Array(this.BS);
+        this.fill = 0;
+        this.rec = true;
+      } else if(e.data === "stop"){
         this.rec = false;
-        this.port.postMessage({ L: this.bL, R: this.bR });
-        this.bL = []; this.bR = [];
+        if(this.fill > 0 && this.curL){
+          this.blocksL.push(this.curL.slice(0, this.fill));
+          this.blocksR.push(this.curR.slice(0, this.fill));
+        }
+        const L = this.blocksL, R = this.blocksR;
+        this.blocksL = []; this.blocksR = [];
+        this.curL = null; this.curR = null;
+        const transfer = L.map(a => a.buffer).concat(R.map(a => a.buffer));
+        this.port.postMessage({ L, R }, transfer);
       }
     };
   }
   process(inputs){
-    if(!this.rec) return true;
+    if(!this.rec || !this.curL) return true;
     const ch = inputs[0];
     if(!ch || !ch.length) return true;
-    this.bL.push(new Float32Array(ch[0]));
-    this.bR.push(new Float32Array(ch[1] || ch[0]));
+    const l = ch[0], r = ch[1] || ch[0];
+    let i = 0;
+    const n = l.length;
+    while(i < n){
+      const take = Math.min(this.BS - this.fill, n - i);
+      this.curL.set(l.subarray(i, i + take), this.fill);
+      this.curR.set(r.subarray(i, i + take), this.fill);
+      this.fill += take;
+      i += take;
+      if(this.fill === this.BS){
+        this.blocksL.push(this.curL);
+        this.blocksR.push(this.curR);
+        this.curL = new Float32Array(this.BS);
+        this.curR = new Float32Array(this.BS);
+        this.fill = 0;
+      }
+    }
     return true;
   }
 }
