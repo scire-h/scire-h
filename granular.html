@@ -254,19 +254,12 @@
     width: 0%;
   }
   .strip.sel .meter .bar{ background: #fff; }
-  .strip .knob-row{
-    display:grid; grid-template-columns: 30px 1fr 40px; gap: 6px;
-    align-items: center;
-    margin-top: 6px;
-    font-size: 10px;
-    color: var(--ink-d);
-  }
-  .strip .knob-row input[type=range]{ margin: 0; }
-  .strip .knob-row .v{
-    text-align:right;
-    font-family: "JetBrains Mono","SF Mono",monospace;
-    font-size: 9px; color: var(--ink);
-  }
+  /* NOTE: the earlier `.strip .knob-row { display:grid; ... }` block was
+     removed. The .strip .knob-row rule higher up sets display:none, which
+     is the intended behaviour — GAIN/PAN moved to the track editor. The
+     duplicate rule here was overriding it, forcing every strip to render
+     hidden sliders on every frame, blowing up mobile layout AND heating
+     the phone (12 tracks × 2 sliders × meter-loop reflows). */
 
   main{
     position: relative; z-index:1;
@@ -4485,12 +4478,20 @@ document.addEventListener("keydown", e=>{
 /* ============================================================
    MAIN LOOP
    ============================================================ */
-function frame(){
-  drawWaveOverlay();
-  drawScope();
-  drawSpec();
+// Beat tick + meters run every rAF for smooth response.
+// Canvas visualisers (wave / scope / spec) are the expensive ones —
+// throttle those to ~30 fps to keep the phone cool without visible lag.
+let _lastVizTime = 0;
+function frame(now){
+  now = now || performance.now();
   updateBeat();
   updateMeters();
+  if(now - _lastVizTime >= 33){
+    drawWaveOverlay();
+    drawScope();
+    drawSpec();
+    _lastVizTime = now;
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
