@@ -158,7 +158,8 @@
   /* ====== track strip row ====== */
   .tracks-strip{
     display:grid;
-    grid-template-columns: repeat(6, 1fr);
+    /* flexible: as many strips per row as fit at ≥86px each */
+    grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
     gap: 1px;
     background: #000;
     border-top: 1px solid #000;
@@ -581,8 +582,12 @@
     border: 1px solid #000;
   }
   .seg button{
-    flex:1;
-    padding: 2px 5px; font-size: 11px;
+    flex: 1 1 0;
+    min-width: 0;            /* allow shrink — keeps 7-button segs on one row */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 2px 3px; font-size: 11px;
     background: #fff;
     color: #000;
     border: 0;
@@ -751,7 +756,8 @@
   /* Prophet-style knobs */
   .knob-grid{
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    /* flexible: fit as many knobs per row as the panel width allows */
+    grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
     gap: 14px 4px;
     margin: 10px 0 6px;
   }
@@ -860,7 +866,7 @@
   }
   .fx-params{
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
     gap: 12px 4px;
     margin-top: 4px;
   }
@@ -906,15 +912,15 @@
     header .status, header .recind{ font-size: 9px; }
     main{ padding: 6px; gap: 6px; }
     section.panel > *:not(h2){ margin-left: 8px; margin-right: 8px; }
-    .tracks-strip{ grid-template-columns: repeat(4, 1fr); }
+    .tracks-strip{ grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
     .strip{ padding: 5px 6px 6px; }
     .strip .meter{ height: 3px; margin-top: 4px; }
     .strip-head{ flex-direction: column; align-items: stretch; gap: 3px; }
     .strip-head .name{ font-size: 11px; text-align: left; }
     .strip-head .ctl{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
     .strip-head button{ padding: 1px 2px; font-size: 9px; min-width: 0; }
-    .knob-grid{ grid-template-columns: repeat(3, 1fr); gap: 14px 6px; }
-    .fx-params{ grid-template-columns: repeat(3, 1fr); }
+    /* knob-grid / fx-params inherit the flexible auto-fill base rule */
+    .knob-grid{ gap: 14px 6px; }
     .knob svg{ width: 42px; height: 42px; }
     .pattern-row{ grid-template-columns: 26px 20px 28px minmax(0, 1fr); gap: 1px; overflow: hidden; }
     .pattern-row .lbl, .pattern-row .ena, .pattern-row .modet{ font-size: 9px; }
@@ -929,9 +935,10 @@
     section.panel{ padding: 14px 14px 18px; }
     .stage-block{ padding: 14px 14px; }
     .seq-cell{ min-height: 30px; aspect-ratio: auto; height: 34px; font-size: 10px; }
-    .seq-toolbar{ gap: 8px; }
-    .seq-toolbar .group{ gap: 4px; font-size: 9px; letter-spacing: 0.10em; }
-    .seq-toolbar .seg button{ padding: 5px 6px; font-size: 9px; }
+    .pattern-toolbar{ gap: 6px; }
+    .pattern-toolbar .group{ gap: 3px; font-size: 9px; }
+    .pattern-toolbar .seg button{ padding: 3px 3px; font-size: 9px; }
+    .pattern-toolbar button{ padding: 2px 6px; font-size: 10px; }
     .bpm-display{ font-size: 22px; min-width: 100px; padding: 0 12px; }
     .mem-btn{ padding: 11px 4px; font-size: 11px; }
     .chips .chip{ padding: 7px 10px; }
@@ -3444,7 +3451,9 @@ function buildPatternGrid(){
     // cells container
     const cells = document.createElement("div");
     cells.className = "cells";
-    cells.style.gridTemplateColumns = `repeat(${G.seq.steps}, 1fr)`;
+    // minmax(0,1fr): plain 1fr has an implicit min-content floor, which is
+    // what pushed the last cells off-screen on narrow phones.
+    cells.style.gridTemplateColumns = `repeat(${G.seq.steps}, minmax(0, 1fr))`;
     const stepsPerBeat = G.seq.rate / 4;
     for(let i=0; i<G.seq.steps; i++){
       const cell = document.createElement("div");
