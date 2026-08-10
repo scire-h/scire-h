@@ -265,7 +265,11 @@
   main{
     position: relative; z-index:1;
     display:grid;
-    grid-template-columns: 290px 1fr 290px;
+    /* minmax(0,1fr) — plain 1fr has a min-content floor, letting any wide
+       child (e.g. an element with a min-width) blow the whole page out
+       past the viewport. minmax(0,…) makes the column truly cap at the
+       available space, so children must wrap/shrink instead. */
+    grid-template-columns: 290px minmax(0, 1fr) 290px;
     gap: 8px;
     padding: 8px;
   }
@@ -899,7 +903,7 @@
   .rec-status.on{ color: var(--warn); }
 
   @media (max-width: 1100px){
-    main{ grid-template-columns: 1fr; }
+    main{ grid-template-columns: minmax(0, 1fr); }
     .visuals{ grid-template-columns: 1fr; }
   }
   @media (max-width: 720px){
@@ -1108,12 +1112,12 @@
         </div>
       </div>
 
-      <div class="row" style="margin-top: 18px; display:flex; gap: 24px;">
-        <div style="flex:1; min-width:200px;">
+      <div class="row" style="margin-top: 18px; display:flex; gap: 24px; flex-wrap: wrap;">
+        <div style="flex:1 1 160px; min-width:0;">
           <div class="row"><label>Tempo</label><span class="val" id="bpmVal">120 BPM</span></div>
           <input type="range" id="bpm" min="30" max="240" step="0.5" value="120" />
         </div>
-        <div style="flex:1; min-width:200px;">
+        <div style="flex:1 1 160px; min-width:0;">
           <div class="row"><label>Free-Mode Sync</label></div>
           <div class="seg" id="syncSeg">
             <button class="on" data-sync="1">BPM-Sync</button>
