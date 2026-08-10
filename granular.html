@@ -1228,7 +1228,7 @@
     </div>
 
     <div class="hint" id="hint">
-      space play · 1–4 track · ↑↓ size · ←→ position · t tap · r re-gen · g freeze · s shuffle · q seq · h mode · drag wave = scrub
+      space play · 1–5 track · ↑↓ size · ←→ position · t tap · r re-gen · g freeze · s shuffle · q seq · h mode · drag wave = scrub
     </div>
   </div>
 
@@ -1271,8 +1271,8 @@
         <button class="on" data-armm="1">Armed</button>
       </div>
       <div class="meta" style="margin-top: 6px;">
-        ● REC in toolbar · records the master mix by default<br>
-        arm stems with strip [R] (each adds CPU) · max 10 min take<br>
+        ● REC in toolbar · multitrack: all 5 stems + master mix<br>
+        un-arm stems with strip [R] to save CPU · max 10 min take<br>
         sample rate locks at first ▶ Play — restart page to change
       </div>
     </div>
@@ -1293,7 +1293,7 @@
         <input id="projFile" type="file" accept="application/json,.json" style="display:none" />
       </div>
       <div class="meta" style="margin-top: 8px;">
-        all 12 tracks + patterns + FX + memories<br>
+        all 5 tracks + patterns + FX + memories<br>
         (audio files are not embedded)
       </div>
     </div>
@@ -1308,21 +1308,17 @@
    single-file web audio app
    ================================================================= */
 
-const NUM_TRACKS = 12;
+// 5 granular tracks. The fixed TR-808 drum rows (KIK..COW) were removed at
+// the user's request to cut voice count / CPU; the drum-synthesis functions
+// remain below in case a drum voice is ever wanted again.
+const NUM_TRACKS = 5;
 
 const TRACK_PRESETS = [
-  { name: "T1",  voice: "granular", srcType: "sine",  freq: 220, pan: -0.4 },
-  { name: "T2",  voice: "granular", srcType: "tri",   freq: 330, pan:  0.4 },
-  { name: "T3",  voice: "granular", srcType: "white", freq: 165, pan: -0.15 },
-  { name: "T4",  voice: "granular", srcType: "saw",   freq: 110, pan:  0.15 },
-  { name: "KIK", voice: "kick",  size: 220, pit:   0 },
-  { name: "SNR", voice: "snare", size: 140, pit:   0 },
-  { name: "HHC", voice: "hatc",  size:  60, pit:   0 },
-  { name: "HHO", voice: "hato",  size: 180, pit:   0 },
-  { name: "CLP", voice: "clap",  size: 180, pit:   0 },
-  { name: "TOM", voice: "tom",   size: 180, pit:  -3 },
-  { name: "CYM", voice: "cym",   size: 250, pit:   0 },
-  { name: "COW", voice: "cow",   size: 200, pit:   0 },
+  { name: "T1", voice: "granular", srcType: "sine",  freq: 220, pan: -0.4 },
+  { name: "T2", voice: "granular", srcType: "tri",   freq: 330, pan:  0.4 },
+  { name: "T3", voice: "granular", srcType: "white", freq: 165, pan: -0.15 },
+  { name: "T4", voice: "granular", srcType: "saw",   freq: 110, pan:  0.15 },
+  { name: "T5", voice: "granular", srcType: "chord", freq: 220, pan:  0 },
 ];
 const $ = id => document.getElementById(id);
 const clamp = (v,a,b)=> v<a?a:v>b?b:v;
@@ -1376,10 +1372,11 @@ function makeTrack(idx){
   const isDrum = p.voice !== "granular";
   return {
     idx, name: p.name,
-    // armed defaults OFF — recording 13 simultaneous streams (12 stems +
-    // master) was crushing the audio thread. Master-mix capture is on by
-    // default; arm individual stems via the strip [R] when needed.
-    mute: false, solo: false, armed: false,
+    // multitrack capture on by default — 5 stems + master = 6 recorder
+    // worklets, comfortably within budget now that the recorder is
+    // block-buffered. (13 streams with the old per-quantum allocator was
+    // what caused the recording glitches.)
+    mute: false, solo: false, armed: true,
     evolve: false,
     gain_db: isDrum ? -6 : -8,
     pan: p.pan ?? 0,
@@ -4558,8 +4555,8 @@ document.addEventListener("keydown", e=>{
     t.seq.mode = t.seq.mode === "slice" ? "hit" : "slice";
     buildPatternGrid();
   }
-  // 1–9 = T1–T9, 0 = T10  (12 tracks total — use strip click for T11/T12)
-  const tIdx = "1234567890".indexOf(e.key);
+  // 1–5 = select track
+  const tIdx = "12345".indexOf(e.key);
   if(tIdx >= 0){ selectTrack(tIdx); return; }
   // F1-F4 alias
   if(e.key === "F1") { e.preventDefault(); selectTrack(0); }
