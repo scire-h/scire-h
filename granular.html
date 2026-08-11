@@ -1253,12 +1253,12 @@
 
     <div class="block">
       <h2>Record</h2>
-      <div class="rec-status" id="recStatus">idle · 32-bit float · auto</div>
+      <div class="rec-status" id="recStatus">idle · 32-bit float · 96 kHz</div>
       <div class="row" style="margin-top:8px"><label>Sample Rate</label></div>
       <div class="seg" id="srRateSeg">
-        <button class="on" data-sr="0">Auto</button>
+        <button data-sr="0">Auto</button>
         <button data-sr="48000">48k</button>
-        <button data-sr="96000">96k</button>
+        <button class="on" data-sr="96000">96k</button>
         <button data-sr="192000">192k</button>
       </div>
       <div class="row" style="margin-top:8px"><label>Bit Depth</label></div>
@@ -1360,13 +1360,11 @@ const G = {
     pendingMaster: false,
   },
 
-  // 0 = Auto: create the AudioContext WITHOUT a sampleRate request so it
-  // adopts whatever the current hardware/audio-session rate is. iOS screen
-  // recording runs the session at its own rate (44.1 kHz family) — if the
-  // user starts recording BEFORE loading the page, Auto matches it exactly
-  // and no resample path exists. Fixed 48/96/192 k remain for deliberate
-  // hi-res captures (desktop).
-  requestedSampleRate: 0,
+  // Hi-res default (user preference): 96 kHz context for hi-res in-app
+  // captures. Auto (0) remains selectable — it adopts the device/session
+  // rate and is the right choice when screen-recording on iOS; the clean-
+  // capture workflow there is in-app REC + screen video merged after.
+  requestedSampleRate: 96000,
   recFormat: "f32",        // "f32" = 32-bit float, "pcm24" = 24-bit PCM
 
   memories: new Array(10).fill(null),
