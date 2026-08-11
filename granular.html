@@ -1253,11 +1253,11 @@
 
     <div class="block">
       <h2>Record</h2>
-      <div class="rec-status" id="recStatus">idle · 32-bit float · 96 kHz</div>
+      <div class="rec-status" id="recStatus">idle · 32-bit float · 48 kHz</div>
       <div class="row" style="margin-top:8px"><label>Sample Rate</label></div>
       <div class="seg" id="srRateSeg">
-        <button data-sr="48000">48k</button>
-        <button class="on" data-sr="96000">96k</button>
+        <button class="on" data-sr="48000">48k</button>
+        <button data-sr="96000">96k</button>
         <button data-sr="192000">192k</button>
       </div>
       <div class="row" style="margin-top:8px"><label>Bit Depth</label></div>
@@ -1359,7 +1359,13 @@ const G = {
     pendingMaster: false,
   },
 
-  requestedSampleRate: 96000,
+  // 48 kHz default = phone-native rate. Requesting 96 k forces a
+  // permanent resample against the 44.1/48 k hardware session — normally
+  // tolerable, but when iOS screen recording reconfigures the audio
+  // session the mismatched-rate path is a known Safari crackle source,
+  // and 96 k also doubles the CPU cost of every node in the graph.
+  // 96 k / 192 k remain selectable for hi-res captures on desktop.
+  requestedSampleRate: 48000,
   recFormat: "f32",        // "f32" = 32-bit float, "pcm24" = 24-bit PCM
 
   memories: new Array(10).fill(null),
