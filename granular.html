@@ -4005,21 +4005,34 @@ function knobifySlider(sliderId, opts){
 // the output into the overlapping "jabber" the user heard. This version
 // fills preallocated ~0.34 s blocks (2 allocs per block instead of ~500)
 // and hands the data back with transferables, so stop doesn't deep-copy.
+// Two correctness rules learned the hard way:
+// 1. TIMELINE: when a track has no sounding grains its node chain goes
+//    input-inactive and process() receives zero channels. Skipping those
+//    quanta silently REMOVES the silence from the file — stems came out
+//    time-compressed and didn't line up with the master. Inactive quanta
+//    are now recorded as 128 zero frames so the timeline stays real.
+// 2. ALIGNMENT: every recorder is given the same startAt frame (a little
+//    in the future) and begins accumulating exactly there, so all stem
+//    WAVs and the master are sample-aligned when dropped into a DAW.
 const RECORDER_WORKLET = `
 class RecP extends AudioWorkletProcessor {
   constructor(){ super();
     this.rec = false;
+    this.startAt = 0;
     this.BS = 32768;
     this.curL = null; this.curR = null; this.fill = 0;
     this.blocksL = []; this.blocksR = [];
+    this.zeros = new Float32Array(128);
     this.port.onmessage = e => {
-      if(e.data === "start"){
+      const d = e.data;
+      if(d && d.cmd === "start"){
         this.blocksL = []; this.blocksR = [];
         this.curL = new Float32Array(this.BS);
         this.curR = new Float32Array(this.BS);
         this.fill = 0;
+        this.startAt = d.startAt || 0;
         this.rec = true;
-      } else if(e.data === "stop"){
+      } else if(d === "stop" || (d && d.cmd === "stop")){
         this.rec = false;
         if(this.fill > 0 && this.curL){
           this.blocksL.push(this.curL.slice(0, this.fill));
@@ -4033,17 +4046,14 @@ class RecP extends AudioWorkletProcessor {
       }
     };
   }
-  process(inputs){
-    if(!this.rec || !this.curL) return true;
-    const ch = inputs[0];
-    if(!ch || !ch.length) return true;
-    const l = ch[0], r = ch[1] || ch[0];
+  append(l, r, n){
     let i = 0;
-    const n = l.length;
     while(i < n){
       const take = Math.min(this.BS - this.fill, n - i);
-      this.curL.set(l.subarray(i, i + take), this.fill);
-      this.curR.set(r.subarray(i, i + take), this.fill);
+      if(l) this.curL.set(l.subarray(i, i + take), this.fill);
+      else  this.curL.fill(0, this.fill, this.fill + take);
+      if(r) this.curR.set(r.subarray(i, i + take), this.fill);
+      else  this.curR.fill(0, this.fill, this.fill + take);
       this.fill += take;
       i += take;
       if(this.fill === this.BS){
@@ -4054,6 +4064,17 @@ class RecP extends AudioWorkletProcessor {
         this.fill = 0;
       }
     }
+  }
+  process(inputs){
+    if(!this.rec || !this.curL) return true;
+    if(currentFrame < this.startAt) return true;   // wait for the shared start
+    const ch = inputs[0];
+    if(!ch || !ch.length){
+      this.append(null, null, 128);                // keep silence in the timeline
+      return true;
+    }
+    const l = ch[0], r = ch[1] || ch[0];
+    this.append(l, r, l.length);
     return true;
   }
 }
@@ -4126,6 +4147,10 @@ async function startRecording(){
   if(!G.rec.workletReady){ $("recStatus").textContent = "worklet not ready"; return; }
   if(G.rec.active) return;
 
+  // shared start frame ~150 ms ahead, quantum-aligned: every recorder
+  // begins at exactly the same sample so stems + master line up in a DAW.
+  const startAt = Math.ceil ((G.ctx.currentTime + 0.15) * G.ctx.sampleRate / 128) * 128;
+
   for(const t of tracks){
     if(!t.armed) continue;
     try{
@@ -4139,7 +4164,7 @@ async function startRecording(){
         downloadBlob(blob, `granular-${tStamp()}-${t.name}-${sr}-${tag}.wav`);
       };
       t.panNode.connect(t.recNode);
-      t.recNode.port.postMessage("start");
+      t.recNode.port.postMessage({cmd:"start", startAt});
     } catch(e){
       console.error("track recorder failed", e);
     }
@@ -4156,7 +4181,7 @@ async function startRecording(){
         downloadBlob(blob, `granular-${tStamp()}-MASTER-${sr}-${tag}.wav`);
       };
       G.limiter.connect(G.rec.masterRecNode);   // tap post-limiter so the WAV is safe too
-      G.rec.masterRecNode.port.postMessage("start");
+      G.rec.masterRecNode.port.postMessage({cmd:"start", startAt});
     } catch(e){
       console.error("master recorder failed", e);
     }
