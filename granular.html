@@ -1253,10 +1253,11 @@
 
     <div class="block">
       <h2>Record</h2>
-      <div class="rec-status" id="recStatus">idle · 32-bit float · 48 kHz</div>
+      <div class="rec-status" id="recStatus">idle · 32-bit float · auto</div>
       <div class="row" style="margin-top:8px"><label>Sample Rate</label></div>
       <div class="seg" id="srRateSeg">
-        <button class="on" data-sr="48000">48k</button>
+        <button class="on" data-sr="0">Auto</button>
+        <button data-sr="48000">48k</button>
         <button data-sr="96000">96k</button>
         <button data-sr="192000">192k</button>
       </div>
@@ -1359,13 +1360,13 @@ const G = {
     pendingMaster: false,
   },
 
-  // 48 kHz default = phone-native rate. Requesting 96 k forces a
-  // permanent resample against the 44.1/48 k hardware session — normally
-  // tolerable, but when iOS screen recording reconfigures the audio
-  // session the mismatched-rate path is a known Safari crackle source,
-  // and 96 k also doubles the CPU cost of every node in the graph.
-  // 96 k / 192 k remain selectable for hi-res captures on desktop.
-  requestedSampleRate: 48000,
+  // 0 = Auto: create the AudioContext WITHOUT a sampleRate request so it
+  // adopts whatever the current hardware/audio-session rate is. iOS screen
+  // recording runs the session at its own rate (44.1 kHz family) — if the
+  // user starts recording BEFORE loading the page, Auto matches it exactly
+  // and no resample path exists. Fixed 48/96/192 k remain for deliberate
+  // hi-res captures (desktop).
+  requestedSampleRate: 0,
   recFormat: "f32",        // "f32" = 32-bit float, "pcm24" = 24-bit PCM
 
   memories: new Array(10).fill(null),
@@ -1435,16 +1436,27 @@ async function ensureAudio(){
   // but the bigger buffer makes the audio thread survive CPU spikes from
   // screen recording / app switching without underrun crackle ("bababa").
   try{
-    ctx = new (window.AudioContext || window.webkitAudioContext)({
-      sampleRate: G.requestedSampleRate,
-      latencyHint: "playback",
-    });
+    const opts = { latencyHint: "playback" };
+    if(G.requestedSampleRate > 0) opts.sampleRate = G.requestedSampleRate;
+    ctx = new (window.AudioContext || window.webkitAudioContext)(opts);
   } catch(e){
     ctx = new (window.AudioContext || window.webkitAudioContext)({
       latencyHint: "playback",
     });
   }
   G.ctx = ctx;
+  // iOS pauses/interrupts the context on session changes (screen recording
+  // start/stop, calls, route changes). Auto-resume when we come back.
+  ctx.addEventListener("statechange", ()=>{
+    if(ctx.state === "suspended" || ctx.state === "interrupted"){
+      if(G.running) ctx.resume().catch(()=>{});
+    }
+  });
+  document.addEventListener("visibilitychange", ()=>{
+    if(!document.hidden && G.running && ctx.state !== "running"){
+      ctx.resume().catch(()=>{});
+    }
+  });
   updateRecStatusText();
 
   G.master = G.ctx.createGain();
@@ -4095,13 +4107,18 @@ document.querySelectorAll("#recFmtSeg button").forEach(b=>{
 
 function updateRecStatusText(){
   const fmt  = G.recFormat === "pcm24" ? "24-bit PCM" : "32-bit float";
+  const auto = !(G.requestedSampleRate > 0);
   const req  = G.requestedSampleRate / 1000;
   if(G.rec.active) return;             // leave the rec-timer text alone while recording
   if(!G.ctx){
-    $("recStatus").textContent = `idle · ${fmt} · ${req} kHz (requested)`;
+    $("recStatus").textContent = auto
+      ? `idle · ${fmt} · auto (device rate)`
+      : `idle · ${fmt} · ${req} kHz (requested)`;
   } else {
     const actual = G.ctx.sampleRate / 1000;
-    const note   = (Math.abs(actual - req) > 1) ? `requested ${req}k, got ${actual}k` : `${actual} kHz`;
+    const note = auto
+      ? `${actual} kHz (auto)`
+      : (Math.abs(actual - req) > 1 ? `requested ${req}k, got ${actual}k` : `${actual} kHz`);
     $("recStatus").textContent = `idle · ${fmt} · ${note}`;
   }
 }
@@ -4315,7 +4332,7 @@ function applyState(s){
         b.classList.toggle("on", b.dataset.fmt === G.recFormat);
       });
     }
-    if(s.G.requestedSampleRate){
+    if(typeof s.G.requestedSampleRate === "number"){   // 0 = Auto is valid
       G.requestedSampleRate = s.G.requestedSampleRate;
       document.querySelectorAll("#srRateSeg button").forEach(b=>{
         b.classList.toggle("on", parseInt(b.dataset.sr) === G.requestedSampleRate);
