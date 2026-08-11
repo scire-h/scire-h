@@ -1,13 +1,30 @@
-# scire-h — ULT-SOUND DS-4M clones
-
-Two implementations of the **ULT-SOUND DS-4M** (Toyo Gakki, 1978),
-a four-channel analog drum synthesiser in the Pollard Syndrum family.
+# scire-h — instruments
 
 ```
 scire-h/
-├── index.html        ← single-file HTML / Web Audio clone
-└── ds4-native/       ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
+├── index.html         ← ULT-SOUND DS-4M single-file HTML / Web Audio clone
+├── ds4-native/        ← DS-4M JUCE 8 C++ plug-in (Standalone + AU + VST3)
+├── granular.html      ← GRANULAR: 5-track granular synth (Web Audio, single file)
+└── granular-native/   ← GRANULAR native port (JUCE, AUv3 for AUM on iOS) — WIP
 ```
+
+## GRANULAR (`granular.html` / `granular-native/`)
+
+A 5-track granular synthesiser: 8 signal sources or imported audio,
+64-step Hit/Slice sequencer with triplets, generative Evolve mutations,
+per-track FX (delay, ping-pong, reverb, bit-crush, distortion, comp,
+gate, binaural HRTF orbit, flanger, phaser), XY performance pad,
+multitrack hi-res WAV capture, 1-bit Macintosh look. Open
+`granular.html` in any browser. The native port (`granular-native/`,
+see `docs/PORT_PLAN.md`) targets iPhone + AUM via AUv3; its DSP core is
+unit-tested without JUCE (`granular-native/tests/run_all.sh`).
+
+---
+
+# ULT-SOUND DS-4M clones
+
+Two implementations of the **ULT-SOUND DS-4M** (Toyo Gakki, 1978),
+a four-channel analog drum synthesiser in the Pollard Syndrum family.
 
 ## 1. HTML / Web Audio clone (`index.html`)
 
