@@ -3,6 +3,25 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## ZURE — the name, and 1992
+
+* The machine is now called **ZURE** (`zure.html`; the ずれ is the
+  instrument). Tests, Makefile (`make zure`, `poly` kept as an alias),
+  workflow names, project/recording file names and the MIDI-map
+  localStorage key follow (the old key is still read as a fallback).
+* Reskin: a 1992 personal computer, not a game console. Paper white +
+  ink black, 2x2 checkerboard dither in place of every gradient,
+  bitmap-font stack (MS Gothic / Osaka-Mono / monospace), zero border
+  radius, hard offset shadows, System-7 striped title bars, buttons
+  that press into their own shadow, blinking dithered REC.
+* The phase scope now rasterises at 92x92 and upscales through
+  `image-rendering: pixelated` — real chunky dots, no glow.
+* Header BPM stepper for the selected track: left/right buttons per
+  digit (±0.01 / 0.1 / 1 / 10), hold for auto-repeat, letter button
+  cycles the selection, live target readout. All through the glide.
+* Echo gains a manual mode: a TIME knob (20 ms - 2 s) plus FREE in the
+  division row; turning the knob claims the delay from tempo sync.
+
 ## POLYTEMPO — FX, fill, memories, performance controls, Platinum
 
 * Per-track FX: send into a shared convolver reverb (generated

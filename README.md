@@ -2,12 +2,12 @@
 
 Two implementations of the **ULT-SOUND DS-4M** (Toyo Gakki, 1978),
 a four-channel analog drum synthesiser in the Pollard Syndrum family,
-plus **POLYTEMPO**, a four-track polytempo loop machine.
+plus **ZURE**, a four-track polytempo loop machine.
 
 ```
 scire-h/
 ├── index.html        ← single-file HTML / Web Audio DS-4M clone
-├── polytempo.html    ← single-file polytempo loop machine
+├── zure.html         ← ZURE, single-file polytempo loop machine
 ├── tests/web/        ← Node unit tests for the web apps
 └── ds4-native/       ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
 ```
@@ -38,14 +38,14 @@ open      index.html   # macOS
 start     index.html   # Windows
 ```
 
-## 2. POLYTEMPO loop machine (`polytempo.html`)
+## 2. ZURE — polytempo loop machine (`zure.html`)
 
 Four loops, four independent tempos, and an operation that makes one
 loop *catch up* to another. The drift and the convergence are the
 instrument: tracks run as a polytempo mass, then slide into agreement.
 
 ```
-xdg-open polytempo.html      # or: make poly
+xdg-open zure.html           # or: make zure
 ```
 
 **Tempo.** Each of the four tracks holds its own continuously-variable
@@ -113,7 +113,8 @@ defaults to 120; FIT LOOP derives it from the loop length, or type it.
 **Per-track FX.** Each track has a send into a shared reverb and its
 own ping-pong L/R echo. The echo time is set as a note value (1/16 -
 1/2) against that track's OWN tempo, so during a catch-up the echoes
-sweep along with the pitch. Recorded stems stay dry; FX print only on
+sweep along with the pitch — or set FREE (turning the TIME knob claims
+it automatically) for a manual 20 ms - 2 s time. Recorded stems stay dry; FX print only on
 the master.
 
 **FILL.** One button (or `F`): every unmuted drum track drops into a
@@ -126,11 +127,17 @@ memories (P1-P4, saved in the project). Steps paint with press-and-
 slide, not just clicks. The header carries A-D on/off toggles next to
 PLAY, and a selected track (click it, or Numpad 1-4) takes BPM nudges
 from the keyboard: `+`/`-` for ±1, Shift for ±0.1, `*`//` for ±10 —
-all through the glide.
+all through the glide. A header stepper does the same with buttons,
+digit by digit (±0.01 / 0.1 / 1 / 10, hold to auto-repeat), with a
+live readout of the selected track's target BPM.
 
-**Look.** Mac OS 8 Platinum: deliberate monochrome, hard bevels,
-striped title bars, hard offset shadows. Tracks are told apart by
-letter and four grey values, not hue.
+**Look.** A 1992 personal computer, not a game console: paper white
+and ink black, checkerboard dither where a gradient would have been,
+a bitmap-font stack (MS Gothic / Osaka-Mono / monospace), zero border
+radius, hard offset shadows, buttons that press into their own
+shadow, and a phase scope rasterised at 92x92 and upscaled with
+`image-rendering: pixelated` — honest dots. Tracks are told apart by
+letter and grey value, not hue.
 
 **Level safety.** Every track starts with 12 dB of headroom; the master
 bus is 20 Hz high-pass → limiter → tanh soft clip, and boots quiet. A
@@ -149,7 +156,7 @@ cd tests/web && ./run_all.sh     # or: make test-web
 296 assertions over the timing math, the catch-up/glide state machine,
 the voice library (including the waveform/decay/sustain edit layer and
 the choke handles) and the file writers. All three suites read the code
-straight out of `polytempo.html`, so there is no duplicated copy to
+straight out of `zure.html`, so there is no duplicated copy to
 fall out of date: `test_tempo.js` simulates the scheduler against a
 fake clock and checks that phase lock converges to under 3 ms across
 28 tempo/offset combinations, `test_voices.js` builds every voice

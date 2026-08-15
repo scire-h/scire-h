@@ -2,7 +2,7 @@
 /* ===================================================================
    Unit tests for the POLYTEMPO voice library.
 
-   Runs the voice-construction code out of polytempo.html against a
+   Runs the voice-construction code out of zure.html against a
    stub AudioContext that enforces the parts of the Web Audio contract
    browsers throw on: start-before-stop, one start per source, finite
    parameter values, no exponential ramp to zero, nothing scheduled in
@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 // optional argv override so the suite can be pointed at a mutated copy
-const HTML = process.argv[2] || path.join(__dirname, '..', '..', 'polytempo.html');
+const HTML = process.argv[2] || path.join(__dirname, '..', '..', 'zure.html');
 
 /* ---------------- assertion harness ---------------- */
 let pass = 0, fail = 0;
@@ -119,7 +119,7 @@ function loadVoices () {
   const src = fs.readFileSync(HTML, 'utf8');
   const a = src.indexOf('/*<<<VOICES>>>*/');
   const b = src.indexOf('/*<<<END_VOICES>>>*/');
-  if (a < 0 || b < 0) throw new Error('VOICES markers not found in polytempo.html');
+  if (a < 0 || b < 0) throw new Error('VOICES markers not found in zure.html');
   return new Function('ctx', 'noiseBuf', 'Math',
     src.slice(a, b) + '\nreturn { Voices, SUS_CAP };')(ctx, noiseBuf, Math);
 }

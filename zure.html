@@ -3,240 +3,231 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#d4d4d4" />
-<title>POLYTEMPO — 4-track polytempo loop machine</title>
+<meta name="theme-color" content="#e8e8e8" />
+<title>ZURE — 4-track polytempo loop machine</title>
 <style>
   /* ================================================================
-     PLATINUM SKIN — Mac OS 8: deliberate monochrome, hard bevels,
-     striped title bars, hard offset shadows. Identity comes from
-     letters and structure, not hue.
+     ZURE — 1992 PC SKIN. One-bit sensibility: paper white, ink black,
+     checkerboard dither where a gradient would have been, bitmap-font
+     stack, zero border-radius, hard offset shadows, pixelated scope.
+     Not a game console — a workstation.
      ================================================================ */
   :root{
-    --bg:#d4d4d4; --panel:#e2e2e2; --panel2:#efefef; --line:#8e8e8e;
-    --text:#111214; --dim:#4c4d50; --dim2:#77787c;
-    --a:#1d1e20; --b:#2c2d30; --c:#4a4b4f; --d:#6b6c70;
-    --hot:#1d1e20; --ok:#1d1e20;
-    --bevH:#ffffff; --bevS:#9c9c9c; --edge:#3c3c3e;
+    --paper:#ffffff; --ink:#000000; --line:#000000;
+    --bg:#e8e8e8; --panel:#ffffff; --panel2:#ffffff;
+    --text:#000000; --dim:#444444; --dim2:#666666;
+    --a:#000; --b:#333; --c:#000; --d:#777;
+    --hot:#000; --ok:#000;
+    --dith: conic-gradient(#bdbdbd 25%, #ffffff 0 50%, #bdbdbd 0 75%, #ffffff 0);
+    --dithDark: conic-gradient(#000 25%, #fff 0 50%, #000 0 75%, #fff 0);
+    --dithLight: conic-gradient(#e2e2e2 25%, #ffffff 0 50%, #e2e2e2 0 75%, #ffffff 0);
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
-    font-family:"Charcoal","Chicago",Geneva,Verdana,"Hiragino Sans",system-ui,sans-serif;
-    font-size:12px;overscroll-behavior:none}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;border-radius:0 !important;
+    -webkit-font-smoothing:none;font-smooth:never}
+  html,body{margin:0;padding:0;color:var(--text);
+    background-image:var(--dith);background-size:2px 2px;
+    font-family:"MS Gothic","ＭＳ ゴシック","Osaka-Mono",Osaka-等幅,"Courier New",monospace;
+    font-size:12px;line-height:1.35;overscroll-behavior:none}
   .app{max-width:1180px;margin:0 auto;padding:0 0 40px}
   button{font-family:inherit;color:inherit}
   .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 
   /* ---------- header ---------- */
-  .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:9px;flex-wrap:wrap;
-    padding:7px 12px;background:linear-gradient(180deg,#e8e8e8,#cfcfcf);
-    border-bottom:1px solid var(--edge);
-    box-shadow:inset 0 1px 0 var(--bevH), 0 1px 0 rgba(0,0,0,.15)}
-  .logo{font-weight:800;letter-spacing:.14em;font-size:13px;color:#131315}
-  .logo small{display:block;letter-spacing:.06em;font-size:8px;color:var(--dim2);font-weight:700}
+  .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    padding:6px 10px;background:#fff;border-bottom:2px solid #000;
+    box-shadow:0 2px 0 rgba(0,0,0,.25)}
+  .logo{font-weight:700;letter-spacing:.3em;font-size:16px;color:#000}
+  .logo small{display:block;letter-spacing:.08em;font-size:8px;color:#555;font-weight:400}
   .top .sp{flex:1}
 
-  /* platinum buttons */
-  .tbtn{height:28px;padding:0 13px;border-radius:5px;border:1px solid var(--edge);
-    background:linear-gradient(180deg,#f6f6f6,#cfcfcf);
-    color:#131315;font-size:11px;font-weight:700;letter-spacing:.05em;cursor:pointer;
-    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS)}
-  .tbtn:active{background:linear-gradient(180deg,#c2c2c2,#d8d8d8);
-    box-shadow:inset 1px 1px 0 var(--bevS), inset -1px -1px 0 var(--bevH)}
-  .tbtn.on,.tbtn.play.playing,.tbtn.warn.on{
-    background:#2b2c2f;color:#fff;border-color:#000;
-    box-shadow:inset 1px 1px 0 #4a4b4f, inset -1px -1px 0 #000}
-  .tbtn.play{font-weight:800;box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS),
-    0 0 0 2px #cfcfcf, 0 0 0 3px var(--edge)}  /* OS8 default-button ring */
-  .tbtn.play.playing{box-shadow:inset 1px 1px 0 #4a4b4f, inset -1px -1px 0 #000,
-    0 0 0 2px #cfcfcf, 0 0 0 3px var(--edge)}
+  /* pixel buttons: press = shift into your own shadow */
+  .tbtn{height:26px;padding:0 12px;border:1px solid #000;background:#fff;
+    color:#000;font-size:11px;font-weight:700;letter-spacing:.05em;cursor:pointer;
+    box-shadow:2px 2px 0 #000}
+  .tbtn:active{transform:translate(2px,2px);box-shadow:none}
+  .tbtn.on,.tbtn.play.playing,.tbtn.warn.on{background:#000;color:#fff}
+  .tbtn.play{box-shadow:2px 2px 0 #000, 0 0 0 1px #fff inset, 0 0 0 2px #000 inset}
+  .tbtn.play.playing{box-shadow:2px 2px 0 #000, 0 0 0 1px #000 inset, 0 0 0 2px #fff inset}
 
-  /* track on/off, sits next to PLAY */
-  .trkTgl{display:flex;border:1px solid var(--edge);border-radius:5px;overflow:hidden;
-    box-shadow:inset 1px 1px 0 var(--bevH)}
-  .trkTgl button{width:30px;height:26px;border:0;border-right:1px solid var(--line);
-    background:linear-gradient(180deg,#f2f2f2,#d2d2d2);
-    font-size:11px;font-weight:800;cursor:pointer;color:#9b9c9f}
+  /* selected-track BPM digit stepper */
+  .stepper{display:flex;align-items:stretch;border:1px solid #000;box-shadow:2px 2px 0 #000;
+    background:#fff;height:26px}
+  .stepper button{border:0;border-right:1px solid #000;background:#fff;color:#000;
+    font-size:9px;font-weight:700;padding:0 5px;cursor:pointer;font-family:inherit}
+  .stepper button:last-child{border-right:0}
+  .stepper button:active{background:#000;color:#fff}
+  .stepper .stSel{background:#000;color:#fff;min-width:22px}
+  .stepper .stBpm{display:flex;align-items:center;padding:0 6px;font-size:12px;font-weight:700;
+    border-right:1px solid #000;min-width:58px;justify-content:center;
+    background-image:var(--dithLight);background-size:2px 2px}
+
+  .trkTgl{display:flex;border:1px solid #000;box-shadow:2px 2px 0 #000;background:#fff}
+  .trkTgl button{width:28px;height:24px;border:0;border-right:1px solid #000;background:#fff;
+    font-size:11px;font-weight:700;cursor:pointer;color:#000}
   .trkTgl button:last-child{border-right:0}
-  .trkTgl button.on{background:#2b2c2f;color:#fff}
+  .trkTgl button:not(.on){background-image:var(--dithLight);background-size:2px 2px;color:#888}
+  .trkTgl button.on{background:#000;color:#fff}
 
-  /* ---------- meter (monochrome) ---------- */
+  /* ---------- meter: block segments ---------- */
   .meter{display:flex;align-items:center;gap:6px}
-  .mbar{position:relative;width:100px;height:9px;background:#fff;
-    border:1px solid var(--edge);overflow:hidden;
-    box-shadow:inset 1px 1px 2px rgba(0,0,0,.25)}
+  .mbar{position:relative;width:100px;height:10px;background:#fff;border:1px solid #000;overflow:hidden}
   .mfill{position:absolute;inset:0;width:0%;
-    background:repeating-linear-gradient(90deg,#3a3b3e 0 3px,#6a6b6e 3px 4px)}
+    background-image:repeating-linear-gradient(90deg,#000 0 4px,#fff 4px 6px)}
   .mpk{position:absolute;top:0;bottom:0;width:2px;background:#000;left:0}
-  .clip{width:9px;height:9px;border-radius:50%;background:#fff;border:1px solid var(--edge)}
+  .clip{width:10px;height:10px;background:#fff;border:1px solid #000}
   .clip.on{background:#000}
-  .mdb{font-size:10px;color:var(--dim);min-width:44px;text-align:right}
+  .mdb{font-size:10px;color:#333;min-width:44px;text-align:right}
 
   /* ---------- panels ---------- */
   .panelRow{display:grid;grid-template-columns:minmax(380px,5fr) minmax(330px,4fr) minmax(250px,3fr);
     gap:10px;margin:10px 12px}
   .panelRow .panel{margin:0}
   @media (max-width:1020px){ .panelRow{grid-template-columns:1fr} }
-  .panel{background:var(--panel);border:1px solid var(--edge);border-radius:2px;
-    margin:10px 12px;padding:9px 10px;
-    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS),
-      2px 2px 0 rgba(0,0,0,.18)}
-  /* OS8 striped title */
-  .ptitle{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:800;
-    letter-spacing:.14em;color:#131315;margin:0 0 8px;white-space:nowrap}
-  .ptitle::before,.ptitle::after{content:"";flex:1;height:9px;min-width:12px;
-    background:repeating-linear-gradient(180deg,#fdfdfd 0 1px,#b9b9b9 1px 2px);
-    border:1px solid #9a9a9a}
+  .panel{background:#fff;border:1px solid #000;margin:10px 12px;padding:9px 10px;
+    box-shadow:3px 3px 0 #000}
+  /* System-7 striped title */
+  .ptitle{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;
+    letter-spacing:.12em;color:#000;margin:0 0 8px;white-space:nowrap}
+  .ptitle::before,.ptitle::after{content:"";flex:1;height:9px;min-width:10px;
+    background:repeating-linear-gradient(180deg,#000 0 1px,#fff 1px 3px)}
   .ptitle::before{min-width:8px;flex:0 0 8px}
 
-  /* ---------- knob ---------- */
-  .knob{display:flex;flex-direction:column;align-items:center;gap:4px;width:72px;flex:none;
+  /* ---------- knob: flat ink-and-paper dial ---------- */
+  .knob{display:flex;flex-direction:column;align-items:center;gap:4px;width:70px;flex:none;
     cursor:ns-resize;touch-action:none}
-  .knob .dial{position:relative;flex:none;width:46px;height:46px;border-radius:50%;
-    background:radial-gradient(circle at 36% 30%, #fbfbfb, #d9d9d9 55%, #b6b6b6 100%);
-    border:1px solid var(--edge);
-    box-shadow:inset 1px 1px 0 var(--bevH), inset -2px -3px 4px rgba(0,0,0,.18),
-      1px 1px 0 rgba(0,0,0,.2)}
-  .knob .dial i{position:absolute;left:50%;top:4px;width:2px;height:15px;margin-left:-1px;
-    background:#0c0c0e;border-radius:1px;transform-origin:50% 19px}
-  .knob .kl{font-size:8px;font-weight:800;letter-spacing:.1em;color:var(--dim2);white-space:nowrap}
-  .knob .kv{font-size:10px;font-weight:700;color:#131315;white-space:nowrap}
-  .knob.inline{flex-direction:row;align-items:center;width:auto;height:28px;gap:6px;cursor:ns-resize}
-  .knob.inline .dial{width:26px;height:26px}
-  .knob.inline .dial i{height:9px;top:3px;margin-left:-1px;transform-origin:50% 10px}
-  .knob.inline .kl{font-size:8px}
-  .knob.inline .kv{font-size:10px;min-width:48px;text-align:right}
+  .knob .dial{position:relative;flex:none;width:44px;height:44px;border-radius:50% !important;
+    background:#fff;border:2px solid #000;
+    box-shadow:2px 2px 0 rgba(0,0,0,.55)}
+  .knob .dial::after{content:"";position:absolute;inset:3px;border-radius:50%;
+    background-image:var(--dithLight);background-size:2px 2px}
+  .knob .dial i{position:absolute;left:50%;top:3px;width:3px;height:14px;margin-left:-2px;
+    background:#000;transform-origin:50% 17px;z-index:1}
+  .knob .kl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#555;white-space:nowrap}
+  .knob .kv{font-size:11px;font-weight:700;color:#000;white-space:nowrap}
+  .knob.inline{flex-direction:row;align-items:center;width:auto;height:26px;gap:6px;cursor:ns-resize}
+  .knob.inline .dial{width:24px;height:24px;border-width:2px}
+  .knob.inline .dial i{height:8px;top:2px;width:2px;margin-left:-1px;transform-origin:50% 9px}
+  .knob.inline .kl{font-size:9px}
+  .knob.inline .kv{font-size:11px;min-width:48px;text-align:right}
   .knob.big{width:92px}
-  .knob.big .dial{width:62px;height:62px}
-  .knob.big .dial i{height:20px;top:5px;transform-origin:50% 26px;width:3px}
-  .knob.big .kv{font-size:12px;color:#131315}
+  .knob.big .dial{width:60px;height:60px}
+  .knob.big .dial i{height:20px;top:4px;transform-origin:50% 25px;width:4px}
+  .knob.big .kv{font-size:12px;color:#000}
   .knob.sm{width:52px;gap:3px}
-  .knob.sm .dial{width:30px;height:30px}
-  .knob.sm .dial i{height:10px;top:3px;transform-origin:50% 12px}
-  .knob.sm .kl{font-size:7px}
-  .knob.sm .kv{font-size:9px}
-  .knob.learn{outline:2px dashed #131315;outline-offset:3px}
-  .knob.mapped .kl::after{content:" ●";color:#131315}
+  .knob.sm .dial{width:28px;height:28px;border-width:2px}
+  .knob.sm .dial i{height:9px;top:2px;width:2px;margin-left:-1px;transform-origin:50% 11px}
+  .knob.sm .kl{font-size:8px}
+  .knob.sm .kv{font-size:10px}
+  .knob.learn{outline:2px dashed #000;outline-offset:3px}
+  .knob.mapped .kl::after{content:" *";color:#000;font-weight:700}
 
   /* ---------- recorder ---------- */
-  .recBtn{height:38px;padding:0 18px;border-radius:5px;border:1px solid var(--edge);
-    background:linear-gradient(180deg,#f6f6f6,#cfcfcf);
-    color:#131315;font-size:12px;font-weight:800;letter-spacing:.08em;cursor:pointer;
-    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS)}
-  .recBtn.on{background:#1d1e20;color:#fff;border-color:#000;
-    box-shadow:inset 1px 1px 0 #4a4b4f;animation:recpulse 1.1s ease-in-out infinite}
-  @keyframes recpulse{0%,100%{box-shadow:inset 1px 1px 0 #4a4b4f,0 0 0 0 rgba(0,0,0,.4)}
-    50%{box-shadow:inset 1px 1px 0 #4a4b4f,0 0 0 7px rgba(0,0,0,0)}}
+  .recBtn{height:34px;padding:0 16px;border:1px solid #000;background:#fff;
+    color:#000;font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;
+    box-shadow:2px 2px 0 #000}
+  .recBtn:active{transform:translate(2px,2px);box-shadow:none}
+  .recBtn.on{background:#000;color:#fff;animation:blink 0.9s steps(1) infinite}
+  @keyframes blink{0%,55%{background:#000;color:#fff}
+    56%,100%{background-image:var(--dithDark);background-size:2px 2px;color:#fff}}
   #recStat b{color:#000}
 
   /* ---------- console ---------- */
   .console{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
   .segs{display:flex;flex-direction:column;gap:6px;min-width:200px}
   .seg{display:flex;align-items:center;gap:7px}
-  .seg .sl{font-size:8px;font-weight:800;letter-spacing:.1em;color:var(--dim2);width:56px;flex:none}
-  .opts{display:flex;border:1px solid var(--edge);border-radius:4px;overflow:hidden;
-    box-shadow:inset 1px 1px 0 var(--bevH)}
-  .opts button{border:0;color:#131315;font-size:9px;font-weight:800;
-    letter-spacing:.05em;padding:6px 9px;cursor:pointer;border-right:1px solid var(--line);
-    background:linear-gradient(180deg,#f2f2f2,#d2d2d2)}
+  .seg .sl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#555;width:56px;flex:none}
+  .opts{display:flex;border:1px solid #000;background:#fff;box-shadow:2px 2px 0 rgba(0,0,0,.55)}
+  .opts button{border:0;color:#000;font-size:10px;font-weight:700;
+    letter-spacing:.04em;padding:5px 8px;cursor:pointer;border-right:1px solid #000;background:#fff}
   .opts button:last-child{border-right:0}
-  .opts button.on{background:#2b2c2f;color:#fff}
-  .opts.learn{outline:2px dashed #131315;outline-offset:2px}
-  .hint{font-size:10px;color:var(--dim);line-height:1.7;max-width:320px}
-  .hint b{color:#131315;font-weight:700}
+  .opts button.on{background:#000;color:#fff}
+  .opts.learn{outline:2px dashed #000;outline-offset:2px}
+  .hint{font-size:10px;color:#444;line-height:1.7;max-width:320px}
+  .hint b{color:#000;font-weight:700}
 
-  /* ---------- phase scope ---------- */
+  /* ---------- phase scope: honest pixels ---------- */
   .scopeWrap{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
-  canvas#scope{width:170px;height:170px;flex:none;background:#fff;
-    border:1px solid var(--edge);box-shadow:inset 1px 1px 2px rgba(0,0,0,.15)}
+  canvas#scope{width:172px;height:172px;flex:none;background:#fff;border:1px solid #000;
+    image-rendering:pixelated;box-shadow:2px 2px 0 rgba(0,0,0,.55)}
   .legend{display:flex;flex-direction:column;gap:5px;font-size:10px}
   .legend .row{display:flex;align-items:center;gap:6px}
   .legend .sw{width:9px;height:9px;border:1px solid #000}
-  .legend .nm{width:14px;font-weight:800}
-  .legend .st{color:var(--dim);font-size:9px;min-width:120px}
+  .legend .nm{width:14px;font-weight:700}
+  .legend .st{color:#444;font-size:9px;min-width:120px}
 
   /* ---------- tracks ---------- */
-  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 12px}
+  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 12px}
   @media (max-width:900px){ .tracks{grid-template-columns:1fr} }
-  .trk{background:var(--panel);border:1px solid var(--edge);border-radius:2px;padding:9px;
-    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS),
-      2px 2px 0 rgba(0,0,0,.18)}
-  .trk.master{border-color:#000;box-shadow:0 0 0 1px #000,
-    inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS), 2px 2px 0 rgba(0,0,0,.25)}
-  .trk.selected{outline:2px dashed #6a6b6e;outline-offset:2px}
+  .trk{background:#fff;border:1px solid #000;padding:9px;box-shadow:3px 3px 0 #000}
+  .trk.master{box-shadow:3px 3px 0 #000, 0 0 0 1px #fff inset, 0 0 0 3px #000 inset;
+    padding:11px}
+  .trk.selected{outline:2px dashed #000;outline-offset:3px}
   .thead{display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap}
   .tid{width:24px;height:24px;display:flex;align-items:center;justify-content:center;
-    font-weight:900;font-size:12px;color:#fff;flex:none;background:#1d1e20;
-    border:1px solid #000;box-shadow:inset 1px 1px 0 #4a4b4f}
-  .tbpm{font-size:19px;font-weight:800;color:#131315;letter-spacing:.02em;cursor:text}
-  .tbpm small{font-size:8px;color:var(--dim2);letter-spacing:.12em;margin-left:3px;font-weight:700}
+    font-weight:700;font-size:13px;color:#fff;flex:none;background:#000;border:1px solid #000}
+  .tbpm{font-size:19px;font-weight:700;color:#000;letter-spacing:.02em;cursor:text}
+  .tbpm small{font-size:8px;color:#666;letter-spacing:.1em;margin-left:3px}
   .thead .sp{flex:1}
-  .mini{height:24px;padding:0 9px;border-radius:4px;border:1px solid var(--edge);
-    font-size:9px;font-weight:800;letter-spacing:.05em;cursor:pointer;color:#131315;
-    background:linear-gradient(180deg,#f2f2f2,#d2d2d2);
-    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS)}
-  .mini.on,.mini.catch.run{background:#2b2c2f;color:#fff;border-color:#000;
-    box-shadow:inset 1px 1px 0 #4a4b4f}
-  .mini.learn{outline:2px dashed #131315;outline-offset:2px}
-  .mini:disabled{opacity:.35;cursor:default}
-  .mini.pm{width:34px}
+  .mini{height:23px;padding:0 8px;border:1px solid #000;background:#fff;
+    font-size:9px;font-weight:700;letter-spacing:.04em;cursor:pointer;color:#000;
+    box-shadow:1px 1px 0 #000}
+  .mini:active{transform:translate(1px,1px);box-shadow:none}
+  .mini.on,.mini.catch.run{background:#000;color:#fff}
+  .mini.learn{outline:2px dashed #000;outline-offset:2px}
+  .mini:disabled{opacity:.3;cursor:default;box-shadow:none}
+  .mini.pm{width:32px}
   .trow{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
-  .stat{font-size:9px;color:var(--dim);letter-spacing:.03em}
-  .stat b{color:#000;font-weight:700}
+  .stat{font-size:9px;color:#444;letter-spacing:.02em}
+  .stat b{color:#000}
   .stat.lock b{color:#000}
 
-  /* grid */
+  /* grid: paper cells, ink pips, dithered beat guides */
   .grid{display:flex;flex-direction:column;gap:2px;margin-top:3px}
   .grow{display:grid;grid-template-columns:28px 1fr;gap:4px;align-items:center}
-  .rlbl{font-size:8px;font-weight:800;color:var(--dim2);text-align:right;letter-spacing:.03em}
+  .rlbl{font-size:9px;font-weight:700;color:#555;text-align:right;letter-spacing:.02em}
   .cells{display:grid;gap:2px;touch-action:pan-y;user-select:none}
   .pmRow{display:flex;gap:5px;margin:2px 0 6px}
   .pmRow:empty{display:none}
-  .cell{height:18px;border:1px solid #85868a;background:#fff;cursor:pointer;
-    box-shadow:inset 1px 1px 1px rgba(0,0,0,.14)}
-  .cell.beat{background:#e4e4e6}
-  .cell.on{background:#2b2c2f;border-color:#000;box-shadow:inset 1px 1px 0 #4a4b4f}
-  .cell.now{outline:2px solid #000;outline-offset:-2px}
-  .cell.on.now{outline-color:#fff}
-  .fileRow{display:flex;gap:7px;align-items:center;font-size:9px;color:var(--dim);flex-wrap:wrap}
+  .cell{height:17px;border:1px solid #000;background:#fff;cursor:pointer}
+  .cell.beat{background-image:var(--dithLight);background-size:2px 2px}
+  .cell.on{background:#000}
+  .cell.now{box-shadow:inset 0 0 0 2px #000, inset 0 0 0 3px #fff}
+  .cell.on.now{box-shadow:inset 0 0 0 2px #fff}
+  .fileRow{display:flex;gap:7px;align-items:center;font-size:9px;color:#444;flex-wrap:wrap}
   .fileRow input[type=file]{display:none}
-  .bpmEdit{width:88px;background:transparent;border:none;border-bottom:2px solid #000;
-    color:#131315;font:inherit;font-size:19px;font-weight:800;outline:none;padding:0}
-  .numIn{width:72px;height:24px;border:1px solid var(--edge);border-radius:0;
-    background:#fff;color:#131315;font-size:10px;padding:0 5px;
-    font-variant-numeric:tabular-nums;box-shadow:inset 1px 1px 2px rgba(0,0,0,.18)}
-  .numIn:disabled{opacity:.4}
-  .fbtn{height:24px;padding:0 9px;border:1px dashed #77787c;border-radius:3px;
-    background:#f4f4f4;color:var(--dim);font-size:9px;font-weight:700;cursor:pointer}
-  .fbtn:hover{background:#fff}
-  .sel{height:24px;border:1px solid var(--edge);border-radius:0;background:#fff;
-    color:#131315;font-size:10px;padding:0 4px;box-shadow:inset 1px 1px 2px rgba(0,0,0,.12)}
+  .bpmEdit{width:88px;background:#fff;border:none;border-bottom:2px solid #000;
+    color:#000;font:inherit;font-size:19px;font-weight:700;outline:none;padding:0}
+  .numIn{width:72px;height:23px;border:1px solid #000;background:#fff;color:#000;
+    font-size:10px;padding:0 5px;font-family:inherit;font-variant-numeric:tabular-nums}
+  .numIn:disabled{opacity:.35}
+  .fbtn{height:23px;padding:0 8px;border:1px dashed #000;background:#fff;
+    color:#333;font-size:9px;font-weight:700;cursor:pointer}
+  .fbtn:hover{background:#000;color:#fff}
+  .sel{height:23px;border:1px solid #000;background:#fff;color:#000;
+    font-size:10px;padding:0 3px;font-family:inherit}
 
   /* voice / fx editor */
-  details.vedit{margin:2px 0 7px;border:1px solid var(--line);background:#f2f2f2;
-    box-shadow:inset 1px 1px 0 var(--bevH)}
-  details.vedit summary{cursor:pointer;font-size:8px;font-weight:800;letter-spacing:.12em;
-    color:var(--dim);padding:5px 8px;
-    background:repeating-linear-gradient(180deg,#fbfbfb 0 1px,#dcdcdc 1px 2px)}
-  details.vedit[open] summary{border-bottom:1px solid var(--line)}
+  details.vedit{margin:2px 0 7px;border:1px solid #000;background:#fff}
+  details.vedit summary{cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.1em;
+    color:#000;padding:4px 8px;background-image:var(--dithLight);background-size:2px 2px}
+  details.vedit[open] summary{border-bottom:1px solid #000}
   .vrow{display:flex;align-items:center;gap:7px;padding:5px 8px;flex-wrap:wrap}
-  .vrow + .vrow{border-top:1px solid #d9d9db}
-  .vlbl{width:32px;flex:none;font-size:8px;font-weight:800;color:#131315;letter-spacing:.05em}
-  .opts.sm button{padding:4px 6px;font-size:8px}
+  .vrow + .vrow{border-top:1px solid #999}
+  .vlbl{width:32px;flex:none;font-size:9px;font-weight:700;color:#000;letter-spacing:.04em}
+  .opts.sm button{padding:3px 5px;font-size:9px}
 
   /* footer / docs */
-  details.doc{margin:12px;border:1px solid var(--edge);background:var(--panel);
-    padding:8px 10px;border-radius:2px;
-    box-shadow:inset 1px 1px 0 var(--bevH), 2px 2px 0 rgba(0,0,0,.15)}
-  details.doc summary{cursor:pointer;font-size:10px;font-weight:800;letter-spacing:.1em;color:#131315}
-  details.doc div{font-size:11px;color:var(--dim);line-height:1.85;margin-top:8px}
+  details.doc{margin:12px;border:1px solid #000;background:#fff;padding:8px 10px;
+    box-shadow:3px 3px 0 #000}
+  details.doc summary{cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.08em;color:#000}
+  details.doc div{font-size:11px;color:#333;line-height:1.9;margin-top:8px}
   details.doc b{color:#000}
-  details.doc code{background:#fff;border:1px solid var(--line);padding:1px 4px;font-size:10px}
+  details.doc code{background:#fff;border:1px solid #000;padding:0 4px;font-size:10px}
 
-  /* OS8 alert toast: hard shadow */
+  /* alert toast */
   .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:200;
-    background:#efefef;border:1px solid #000;padding:7px 14px;font-size:11px;color:#131315;
-    box-shadow:2px 2px 0 rgba(0,0,0,.45), inset 1px 1px 0 var(--bevH);
-    opacity:0;pointer-events:none;transition:opacity .15s}
+    background:#fff;border:1px solid #000;padding:7px 14px;font-size:11px;color:#000;
+    box-shadow:3px 3px 0 #000;opacity:0;pointer-events:none;transition:opacity .1s steps(1)}
   .toast.show{opacity:1}
 </style>
 </head>
@@ -244,13 +235,18 @@
 <div class="app">
 
   <div class="top">
-    <div class="logo">POLYTEMPO<small>LOOP MACHINE</small></div>
+    <div class="logo">ZURE<small>POLYTEMPO LOOP MACHINE</small></div>
     <button class="tbtn play" id="btnPlay">PLAY</button>
     <button class="tbtn" id="btnAlign" title="全トラックの位相を今すぐ揃える">ALIGN</button>
     <div class="trkTgl" id="trkTgl" title="トラック ON/OFF">
       <button data-i="0">A</button><button data-i="1">B</button><button data-i="2">C</button><button data-i="3">D</button>
     </div>
     <button class="tbtn" id="btnFill" title="次の小節頭で1小節のフィル（ドラムトラック）">FILL</button>
+    <div class="stepper" id="stepper" title="選択トラックのBPMを桁ごとに増減（長押しで連続）">
+      <button data-d="-10">&#9668;10</button><button data-d="-1">&#9668;1</button><button data-d="-0.1">&#9668;.1</button><button data-d="-0.01">&#9668;.01</button>
+      <button class="stSel" id="stSel">A</button><span class="stBpm num" id="stBpm">120.00</span>
+      <button data-d="0.01">.01&#9658;</button><button data-d="0.1">.1&#9658;</button><button data-d="1">1&#9658;</button><button data-d="10">10&#9658;</button>
+    </div>
     <div class="sp"></div>
     <div class="meter">
       <div class="clip" id="clipLed" title="clip"></div>
@@ -333,7 +329,7 @@
   <div class="panel">
     <div class="ptitle">PHASE SCOPE</div>
     <div class="scopeWrap">
-      <canvas id="scope" width="460" height="460"></canvas>
+      <canvas id="scope" width="92" height="92"></canvas>
       <div class="legend" id="legend"></div>
     </div>
   </div>
@@ -372,11 +368,14 @@
       <b>押しながらスライドで連続入力</b>（最初のセルで ON/OFF が決まる）。
       トラックカードをクリックすると選択（破線枠）され、テンキー 1–4 で選択、
       <code>+</code>/<code>-</code> で ±1 BPM、Shift+テンキー± で ±0.1、
-      <code>*</code>/<code>/</code> で ±10（すべてグライド経由）。<br>
+      <code>*</code>/<code>/</code> で ±10（すべてグライド経由）。
+      ヘッダーの ◀▶ ステッパーでも選択トラックのBPMを 0.01 / 0.1 / 1 / 10 の
+      桁ごとに増減できる（長押しで連続、文字ボタンで選択切替）。<br>
       <b>FX</b>: 各トラックに共有リバーブへのセンドと、トラック専用のピンポン
-      （L·R）エコー。エコーのタイムは 1/16〜1/2 の音価指定で、
+      （L·R）エコー。エコーのタイムは 1/16〜1/2 の音価指定で
       <b>そのトラック自身のテンポ</b>に追従する — 追いつかせの最中はエコーも一緒に
-      うねる。FB はフィードバック量。録音のパラ・ステムはドライ信号のまま
+      うねる。FREE を選ぶ（または TIME ノブを回す）とテンポから切り離れ、
+      TIME ノブ（20ms〜2s）でマニュアル指定になる。FB はフィードバック量。録音のパラ・ステムはドライ信号のまま
       （FX はマスターにのみ乗る）。<br>
       <b>FILL</b>: ヘッダーの FILL（または F キー）で、各ドラムトラックの
       次の小節頭から1小節、ランダム生成のフィル（6系統のテンプレート+揺らぎ）が
@@ -838,10 +837,13 @@ function ensureTrackNode (tr) {
   updateDelayTime(tr, true);
 }
 
-/* delay time = the track's live tempo x note division, smoothed */
+/* delay time = the track's live tempo x note division (or the manual
+   TIME knob when the division is FREE), smoothed */
 function updateDelayTime (tr, hard) {
   if (!tr.dl) return;
-  const sec = Math.min(7.8, 60 / Math.max(20, tr.bpm) * tr.fx.div);
+  const sec = tr.fx.div === 'free'
+    ? Math.min(7.8, Math.max(0.01, tr.fx.time))
+    : Math.min(7.8, 60 / Math.max(20, tr.bpm) * tr.fx.div);
   const now = ctx.currentTime;
   for (const d of [tr.dl.dL, tr.dl.dR]) {
     if (hard) d.delayTime.setValueAtTime(sec, now);
@@ -1053,7 +1055,7 @@ function mkTrack (i, cfg) {
     pats: [blankPat(), blankPat(), blankPat(), blankPat()],
     patIdx: 0,
     vp: defaultVp(cfg.lib),                      // voice-edit params
-    fx: { rev: 0, dly: 0, div: 0.75, fb: 0.45 }, // sends; div in beats (0.75 = dotted 8th)
+    fx: { rev: 0, dly: 0, div: 0.75, fb: 0.45, time: 0.35 }, // div in beats, or 'free' + time(s)
     live: {},                                    // per-row sounding voice (mono rows)
     sample: null,                                // {buf,name,baseBpm}
     node: null, srcNode: null,
@@ -1451,7 +1453,7 @@ const Recorder = {
         ? RecorderCore.encodeAiff(chans, sr, bits)
         : RecorderCore.encodeWav(chans, sr, bits);
       downloadBlob(new Blob([buf], { type: S.recFmt === 'aif' ? 'audio/aiff' : 'audio/wav' }),
-        'polytempo-' + stamp + '-' + t.name + '.' + ext, i * 350);
+        'zure-' + stamp + '-' + t.name + '.' + ext, i * 350);
     });
     const n = this.taps.length;
     const secs = n ? this.taps[0].frames / sr : 0;
@@ -1878,7 +1880,7 @@ function buildTrackBody (tr) {
 }
 
 /* ---- per-track FX: reverb send + tempo-synced L/R echo ---- */
-const DLY_DIVS = [[0.25, '1/16'], [0.5, '1/8'], [0.75, '1/8.'], [1, '1/4'], [2, '1/2']];
+const DLY_DIVS = [[0.25, '1/16'], [0.5, '1/8'], [0.75, '1/8.'], [1, '1/4'], [2, '1/2'], ['free', 'FREE']];
 
 function buildFx (tr) {
   const host = trackEl(tr).querySelector('[data-fx]');
@@ -1920,6 +1922,15 @@ function buildFx (tr) {
            if (tr.dl) tr.dl.fbL.gain.value = tr.dl.fbR.gain.value = v;
          },
          fmt: v => (v * 100).toFixed(0) + '%' });
+  addK({ label: 'TIME', min: 0.02, max: 2, def: 0.35, log: true, id: 'fx' + tr.idx + 'T',
+         get: () => tr.fx.time,
+         set: v => {
+           // turning the manual knob claims the delay: switch to FREE
+           tr.fx.time = v;
+           if (tr.fx.div !== 'free') { tr.fx.div = 'free'; segPaint('fxT' + tr.idx, () => tr.fx.div); }
+           if (ctx) updateDelayTime(tr);
+         },
+         fmt: v => v < 1 ? (v * 1000).toFixed(0) + ' ms' : v.toFixed(2) + ' s' });
 
   const seg = document.createElement('div');
   seg.className = 'opts sm';
@@ -1939,7 +1950,7 @@ function buildFx (tr) {
   det.appendChild(row);
   host.appendChild(det);
   segInit(seg.id, () => tr.fx.div,
-    v => { tr.fx.div = +v; if (ctx) updateDelayTime(tr); });
+    v => { tr.fx.div = v === 'free' ? 'free' : +v; if (ctx) updateDelayTime(tr); });
 }
 
 /* ---- pattern memories P1-P4 (drum tracks) ---- */
@@ -2205,6 +2216,13 @@ function frame () {
   document.getElementById('btnFill').classList
     .toggle('on', tracks.some(tr => tr.fillAt != null));
 
+  // stepper readout follows the selection and the glide target
+  const selTr = tracks[S.selIdx];
+  if (selTr) {
+    document.getElementById('stSel').textContent = selTr.name;
+    document.getElementById('stBpm').textContent = targetBpm(selTr).toFixed(2);
+  }
+
   // recorder status
   const rs = document.getElementById('recStat');
   if (Recorder.active && ctx) {
@@ -2233,8 +2251,11 @@ function frame () {
   });
 
   // scope
-  const W = scope.width, H = scope.height, cx = W / 2, cy = H / 2;
-  sctx.clearRect(0, 0, W, H);
+  // low-res raster, upscaled by CSS image-rendering:pixelated -- real dots
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.clearRect(0, 0, scope.width, scope.height);
+  sctx.setTransform(scope.width / 460, 0, 0, scope.height / 460, 0, 0);
+  const W = 460, H = 460, cx = W / 2, cy = H / 2;
   sctx.strokeStyle = '#c9c9cb';
   sctx.lineWidth = 2;
   sctx.beginPath(); sctx.moveTo(cx, 12); sctx.lineTo(cx, H - 12); sctx.stroke();
@@ -2270,11 +2291,9 @@ function frame () {
     // head
     const fl = tr.flash && now - tr.flash < 0.5 ? 1 - (now - tr.flash) / 0.5 : 0;
     sctx.fillStyle = ACC_HEX[i];
-    sctx.shadowBlur = 14 + fl * 26; sctx.shadowColor = ACC_HEX[i];
     sctx.beginPath();
-    sctx.arc(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R, 8 + fl * 5, 0, Math.PI * 2);
+    sctx.arc(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R, 9 + fl * 7, 0, Math.PI * 2);
     sctx.fill();
-    sctx.shadowBlur = 0;
   });
 
   // step highlight in the grids
@@ -2298,7 +2317,7 @@ function frame () {
    =================================================================== */
 const Midi = {
   access: null, armed: null, learnOn: false,
-  map: JSON.parse(localStorage.getItem('polytempo.midi') || '{}'),
+  map: JSON.parse(localStorage.getItem('zure.midi') || localStorage.getItem('polytempo.midi') || '{}'),
 
   async enable () {
     if (!navigator.requestMIDIAccess) { toast('このブラウザは Web MIDI 非対応です'); return; }
@@ -2342,7 +2361,7 @@ const Midi = {
       this.map[k] = t.isSeg ? { kind: 'seg', id: t.id }
                  : t.isBtn ? { kind: 'btn', id: t.id }
                  : { kind: 'knob', id: t.o.id };
-      localStorage.setItem('polytempo.midi', JSON.stringify(this.map));
+      localStorage.setItem('zure.midi', JSON.stringify(this.map));
       this.clearArm();
       this.setLearn(false);
       this.paintMapped();
@@ -2408,7 +2427,7 @@ function saveProject () {
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)],
     { type: 'application/json' }));
   const a = document.createElement('a');
-  a.href = url; a.download = 'polytempo-project.json';
+  a.href = url; a.download = 'zure-project.json';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -2438,7 +2457,7 @@ function loadProject (obj) {
     tr.vp = d.vp
       ? Object.fromEntries(Object.keys(base).map(k => [k, { ...base[k], ...d.vp[k] }]))
       : base;
-    tr.fx = { rev: 0, dly: 0, div: 0.75, fb: 0.45, ...(d.fx || {}) };
+    tr.fx = { rev: 0, dly: 0, div: 0.75, fb: 0.45, time: 0.35, ...(d.fx || {}) };
     if (tr.node) tr.node.gain.value = tr.gain;
     if (tr.revSend) tr.revSend.gain.value = tr.fx.rev;
     if (tr.dlySend) tr.dlySend.gain.value = tr.fx.dly;
@@ -2519,6 +2538,27 @@ window.addEventListener('keydown', e => {
 document.querySelectorAll('#trkTgl button').forEach(b => {
   b.onclick = () => toggleMute(tracks[+b.dataset.i]);
 });
+
+/* BPM digit stepper: click = one step, hold = auto-repeat. The letter
+   button cycles the selected track. */
+document.querySelectorAll('#stepper button[data-d]').forEach(b => {
+  const d = +b.dataset.d;
+  let iv = null, to = null;
+  const fire = () => nudgeSelected(d);
+  const end = () => { clearTimeout(to); clearInterval(iv); to = iv = null; };
+  b.addEventListener('pointerdown', e => {
+    fire();
+    to = setTimeout(() => { iv = setInterval(fire, 110); }, 420);
+    try { b.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  b.addEventListener('pointerup', end);
+  b.addEventListener('pointercancel', end);
+  b.addEventListener('lostpointercapture', end);
+});
+document.getElementById('stSel').onclick = () => {
+  S.selIdx = (S.selIdx + 1) % 4;
+  renderAllHeads();
+};
 
 buildConsole();
 buildRecorder();

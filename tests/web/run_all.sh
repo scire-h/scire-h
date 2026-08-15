@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Run every unit test for the POLYTEMPO web app.
+# Run every unit test for the ZURE web app.
 # These tests are self-contained -- they need only Node (no browser, no
 # npm install). Each one slices the code it exercises straight out of
-# polytempo.html, so there is never a second copy to drift out of sync.
+# zure.html, so there is never a second copy to drift out of sync.
 set -euo pipefail
 
 cd "$(dirname "$0")"

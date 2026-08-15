@@ -2,7 +2,7 @@
 /* ===================================================================
    Unit tests for the POLYTEMPO tempo core.
 
-   The core lives inside polytempo.html (the app is a single
+   The core lives inside zure.html (the app is a single
    self-contained file by design), delimited by TEMPO_CORE markers.
    This runner slices it out and evaluates it, so the tests always
    exercise the exact code the browser runs — no second copy to drift.
@@ -13,13 +13,13 @@ const fs = require('fs');
 const path = require('path');
 
 // optional argv override so the suite can be pointed at a mutated copy
-const HTML = process.argv[2] || path.join(__dirname, '..', '..', 'polytempo.html');
+const HTML = process.argv[2] || path.join(__dirname, '..', '..', 'zure.html');
 
 function loadCore () {
   const src = fs.readFileSync(HTML, 'utf8');
   const a = src.indexOf('/*<<<TEMPO_CORE>>>*/');
   const b = src.indexOf('/*<<<END_TEMPO_CORE>>>*/');
-  if (a < 0 || b < 0) throw new Error('TEMPO_CORE markers not found in polytempo.html');
+  if (a < 0 || b < 0) throw new Error('TEMPO_CORE markers not found in zure.html');
   return new Function(src.slice(a, b) + '\nreturn TempoCore;')();
 }
 

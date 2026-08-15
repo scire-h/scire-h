@@ -9,9 +9,9 @@
 #   make install     build + install the AU into ~/Library/Audio/Plug-Ins
 #   make clean       remove all build / binary artefacts
 #   make web         open the HTML clone in the default browser
-#   make poly        open the POLYTEMPO loop machine in the default browser
+#   make zure        open ZURE (polytempo loop machine) in the default browser
 
-.PHONY: test test-dsp test-web plugin install clean web poly
+.PHONY: test test-dsp test-web plugin install clean web zure poly
 
 NATIVE := ds4-native
 BUILD  := $(NATIVE)/build
@@ -46,7 +46,7 @@ web:
 	 command -v open     >/dev/null && open     index.html || \
 	 echo "Open index.html in your browser manually"
 
-poly:
-	@command -v xdg-open >/dev/null && xdg-open polytempo.html || \
-	 command -v open     >/dev/null && open     polytempo.html || \
-	 echo "Open polytempo.html in your browser manually"
+zure poly:
+	@command -v xdg-open >/dev/null && xdg-open zure.html || \
+	 command -v open     >/dev/null && open     zure.html || \
+	 echo "Open zure.html in your browser manually"

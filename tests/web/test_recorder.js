@@ -2,7 +2,7 @@
 /* ===================================================================
    Unit tests for the POLYTEMPO recorder core (WAV / AIFF encoders).
 
-   The encoders are sliced out of polytempo.html and fed synthetic
+   The encoders are sliced out of zure.html and fed synthetic
    channel data; the results are re-parsed here with independent
    readers (little-endian RIFF walker, big-endian IFF walker, 80-bit
    extended float decoder) so an encoder bug can't hide behind its own
@@ -14,13 +14,13 @@ const fs = require('fs');
 const path = require('path');
 
 // optional argv override so the suite can be pointed at a mutated copy
-const HTML = process.argv[2] || path.join(__dirname, '..', '..', 'polytempo.html');
+const HTML = process.argv[2] || path.join(__dirname, '..', '..', 'zure.html');
 
 function loadCore () {
   const src = fs.readFileSync(HTML, 'utf8');
   const a = src.indexOf('/*<<<RECORDER_CORE>>>*/');
   const b = src.indexOf('/*<<<END_RECORDER_CORE>>>*/');
-  if (a < 0 || b < 0) throw new Error('RECORDER_CORE markers not found in polytempo.html');
+  if (a < 0 || b < 0) throw new Error('RECORDER_CORE markers not found in zure.html');
   return new Function(src.slice(a, b) + '\nreturn RecorderCore;')();
 }
 const R = loadCore();
