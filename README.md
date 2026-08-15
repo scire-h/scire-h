@@ -59,7 +59,7 @@ moving underneath it.
 
 | control | effect |
 |---|---|
-| **CATCH RATE** | how long the merge takes, 0.25 s – 60 s. Turning it *during* a catch re-plans the remaining travel from that instant, so a catch can be hurried or stretched while it is audibly in flight |
+| **CATCH RATE** | how long the merge takes, 0.25 s – 120 s. Turning it *during* a catch re-plans the remaining travel from that instant, so a catch can be hurried or stretched while it is audibly in flight |
 | **BPM SYNC** | tempo only. Bar heads stay apart and the two loops keep running out of phase |
 | **PHASE SYNC** | tempo *and* bar heads. After the tempos converge, the BPM briefly swells past the target and settles back, walking the bar head into place, then locks |
 | **LINEAR / EXP** | constant-rate merge, or fast-then-asymptotic |
@@ -71,6 +71,22 @@ moved the phase by precisely the right amount — the overshoot is
 audible, and the landing is exact. Residual error is re-measured and
 re-corrected until it is under 15 ms, then snapped.
 
+**Every BPM change glides.** Turning a track's BPM knob, typing a value
+(double-click the readout — a non-blocking inline editor, so the audio
+never stalls), or sending MIDI CC does not jump the tempo: it glides
+from the current playing tempo to the new value at the console's
+CATCH RATE / CURVE. Re-aiming mid-glide re-plans from wherever the
+tempo is now. While stopped, changes apply instantly.
+
+**Recording.** The RECORDER panel (or the `R` key) captures the master
+bus — post soft-clip, pre monitor volume — and, with PARA on, every
+unmuted track's dry post-gain signal in parallel. Capture is raw
+Float32 via an AudioWorklet; every file is cut to the identical frame
+range, so all stems are sample-aligned. Output is WAV (16 / 24 /
+32-bit float) or AIFF (16 / 24), at the context rate — selectable
+44.1 / 48 / 88.2 / 96 kHz (the AudioContext is rebuilt on change, so
+rate switching happens while stopped).
+
 **Sound.** Per track: an 808 or 909 drum kit (kick / snare / closed and
 open hat), a chord voice playing scale degrees I / IV / V / vi over
 KEY + OCTAVE + FINE, or a loaded sample. Libraries can be swapped while
@@ -81,6 +97,12 @@ their pitch; KEY / OCTAVE / FINE tune them independently. Sample tracks
 are the tape case: `playbackRate = BPM / BASE BPM`, so a catch-up is
 heard as a pitch swoop. Their TUNE knob writes the track's BPM
 directly — tuning *is* tempo, which is the point of the machine.
+Audio files carry no BPM metadata, so a loaded sample's BASE BPM
+defaults to 120; FIT LOOP derives it from the loop length, or type it.
+
+**Look.** Mac OS X Tiger-era Aqua — brushed metal, gel buttons,
+recessed wells, engraved labels — in the spirit of pluggo and Max
+patches of that period.
 
 **Level safety.** Every track starts with 12 dB of headroom; the master
 bus is 20 Hz high-pass → limiter → tanh soft clip, and boots quiet. A
@@ -96,13 +118,16 @@ catch, `0` to realign.
 cd tests/web && ./run_all.sh     # or: make test-web
 ```
 
-176 assertions over the timing math, the catch-up state machine and the
-voice library. Both suites read the code straight out of
-`polytempo.html`, so there is no duplicated copy to fall out of date:
-`test_tempo.js` simulates the scheduler against a fake clock and checks
-that phase lock converges to under 3 ms across 28 tempo/offset
-combinations, and `test_voices.js` builds every voice against a stub
-AudioContext that enforces the Web Audio rules browsers throw on.
+233 assertions over the timing math, the catch-up/glide state machine,
+the voice library and the file writers. All three suites read the code
+straight out of `polytempo.html`, so there is no duplicated copy to
+fall out of date: `test_tempo.js` simulates the scheduler against a
+fake clock and checks that phase lock converges to under 3 ms across
+28 tempo/offset combinations, `test_voices.js` builds every voice
+against a stub AudioContext that enforces the Web Audio rules browsers
+throw on, and `test_recorder.js` re-parses the generated WAV/AIFF
+files with independent little-endian/big-endian readers (including the
+AIFF 80-bit extended sample-rate field).
 
 ## 3. JUCE plug-in (`ds4-native/`)
 

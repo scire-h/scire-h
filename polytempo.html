@@ -3,62 +3,114 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0a0b0d" />
+<meta name="theme-color" content="#c2c3c8" />
 <title>POLYTEMPO — 4-track polytempo loop machine</title>
 <style>
+  /* ================================================================
+     AQUA SKIN — Mac OS X Tiger era: brushed metal, gel buttons,
+     recessed wells, engraved labels. Lucida Grande where available.
+     ================================================================ */
   :root{
-    --bg:#0a0b0d; --panel:#141519; --panel2:#1b1d22; --line:#25272e;
-    --text:#e9eaee; --dim:#8a8d97; --dim2:#5f636e;
-    --a:#ffb020; --b:#35c8d8; --c:#ff5c8a; --d:#7dd35f;
-    --hot:#ff4d3d; --ok:#7dd35f;
+    --bg:#c2c3c8; --panel:#dcdce0; --panel2:#f2f2f5; --line:#a2a3aa;
+    --text:#26282c; --dim:#5d6066; --dim2:#7d8087;
+    --a:#2f7cf0; --b:#1f6fd6; --c:#e23a8e; --d:#46b03c;
+    --hot:#e5301f; --ok:#54a919;
+    --gel-hi:rgba(255,255,255,.95); --gel-mid:rgba(255,255,255,.35);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Hiragino Sans",system-ui,sans-serif;
-    font-size:14px;overscroll-behavior:none}
+  html,body{margin:0;padding:0;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.030) 0 1px, rgba(255,255,255,0) 1px 3px),
+      linear-gradient(180deg,#cdced3,#b6b7bd);
+    color:var(--text);
+    font-family:"Lucida Grande","Lucida Sans Unicode",-apple-system,BlinkMacSystemFont,
+      "Hiragino Sans",system-ui,sans-serif;
+    font-size:13px;overscroll-behavior:none}
   .app{max-width:1180px;margin:0 auto;padding:0 0 64px}
   button{font-family:inherit;color:inherit}
   .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 
-  /* ---------- header ---------- */
+  /* ---------- header: metal toolbar ---------- */
   .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-    padding:9px 14px;background:#07080a;border-bottom:1px solid var(--line)}
-  .logo{font-weight:800;letter-spacing:.16em;font-size:14px;color:var(--a)}
-  .logo small{display:block;letter-spacing:.06em;font-size:9px;color:var(--dim2);font-weight:600}
+    padding:9px 14px;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.025) 0 1px, rgba(255,255,255,0) 1px 3px),
+      linear-gradient(180deg,#f2f2f5 0%,#d6d6db 55%,#c4c5ca 100%);
+    border-bottom:1px solid #85868c;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 1px 4px rgba(0,0,0,.22)}
+  .logo{font-weight:800;letter-spacing:.16em;font-size:14px;color:#3c3f45;
+    text-shadow:0 1px 0 rgba(255,255,255,.85)}
+  .logo small{display:block;letter-spacing:.06em;font-size:9px;color:var(--dim2);font-weight:600;
+    text-shadow:0 1px 0 rgba(255,255,255,.7)}
   .top .sp{flex:1}
-  .tbtn{height:34px;padding:0 14px;border-radius:7px;border:1px solid var(--line);
-    background:var(--panel2);font-size:12px;font-weight:700;letter-spacing:.06em;cursor:pointer}
-  .tbtn:hover{border-color:#3a3d47}
-  .tbtn.on{background:var(--a);border-color:var(--a);color:#000}
-  .tbtn.play{width:78px;background:var(--ok);border-color:var(--ok);color:#04140a}
-  .tbtn.play.playing{background:var(--hot);border-color:var(--hot);color:#fff}
-  .tbtn.warn.on{background:var(--c);border-color:var(--c);color:#fff}
 
-  /* ---------- meter ---------- */
+  /* gel buttons */
+  .tbtn{height:34px;padding:0 16px;border-radius:17px;border:1px solid #8f9096;
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#fdfdfe,#cfcfd6);
+    color:#333;font-size:12px;font-weight:700;letter-spacing:.05em;cursor:pointer;
+    text-shadow:0 1px 0 rgba(255,255,255,.8);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.7), 0 1px 2px rgba(0,0,0,.28)}
+  .tbtn:hover{filter:brightness(1.04)}
+  .tbtn:active{filter:brightness(.92)}
+  .tbtn.on{border-color:#1b55b5;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#8fc3fa,#2569d8)}
+  .tbtn.play{width:78px;border-color:#3f8710;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#b3e77a,#54a919)}
+  .tbtn.play.playing{border-color:#b02015;
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#ff9d8a,#e5301f)}
+  .tbtn.warn.on{border-color:#b52b70;
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#ffadd0,#e23a8e)}
+
+  /* ---------- meter: recessed glass tube ---------- */
   .meter{display:flex;align-items:center;gap:7px}
-  .mbar{position:relative;width:108px;height:9px;border-radius:3px;background:#000;
-    border:1px solid var(--line);overflow:hidden}
+  .mbar{position:relative;width:108px;height:10px;border-radius:5px;background:#fbfbfd;
+    border:1px solid #94959c;overflow:hidden;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.8)}
   .mfill{position:absolute;inset:0;width:0%;
     background:linear-gradient(90deg,#2f8f4f 0%,#8bc34a 62%,#ffc107 82%,#ff4d3d 100%)}
-  .mpk{position:absolute;top:0;bottom:0;width:2px;background:#fff;left:0;opacity:.85}
-  .clip{width:9px;height:9px;border-radius:50%;background:#2a1414;border:1px solid #3a1a1a}
-  .clip.on{background:var(--hot);border-color:var(--hot);box-shadow:0 0 8px var(--hot)}
-  .mdb{font-size:10px;color:var(--dim);min-width:46px;text-align:right}
+  .mfill::after{content:"";position:absolute;inset:0 0 50% 0;
+    background:linear-gradient(180deg,rgba(255,255,255,.65),rgba(255,255,255,.1))}
+  .mpk{position:absolute;top:0;bottom:0;width:2px;background:#333;left:0;opacity:.8}
+  .clip{width:10px;height:10px;border-radius:50%;background:#e9dcdc;border:1px solid #b09090;
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.8)}
+  .clip.on{background:radial-gradient(circle at 35% 30%,#ff8a7a,var(--hot));
+    border-color:#b02015;box-shadow:0 0 8px var(--hot)}
+  .mdb{font-size:10px;color:#4a4d52;min-width:46px;text-align:right}
 
-  /* ---------- generic panel ---------- */
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin:12px 14px;padding:12px}
-  .ptitle{font-size:10px;font-weight:800;letter-spacing:.18em;color:var(--dim2);margin:0 0 10px}
+  /* ---------- generic panel: brushed metal card ---------- */
+  .panel{
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.022) 0 1px, rgba(255,255,255,0) 1px 3px),
+      linear-gradient(180deg,#e9e9ec,#d4d4d9);
+    border:1px solid #97989e;border-radius:9px;margin:12px 14px;padding:12px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 2px 5px rgba(0,0,0,.20)}
+  .ptitle{font-size:10px;font-weight:800;letter-spacing:.18em;color:#6a6d73;margin:0 0 10px;
+    text-shadow:0 1px 0 rgba(255,255,255,.8)}
 
-  /* ---------- knob ---------- */
+  /* ---------- knob: aluminium ---------- */
   .knob{display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;flex:none;
     cursor:ns-resize;touch-action:none}
   .knob .dial{position:relative;flex:none;width:52px;height:52px;border-radius:50%;
-    background:radial-gradient(circle at 38% 30%,#33363f,#1a1c21 62%,#101215 100%);
-    border:1px solid #34373f;box-shadow:inset 0 -4px 9px rgba(0,0,0,.6),0 2px 5px rgba(0,0,0,.5)}
+    background:radial-gradient(circle at 35% 28%, #ffffff, #dededf 52%, #b3b3b8 82%, #97979c 100%);
+    border:1px solid #7d7e84;
+    box-shadow:0 2px 4px rgba(0,0,0,.30), inset 0 -4px 7px rgba(0,0,0,.16),
+      inset 0 2px 3px rgba(255,255,255,.9)}
   .knob .dial i{position:absolute;left:50%;top:5px;width:2px;height:17px;margin-left:-1px;
-    background:var(--a);border-radius:1px;transform-origin:50% 21px;box-shadow:0 0 6px rgba(255,176,32,.6)}
-  .knob .kl{font-size:9px;font-weight:800;letter-spacing:.12em;color:var(--dim2);white-space:nowrap}
-  .knob .kv{font-size:11px;font-weight:700;color:var(--text);white-space:nowrap}
+    background:#3a3f47;border-radius:1px;transform-origin:50% 21px;
+    box-shadow:0 0 2px rgba(0,0,0,.4)}
+  .knob .kl{font-size:9px;font-weight:800;letter-spacing:.12em;color:#6a6d73;white-space:nowrap;
+    text-shadow:0 1px 0 rgba(255,255,255,.8)}
+  .knob .kv{font-size:11px;font-weight:700;color:#222;white-space:nowrap}
   /* toolbar variant: dial and readout side by side, sized to the button row */
   .knob.inline{flex-direction:row;align-items:center;width:auto;height:34px;gap:7px;cursor:ns-resize}
   .knob.inline .dial{width:30px;height:30px}
@@ -72,78 +124,147 @@
   .knob.learn{outline:2px dashed var(--c);outline-offset:3px;border-radius:8px}
   .knob.mapped .kl::after{content:" ●";color:var(--b)}
 
+  /* ---------- recorder ---------- */
+  .recBtn{height:46px;padding:0 24px;border-radius:23px;border:1px solid #a35953;
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#f3d9d6,#d9a49e);
+    color:#8c1d12;font-size:14px;font-weight:800;letter-spacing:.08em;cursor:pointer;
+    text-shadow:0 1px 0 rgba(255,255,255,.6);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.7), 0 1px 2px rgba(0,0,0,.28)}
+  .recBtn.on{border-color:#b02015;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#ff9d8a,#e5301f);
+    animation:recpulse 1.1s ease-in-out infinite}
+  @keyframes recpulse{0%,100%{box-shadow:0 0 0 0 rgba(229,48,31,.5)}50%{box-shadow:0 0 0 10px rgba(229,48,31,0)}}
+  #recStat b{color:var(--hot)}
+
   /* ---------- catch console ---------- */
   .console{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
   .segs{display:flex;flex-direction:column;gap:8px;min-width:210px}
   .seg{display:flex;align-items:center;gap:8px}
-  .seg .sl{font-size:9px;font-weight:800;letter-spacing:.12em;color:var(--dim2);width:64px;flex:none}
-  .opts{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
-  .opts button{border:0;background:var(--panel2);color:var(--dim);font-size:10px;font-weight:800;
-    letter-spacing:.06em;padding:7px 10px;cursor:pointer;border-right:1px solid var(--line)}
+  .seg .sl{font-size:9px;font-weight:800;letter-spacing:.12em;color:#6a6d73;width:64px;flex:none;
+    text-shadow:0 1px 0 rgba(255,255,255,.8)}
+  .opts{display:flex;border:1px solid #8f9096;border-radius:13px;overflow:hidden;
+    box-shadow:0 1px 2px rgba(0,0,0,.22), inset 0 1px 1px rgba(255,255,255,.6)}
+  .opts button{border:0;color:#3c3f45;font-size:10px;font-weight:800;
+    letter-spacing:.06em;padding:7px 11px;cursor:pointer;border-right:1px solid #a8a9af;
+    text-shadow:0 1px 0 rgba(255,255,255,.75);
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#fbfbfd,#d6d6db)}
   .opts button:last-child{border-right:0}
-  .opts button.on{background:var(--b);color:#04181a}
+  .opts button.on{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#8fc3fa,#2569d8)}
   .opts.learn{outline:2px dashed var(--c);outline-offset:2px}
-  .hint{font-size:10px;color:var(--dim2);line-height:1.6;max-width:330px}
-  .hint b{color:var(--dim);font-weight:700}
+  .hint{font-size:10px;color:#54575d;line-height:1.7;max-width:330px}
+  .hint b{color:#26282c;font-weight:700}
 
   /* ---------- phase scope ---------- */
   .scopeWrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
   canvas#scope{width:230px;height:230px;flex:none}
   .legend{display:flex;flex-direction:column;gap:6px;font-size:11px}
   .legend .row{display:flex;align-items:center;gap:8px}
-  .legend .sw{width:10px;height:10px;border-radius:2px}
+  .legend .sw{width:10px;height:10px;border-radius:3px;
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 1px rgba(0,0,0,.25)}
   .legend .nm{width:16px;font-weight:800}
-  .legend .st{color:var(--dim);font-size:10px;min-width:150px}
+  .legend .st{color:#54575d;font-size:10px;min-width:150px}
 
-  /* ---------- tracks ---------- */
+  /* ---------- tracks: candy-striped metal cards ---------- */
   .tracks{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 14px}
   @media (max-width:900px){ .tracks{grid-template-columns:1fr} }
-  .trk{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px;
-    border-top:3px solid var(--ac)}
-  .trk.master{box-shadow:0 0 0 1px var(--ac) inset}
+  .trk{
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.022) 0 1px, rgba(255,255,255,0) 1px 3px),
+      linear-gradient(180deg,#eaeaed,#d6d6db);
+    border:1px solid #97989e;border-radius:9px;padding:11px;
+    border-top:4px solid var(--ac);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.8), 0 2px 5px rgba(0,0,0,.20)}
+  .trk.master{box-shadow:0 0 0 2px var(--ac), inset 0 1px 0 rgba(255,255,255,.8),
+    0 2px 8px rgba(0,0,0,.25)}
   .thead{display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap}
-  .tid{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;
-    font-weight:900;font-size:13px;background:var(--ac);color:#000;flex:none}
-  .tbpm{font-size:21px;font-weight:800;color:var(--ac);letter-spacing:.02em;cursor:text}
+  .tid{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+    font-weight:900;font-size:13px;color:#fff;flex:none;
+    text-shadow:0 -1px 0 rgba(0,0,0,.3);border:1px solid rgba(0,0,0,.25);
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      var(--ac);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.25)}
+  .tbpm{font-size:21px;font-weight:800;color:var(--ac);letter-spacing:.02em;cursor:text;
+    text-shadow:0 1px 0 rgba(255,255,255,.75)}
   .tbpm small{font-size:9px;color:var(--dim2);letter-spacing:.14em;margin-left:3px;font-weight:700}
   .thead .sp{flex:1}
-  .mini{height:26px;padding:0 9px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);
-    font-size:10px;font-weight:800;letter-spacing:.06em;cursor:pointer;color:var(--dim)}
-  .mini.on{background:var(--ac);border-color:var(--ac);color:#000}
-  .mini.catch{color:var(--text)}
-  .mini.catch.run{background:var(--c);border-color:var(--c);color:#fff}
+  .mini{height:26px;padding:0 10px;border-radius:13px;border:1px solid #8f9096;
+    font-size:10px;font-weight:800;letter-spacing:.06em;cursor:pointer;color:#4a4d52;
+    text-shadow:0 1px 0 rgba(255,255,255,.75);
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#fbfbfd,#d6d6db);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.22)}
+  .mini.on{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:rgba(0,0,0,.3);
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      var(--ac)}
+  .mini.catch{color:#26282c}
+  .mini.catch.run{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:#b52b70;
+    background:
+      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
+      linear-gradient(180deg,#ffadd0,#e23a8e)}
   .mini.learn{outline:2px dashed var(--c);outline-offset:2px}
-  .mini:disabled{opacity:.3;cursor:default}
+  .mini:disabled{opacity:.35;cursor:default}
   .trow{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:9px}
-  .stat{font-size:10px;color:var(--dim2);letter-spacing:.04em}
+  .stat{font-size:10px;color:#5d6066;letter-spacing:.04em}
   .stat b{color:var(--b);font-weight:700}
-  .stat.lock b{color:var(--ok)}
+  .stat.lock b{color:#3f8710}
 
-  /* grid */
+  /* grid: recessed wells with candy pips */
   .grid{display:flex;flex-direction:column;gap:3px;margin-top:4px}
   .grow{display:grid;grid-template-columns:30px 1fr;gap:4px;align-items:center}
-  .rlbl{font-size:9px;font-weight:800;color:var(--dim2);text-align:right;letter-spacing:.04em}
+  .rlbl{font-size:9px;font-weight:800;color:#6a6d73;text-align:right;letter-spacing:.04em;
+    text-shadow:0 1px 0 rgba(255,255,255,.8)}
   .cells{display:grid;gap:2px}
-  .cell{height:20px;border-radius:3px;border:1px solid var(--line);background:#101116;cursor:pointer}
-  .cell.beat{background:#171920}
-  .cell.on{background:var(--ac);border-color:var(--ac)}
-  .cell.now{outline:2px solid #fff;outline-offset:-2px}
-  .fileRow{display:flex;gap:8px;align-items:center;font-size:10px;color:var(--dim);flex-wrap:wrap}
+  .cell{height:20px;border-radius:4px;border:1px solid #a6a8b0;background:#f7f8fa;cursor:pointer;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.16)}
+  .cell.beat{background:#e8ebf1}
+  .cell.on{border-color:rgba(0,0,0,.3);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.85) 0%, rgba(255,255,255,.25) 46%, rgba(255,255,255,0) 55%),
+      var(--ac);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.5), 0 1px 1px rgba(0,0,0,.2)}
+  .cell.now{outline:2px solid #33363c;outline-offset:-2px}
+  .cell.on.now{outline-color:#fff}
+  .fileRow{display:flex;gap:8px;align-items:center;font-size:10px;color:#4a4d52;flex-wrap:wrap}
   .fileRow input[type=file]{display:none}
-  .fbtn{height:26px;padding:0 10px;border-radius:6px;border:1px dashed #3a3d47;background:transparent;
-    color:var(--dim);font-size:10px;font-weight:700;cursor:pointer}
-  .sel{height:26px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);
-    color:var(--text);font-size:11px;padding:0 6px}
+  .bpmEdit{width:96px;background:transparent;border:none;border-bottom:2px solid var(--ac);
+    color:var(--ac);font:inherit;font-size:21px;font-weight:800;outline:none;padding:0}
+  .numIn{width:78px;height:26px;border-radius:6px;border:1px solid #94959c;
+    background:#fff;color:#26282c;font-size:11px;padding:0 6px;
+    font-variant-numeric:tabular-nums;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
+  .numIn:disabled{opacity:.4}
+  .fbtn{height:26px;padding:0 10px;border-radius:13px;border:1px dashed #8f9096;background:rgba(255,255,255,.5);
+    color:#4a4d52;font-size:10px;font-weight:700;cursor:pointer}
+  .fbtn:hover{background:#fff}
+  .sel{height:26px;border-radius:6px;border:1px solid #94959c;background:#fff;
+    color:#26282c;font-size:11px;padding:0 6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.12)}
 
   /* footer / docs */
-  details.doc{margin:14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:10px 12px}
-  details.doc summary{cursor:pointer;font-size:11px;font-weight:800;letter-spacing:.12em;color:var(--dim2)}
-  details.doc div{font-size:12px;color:var(--dim);line-height:1.9;margin-top:10px}
-  details.doc b{color:var(--text)}
-  details.doc code{background:#0d0e11;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px}
+  details.doc{margin:14px;border:1px solid #97989e;border-radius:9px;padding:10px 12px;
+    background:linear-gradient(180deg,#f4f4f6,#e4e4e8);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 2px 5px rgba(0,0,0,.15)}
+  details.doc summary{cursor:pointer;font-size:11px;font-weight:800;letter-spacing:.12em;color:#6a6d73;
+    text-shadow:0 1px 0 rgba(255,255,255,.8)}
+  details.doc div{font-size:12px;color:#44474d;line-height:1.9;margin-top:10px}
+  details.doc b{color:#1c1e22}
+  details.doc code{background:#fff;border:1px solid #b6b7bd;border-radius:4px;padding:1px 5px;font-size:11px}
 
+  /* Aqua help-tag toast */
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:200;
-    background:#000;border:1px solid var(--line);border-radius:8px;padding:9px 16px;font-size:12px;
+    background:#ffffca;border:1px solid #b9b98a;border-radius:4px;padding:8px 16px;font-size:12px;
+    color:#333;box-shadow:0 2px 8px rgba(0,0,0,.3);
     opacity:0;pointer-events:none;transition:opacity .18s}
   .toast.show{opacity:1}
 </style>
@@ -210,6 +331,36 @@
   </div>
 
   <div class="panel">
+    <div class="ptitle">RECORDER</div>
+    <div class="console">
+      <button class="recBtn" id="btnRec">● REC</button>
+      <div class="segs">
+        <div class="seg"><span class="sl">FORMAT</span>
+          <div class="opts" id="optRecFmt">
+            <button data-v="wav">WAV</button><button data-v="aif">AIF</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">BIT</span>
+          <div class="opts" id="optRecBit">
+            <button data-v="16">16</button><button data-v="24">24</button><button data-v="32">32F</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">RATE</span>
+          <div class="opts" id="optRecSr">
+            <button data-v="0">AUTO</button><button data-v="44100">44.1k</button><button data-v="48000">48k</button><button data-v="88200">88.2k</button><button data-v="96000">96k</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">PARA</span>
+          <div class="opts" id="optRecPara">
+            <button data-v="0">OFF</button><button data-v="1">ON</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="recStat"></div>
+    </div>
+  </div>
+
+  <div class="panel">
     <div class="ptitle">PHASE SCOPE</div>
     <div class="scopeWrap">
       <canvas id="scope" width="460" height="460"></canvas>
@@ -224,12 +375,26 @@
     <div>
       <b>テンポ</b>: 各トラックは独立した連続BPMを持つ。スケジューラはWeb Audioの
       オーディオクロック基準（lookahead方式）で、1ステップの長さを
-      テンポ曲線上で中点法により数値積分して求めるため、テンポが動いている最中でも
+      テンポ曲線の数値積分（シンプソン則）で求めるため、テンポが動いている最中でも
       位相がずれない。<br>
+      <b>BPMの変更</b>: つまみ・手入力・MIDIどれで変えても即座には跳ばず、
+      CATCH-UP CONSOLE の CATCH RATE / CURVE に従って現在の再生テンポから
+      グライドする（最大120秒）。グライド中にもう一度動かすと、その地点から
+      新しい目標へ再計画される。停止中は即時反映。<br>
       <b>ピッチ</b>: シンセ音源はシーケンサークロックの変速なのでピッチ不変。
       サンプルは <code>playbackRate = BPM / BASE BPM</code> のテープ方式で、
       テンポの揺れがそのままピッチのうねりになる。サンプルの TUNE つまみは
-      BPMそのものを動かす（チューニング＝テンポの一部）。<br>
+      BPMそのものを動かす（チューニング＝テンポの一部）。
+      音声ファイルにはBPM情報が無いため、読み込み時の BASE BPM は 120 とし、
+      FIT LOOP（サンプル全体＝ループ長とみなして算出）か手入力で合わせる。<br>
+      <b>録音</b>: RECORDER の REC（または R キー）で開始/停止。マスター
+      （ソフトクリップ後・モニター音量前）と、PARA ON なら非ミュートの各トラック
+      （トラックゲイン後・マスターチェーン前のドライ信号）を AudioWorklet で
+      同時キャプチャする。全ファイルは同一フレーム範囲で切り出されるため
+      サンプル単位でアラインしている。WAV は 16/24/32bit float、AIF は 16/24bit。
+      RATE の変更は AudioContext を作り直すため停止中のみ（AUTO はデバイスレート）。
+      パラ録音では複数ファイルを連続ダウンロードするので、ブラウザが許可を
+      求めることがある。<br>
       <b>PHASE SYNC の着地</b>: 収束が終わった時点で両者の次の小節頭の時刻差 e を測り、
       レイズドコサイン形のBPMの膨らみ（面積がちょうど e になる）を1回かける。
       始点と終点でBPMは目標値に一致し、位相だけが e ぶん進む。
@@ -355,6 +520,19 @@ const TempoCore = (function () {
     };
   }
 
+  /* Glide to a FIXED BPM (a knob or typed value) instead of chasing a
+     master track. Same converge machinery, mode 'bpm', so the tempo
+     eases over at the console's rate rather than jumping. Re-issuing
+     mid-glide simply retargets from wherever the ramp is now. */
+  function beginGlide (tr, now, target, opt) {
+    tr.catchState = {
+      stage: 'converge', mode: 'bpm', curve: opt.curve, dir: 'nearest',
+      isGlide: true, fixedBpm: target,
+      ramp: { t0: now, dur: Math.max(0.05, opt.dur), startBpm: tr.bpm, curve: opt.curve },
+      lockTries: 0
+    };
+  }
+
   /* CATCH RATE moved mid-flight: re-plan from where the ramp is now,
      so the remaining travel takes exactly the new duration. */
   function retimeCatch (tr, now, newDur, curBpm) {
@@ -404,7 +582,8 @@ const TempoCore = (function () {
   function updateCatch (tr, master, now, opt) {
     const c = tr.catchState;
     if (!c) return null;
-    const targetAt = t => bpmAt(master, null, t);
+    const targetAt = c.fixedBpm != null ? () => c.fixedBpm
+                                        : t => bpmAt(master, null, t);
 
     if (c.stage === 'converge') {
       if (now < c.ramp.t0 + c.ramp.dur) return null;
@@ -448,11 +627,108 @@ const TempoCore = (function () {
   return {
     STEPS_PER_BEAT, BEATS_PER_BAR, STEPS_PER_BAR,
     catchShape, rampBpm, lockDev, lockAmp, wrapPhase, stepDur,
-    bpmAt, nextBarHead, phaseErrorBars, beginCatch, retimeCatch,
+    bpmAt, nextBarHead, phaseErrorBars, beginCatch, beginGlide, retimeCatch,
     endCatch, planLock, snapPhase, updateCatch, advance, stepPosAt
   };
 })();
 /*<<<END_TEMPO_CORE>>>*/
+
+
+/*<<<RECORDER_CORE>>>*/
+/* ===================================================================
+   RECORDER CORE — pure WAV / AIFF encoders. No DOM, no Web Audio:
+   Float32 channel data in, ArrayBuffer out. Extracted verbatim by
+   tests/web/test_recorder.js.
+   =================================================================== */
+const RecorderCore = (function () {
+  function wStr (dv, off, s) {
+    for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i));
+  }
+  function quantize (x, max) {
+    if (x < -1) x = -1; else if (x > 1) x = 1;
+    return Math.round(x * max);
+  }
+
+  /* IEEE 754 extended precision (10 bytes, big-endian) — the AIFF
+     COMM chunk's sample-rate field. Explicit leading-1 mantissa. */
+  function writeFloat80 (dv, off, v) {
+    if (!(v > 0) || !isFinite(v)) throw new Error('float80: need a positive finite value');
+    const e = Math.floor(Math.log2(v));
+    const m = v / Math.pow(2, e);                       // [1, 2)
+    let hi = Math.floor(m * 0x80000000);
+    let lo = Math.round((m * 0x80000000 - hi) * 0x100000000);
+    if (lo === 0x100000000) { lo = 0; hi++; }
+    dv.setUint16(off, 16383 + e);
+    dv.setUint32(off + 2, hi);
+    dv.setUint32(off + 6, lo);
+  }
+
+  /* channels: array of equal-length Float32Arrays.
+     bits: 16 / 24 (integer PCM) or 32 (IEEE float). */
+  function encodeWav (channels, sampleRate, bits) {
+    const ch = channels.length, frames = channels[0].length;
+    const isF = bits === 32;
+    const bytes = bits / 8, blockAlign = ch * bytes, dataLen = frames * blockAlign;
+    const fmtLen = isF ? 18 : 16;                        // float fmt carries cbSize=0
+    const factLen = isF ? 12 : 0;                        // float requires a fact chunk
+    const buf = new ArrayBuffer(12 + 8 + fmtLen + factLen + 8 + dataLen);
+    const dv = new DataView(buf);
+    wStr(dv, 0, 'RIFF'); dv.setUint32(4, buf.byteLength - 8, true); wStr(dv, 8, 'WAVE');
+    let o = 12;
+    wStr(dv, o, 'fmt '); dv.setUint32(o + 4, fmtLen, true);
+    dv.setUint16(o + 8, isF ? 3 : 1, true);              // 3 = IEEE float, 1 = PCM
+    dv.setUint16(o + 10, ch, true);
+    dv.setUint32(o + 12, sampleRate, true);
+    dv.setUint32(o + 16, sampleRate * blockAlign, true);
+    dv.setUint16(o + 20, blockAlign, true);
+    dv.setUint16(o + 22, bits, true);
+    if (isF) dv.setUint16(o + 24, 0, true);
+    o += 8 + fmtLen;
+    if (isF) { wStr(dv, o, 'fact'); dv.setUint32(o + 4, 4, true); dv.setUint32(o + 8, frames, true); o += 12; }
+    wStr(dv, o, 'data'); dv.setUint32(o + 4, dataLen, true); o += 8;
+    for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) {
+      const x = channels[c][i];
+      if (isF) { dv.setFloat32(o, x, true); o += 4; }
+      else if (bits === 24) {
+        const v = quantize(x, 8388607);
+        dv.setUint8(o, v & 255); dv.setUint8(o + 1, (v >> 8) & 255); dv.setUint8(o + 2, (v >> 16) & 255);
+        o += 3;
+      } else { dv.setInt16(o, quantize(x, 32767), true); o += 2; }
+    }
+    return buf;
+  }
+
+  /* bits: 16 / 24 (big-endian integer PCM — plain AIFF, no AIFC). */
+  function encodeAiff (channels, sampleRate, bits) {
+    const ch = channels.length, frames = channels[0].length;
+    const bytes = bits / 8, dataLen = frames * ch * bytes;
+    const pad = dataLen & 1;                             // IFF chunks are word-aligned
+    const buf = new ArrayBuffer(12 + (8 + 18) + (8 + 8 + dataLen + pad));
+    const dv = new DataView(buf);
+    wStr(dv, 0, 'FORM'); dv.setUint32(4, buf.byteLength - 8); wStr(dv, 8, 'AIFF');
+    let o = 12;
+    wStr(dv, o, 'COMM'); dv.setUint32(o + 4, 18);
+    dv.setInt16(o + 8, ch);
+    dv.setUint32(o + 10, frames);
+    dv.setInt16(o + 14, bits);
+    writeFloat80(dv, o + 16, sampleRate);
+    o += 8 + 18;
+    wStr(dv, o, 'SSND'); dv.setUint32(o + 4, 8 + dataLen);
+    dv.setUint32(o + 8, 0); dv.setUint32(o + 12, 0);     // offset, blockSize
+    o += 16;
+    for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) {
+      if (bits === 24) {
+        const v = quantize(channels[c][i], 8388607);
+        dv.setUint8(o, (v >> 16) & 255); dv.setUint8(o + 1, (v >> 8) & 255); dv.setUint8(o + 2, v & 255);
+        o += 3;
+      } else { dv.setInt16(o, quantize(channels[c][i], 32767)); o += 2; }
+    }
+    return buf;
+  }
+
+  return { encodeWav, encodeAiff, writeFloat80, quantize };
+})();
+/*<<<END_RECORDER_CORE>>>*/
 
 
 /* ===================================================================
@@ -461,14 +737,22 @@ const TempoCore = (function () {
 const LOOKAHEAD = 0.12;      // seconds of audio scheduled ahead
 const TICK_MS   = 25;
 const ACC = ['a', 'b', 'c', 'd'];
-const ACC_HEX = ['#ffb020', '#35c8d8', '#ff5c8a', '#7dd35f'];
+/* candy colours tuned for the light Aqua panels */
+const ACC_HEX = ['#f59714', '#2a9fe0', '#ef3f7b', '#46b03c'];
 
 let ctx = null, master = null, busGain = null, analyser = null, noiseBuf = null;
-let anaBuf = null;
+let anaBuf = null, recTap = null, transportT0 = 0;
 
 function initAudio () {
   if (ctx) return;
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  try {
+    ctx = new AC(S.recSr ? { sampleRate: S.recSr } : undefined);
+  } catch (e) {
+    ctx = new AC();                                  // rate unsupported: device rate
+    toast(S.recSr + ' Hz は非対応 — ' + ctx.sampleRate + ' Hz で動作します');
+    S.recSr = 0;
+  }
 
   busGain = ctx.createGain();
   busGain.gain.value = 1;
@@ -499,6 +783,7 @@ function initAudio () {
 
   busGain.connect(hp).connect(hp2).connect(lim).connect(shaper)
          .connect(master).connect(analyser).connect(ctx.destination);
+  recTap = shaper;              // recording point: post soft-clip, pre monitor volume
 
   const len = Math.floor(ctx.sampleRate * 2);
   noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -665,17 +950,43 @@ const S = {
   masterIdx: 0,
   mode: 'phase', curve: 'exp', dir: 'nearest',
   catchTime: 8.0,
-  vol: 0.35
+  vol: 0.35,
+  recFmt: 'wav', recBit: 24, recSr: 0, recPara: true
 };
 
 function masterTrack () { return tracks[S.masterIdx]; }
 function tuneMul (tr) { return Math.pow(2, (tr.key + 12 * tr.oct) / 12) * Math.pow(2, tr.fine / 1200); }
 function bpmFnFor (tr) {
+  const c = tr.catchState;
+  if (!c) return () => tr.bpm;
+  if (c.fixedBpm != null) return t => TempoCore.bpmAt(tr, () => c.fixedBpm, t);
   const m = masterTrack();
-  if (tr === m || !tr.catchState) return () => tr.bpm;
+  if (tr === m) return () => tr.bpm;
   return t => TempoCore.bpmAt(tr, tt => TempoCore.bpmAt(m, null, tt), t);
 }
 function liveBpm (tr, t) { return bpmFnFor(tr)(t); }
+
+/* The BPM a track is heading for: the glide/catch destination if one
+   is in flight, otherwise the value it is sitting on. Knobs read this
+   so they show where the user pointed, while the big readout shows the
+   live tempo easing over. */
+function targetBpm (tr) {
+  const c = tr.catchState;
+  return c && c.fixedBpm != null ? c.fixedBpm : tr.bpm;
+}
+
+/* Every BPM change from the UI or MIDI lands here. While playing it
+   glides at the console's CATCH RATE / CURVE instead of jumping. */
+function setTrackBpm (tr, v) {
+  v = Math.min(300, Math.max(20, v));
+  if (S.playing && ctx) {
+    TempoCore.beginGlide(tr, ctx.currentTime, v, { curve: S.curve, dur: S.catchTime });
+  } else {
+    tr.catchState = null;
+    tr.bpm = v;
+  }
+  renderTrackHead(tr);
+}
 
 /* ---- one step of one track ---- */
 function playStep (tr, step, time) {
@@ -733,11 +1044,15 @@ function tick () {
   const m = masterTrack();
 
   for (const tr of tracks) {
-    if (tr === m || !tr.catchState) continue;
+    if (!tr.catchState) continue;
+    if (tr.catchState.fixedBpm == null && tr === m) continue;  // stale catch on the new master
+    const wasGlide = tr.catchState.isGlide;
     const ev = TempoCore.updateCatch(tr, m, now, CATCH_OPT());
     if (ev === 'phase-locked' || ev === 'bpm-locked') {
-      tr.flash = now;
-      toast(tr.name + ' → ' + (ev === 'bpm-locked' ? 'BPM SYNC 完了' : 'PHASE LOCK'));
+      if (!wasGlide) {
+        tr.flash = now;
+        toast(tr.name + ' → ' + (ev === 'bpm-locked' ? 'BPM SYNC 完了' : 'PHASE LOCK'));
+      }
       renderTrackHead(tr);
     }
   }
@@ -755,6 +1070,7 @@ function start () {
     tr.node.gain.value = tr.gain;
   });
   const t0 = ctx.currentTime + 0.15;
+  transportT0 = t0;
   tracks.forEach(tr => { tr.stepIndex = 0; tr.nextStepTime = t0; tr.catchState = null; });
   S.playing = true;
   timer = setInterval(tick, TICK_MS);
@@ -763,6 +1079,7 @@ function start () {
 }
 
 function stop () {
+  if (Recorder.active) Recorder.end();               // async: drains, then writes files
   S.playing = false;
   if (timer) clearInterval(timer);
   timer = null;
@@ -794,6 +1111,188 @@ function cancelCatch (tr) {
   tr.bpm = liveBpm(tr, ctx.currentTime);
   tr.catchState = null;
   renderTrackHead(tr);
+}
+
+/* ===================================================================
+   RECORDER — AudioWorklet capture. Every tap is told the exact start
+   and end frame, so all stems cover the identical frame range and are
+   sample-aligned regardless of when each node came online.
+   =================================================================== */
+const CAP_WORKLET = `
+class Cap extends AudioWorkletProcessor {
+  constructor () {
+    super();
+    this.b0 = []; this.b1 = []; this.n = 0;
+    this.sf = -1; this.ef = Infinity;
+    this.port.onmessage = e => {
+      const d = e.data;
+      if (d.cmd === 'start') this.sf = d.frame;
+      else if (d.cmd === 'stop') this.ef = d.frame;
+    };
+  }
+  post () {
+    if (!this.n) return;
+    const b0 = this.b0, b1 = this.b1;
+    this.port.postMessage({ b0, b1, n: this.n },
+      b0.map(a => a.buffer).concat(b1.map(a => a.buffer)));
+    this.b0 = []; this.b1 = []; this.n = 0;
+  }
+  process (inputs) {
+    const f0 = currentFrame, f1 = f0 + 128;
+    if (this.sf < 0 || f1 <= this.sf) return true;
+    const a = Math.max(0, this.sf - f0);
+    const b = Math.min(128, this.ef - f0);
+    if (b > a) {
+      const inp = inputs[0];
+      const c0 = inp && inp[0] ? inp[0].slice(a, b) : new Float32Array(b - a);
+      const c1 = inp && inp[1] ? inp[1].slice(a, b) : c0.slice();
+      this.b0.push(c0); this.b1.push(c1); this.n += b - a;
+    }
+    if (f1 >= this.ef) { this.post(); this.port.postMessage({ done: true }); return false; }
+    if (this.n >= 8192) this.post();
+    return true;
+  }
+}
+registerProcessor('pt-cap', Cap);`;
+
+const Recorder = {
+  active: false, stopping: false, taps: [], startFrame: 0, bytes: 0,
+  MAX_BYTES: 1.5e9,                       // auto-stop before the tab dies
+
+  async ensureModule () {
+    if (ctx._ptCap) return;
+    /* data: first — Chromium rejects blob: worklet modules on file://
+       pages; Firefox rejects data: but takes blob:. Between the two,
+       every current browser loads one of them. */
+    try {
+      await ctx.audioWorklet.addModule(
+        'data:application/javascript;base64,' + btoa(CAP_WORKLET));
+    } catch (e) {
+      const url = URL.createObjectURL(new Blob([CAP_WORKLET], { type: 'application/javascript' }));
+      try { await ctx.audioWorklet.addModule(url); }
+      finally { URL.revokeObjectURL(url); }
+    }
+    ctx._ptCap = true;
+  },
+
+  async begin () {
+    if (this.active) return;
+    initAudio();
+    if (!ctx.audioWorklet || !window.AudioWorkletNode) { toast('このブラウザは AudioWorklet 非対応です'); return; }
+    if (ctx.state === 'suspended') await ctx.resume();
+    await this.ensureModule();
+    const wasPlaying = S.playing;
+    if (!wasPlaying) start();
+
+    const targets = [{ name: 'master', src: recTap }];
+    if (S.recPara) tracks.forEach(tr => {
+      if (tr.muted) return;
+      if (!tr.node) { tr.node = ctx.createGain(); tr.node.gain.value = tr.gain; tr.node.connect(busGain); }
+      targets.push({ name: tr.name, src: tr.node });
+    });
+
+    this.bytes = 0; this.stopping = false;
+    this.taps = targets.map(t => {
+      const node = new AudioWorkletNode(ctx, 'pt-cap',
+        { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2, channelCountMode: 'explicit' });
+      const tap = { name: t.name, node, c0: [], c1: [], frames: 0 };
+      tap.donep = new Promise(res => { tap.done = res; });
+      node.port.onmessage = e => {
+        const d = e.data;
+        if (d.done) { tap.done(); return; }
+        for (const a of d.b0) tap.c0.push(a);
+        for (const a of d.b1) tap.c1.push(a);
+        tap.frames += d.n;
+        this.bytes += d.n * 8;
+        if (this.bytes > this.MAX_BYTES && !this.stopping) {
+          toast('メモリ上限に達したため録音を停止します');
+          this.end();
+        }
+      };
+      t.src.connect(node);
+      return tap;
+    });
+
+    /* Fresh transport: start capturing 50 ms before the first downbeat
+       so its attack is never clipped. Punch-in on a running transport:
+       just a beat's grace for the message to reach the worklets. */
+    this.startFrame = Math.round(
+      (wasPlaying ? ctx.currentTime + 0.1 : transportT0 - 0.05) * ctx.sampleRate);
+    this.taps.forEach(t => t.node.port.postMessage({ cmd: 'start', frame: this.startFrame }));
+    this.active = true;
+    paintRec();
+  },
+
+  async end () {
+    if (!this.active || this.stopping) return;
+    this.stopping = true;
+    const endFrame = Math.max(this.startFrame,
+      Math.round((ctx.currentTime + 0.06) * ctx.sampleRate));
+    this.taps.forEach(t => t.node.port.postMessage({ cmd: 'stop', frame: endFrame }));
+    await Promise.all(this.taps.map(t => t.donep));
+    this.taps.forEach(t => { try { t.node.disconnect(); } catch (e) {} });
+    this.active = false;
+    paintRec();
+
+    toast('書き出し中…');
+    const sr = ctx.sampleRate;
+    const bits = S.recFmt === 'aif' && S.recBit === 32 ? 24 : S.recBit;
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
+    const ext = S.recFmt === 'aif' ? 'aif' : 'wav';
+    this.taps.forEach((t, i) => {
+      const chans = [concatF32(t.c0, t.frames), concatF32(t.c1, t.frames)];
+      const buf = S.recFmt === 'aif'
+        ? RecorderCore.encodeAiff(chans, sr, bits)
+        : RecorderCore.encodeWav(chans, sr, bits);
+      downloadBlob(new Blob([buf], { type: S.recFmt === 'aif' ? 'audio/aiff' : 'audio/wav' }),
+        'polytempo-' + stamp + '-' + t.name + '.' + ext, i * 350);
+    });
+    const n = this.taps.length;
+    const secs = n ? this.taps[0].frames / sr : 0;
+    this.taps = [];
+    toast(n + ' ファイル · ' + secs.toFixed(1) + ' s · ' + sr + ' Hz / ' +
+          (bits === 32 ? '32f' : bits) + 'bit を書き出しました');
+  },
+
+  toggle () { this.active ? this.end() : this.begin(); }
+};
+
+function concatF32 (list, n) {
+  const out = new Float32Array(n);
+  let o = 0;
+  for (const c of list) { out.set(c, o); o += c.length; }
+  return out;
+}
+function downloadBlob (blob, name, delay) {
+  setTimeout(() => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }, delay || 0);
+}
+function paintRec () {
+  const b = document.getElementById('btnRec');
+  b.classList.toggle('on', Recorder.active);
+  b.textContent = Recorder.active ? '■ STOP' : '● REC';
+}
+
+/* Changing the rate means a new AudioContext: tear the graph down and
+   let initAudio rebuild it at the requested rate on next use. Decoded
+   sample AudioBuffers survive -- BufferSource resamples as needed. */
+function setAudioRate (v) {
+  v = +v;
+  if (v === S.recSr) return;
+  if (S.playing || Recorder.active) { toast('レート変更は停止中のみできます'); return; }
+  S.recSr = v;
+  if (ctx) {
+    try { ctx.close(); } catch (e) {}
+    ctx = null; master = null; busGain = null; analyser = null; anaBuf = null;
+    noiseBuf = null; recTap = null;
+    tracks.forEach(tr => { tr.node = null; tr.srcNode = null; });
+  }
+  toast(v ? v + ' Hz で再初期化します' : 'デバイスレートで再初期化します');
 }
 
 /* ===================================================================
@@ -891,7 +1390,7 @@ function segPaint (id, get) {
 
 function buildConsole () {
   kCatch = new Knob(document.getElementById('kCatch'), {
-    label: 'CATCH RATE', min: 0.25, max: 60, def: 8, log: true, id: 'catchTime',
+    label: 'CATCH RATE', min: 0.25, max: 120, def: 8, log: true, id: 'catchTime',
     get: () => S.catchTime,
     set: v => {
       S.catchTime = v;
@@ -917,12 +1416,45 @@ function buildConsole () {
   segInit('optMode',   () => S.mode,      v => S.mode = v);
   segInit('optCurve',  () => S.curve,     v => S.curve = v);
   segInit('optDir',    () => S.dir,       v => S.dir = v);
-  segInit('optMaster', () => S.masterIdx, v => { S.masterIdx = +v; renderAllHeads(); paintLegend(); });
+  segInit('optMaster', () => S.masterIdx, v => setMaster(+v));
 
   document.getElementById('btnCatchAll').onclick = () => tracks.forEach(tr => {
     if (tr !== masterTrack()) startCatch(tr);
   });
   document.getElementById('btnCancelAll').onclick = () => tracks.forEach(cancelCatch);
+}
+
+/* Promoting a track to master drops any catch it was running toward
+   the previous master (it can't chase itself); glides survive. */
+function setMaster (i) {
+  S.masterIdx = i;
+  const m = masterTrack();
+  if (m.catchState && m.catchState.fixedBpm == null) cancelCatch(m);
+  segPaint('optMaster', () => S.masterIdx);
+  renderAllHeads();
+  paintLegend();
+}
+
+function buildRecorder () {
+  segInit('optRecFmt', () => S.recFmt, v => {
+    S.recFmt = v;
+    if (v === 'aif' && S.recBit === 32) {
+      S.recBit = 24;
+      segPaint('optRecBit', () => S.recBit);
+      toast('AIF は 16/24bit（32F は WAV のみ）');
+    }
+  });
+  segInit('optRecBit', () => S.recBit, v => {
+    if (S.recFmt === 'aif' && +v === 32) { toast('AIF は 16/24bit（32F は WAV のみ）'); return; }
+    S.recBit = +v;
+  });
+  segInit('optRecSr', () => S.recSr, v => setAudioRate(v));
+  segInit('optRecPara', () => S.recPara ? 1 : 0, v => S.recPara = v === '1');
+  const b = document.getElementById('btnRec');
+  b.onclick = () => {
+    if (Midi.armFromClick({ el: b, isBtn: true, id: 'rec' })) return;
+    Recorder.toggle();
+  };
 }
 
 function trackEl (tr) { return document.getElementById('trk' + tr.idx); }
@@ -958,9 +1490,7 @@ function buildTracks () {
       '<div class="grid" data-grid></div>';
     host.appendChild(el);
 
-    el.querySelector('[data-master]').onclick = () => {
-      S.masterIdx = tr.idx; segPaint('optMaster', () => S.masterIdx); renderAllHeads(); paintLegend();
-    };
+    el.querySelector('[data-master]').onclick = () => setMaster(tr.idx);
     el.querySelector('[data-mute]').onclick = () => {
       tr.muted = !tr.muted; renderTrackHead(tr);
     };
@@ -969,12 +1499,7 @@ function buildTracks () {
       if (Midi.armFromClick({ el: cb, isBtn: true, id: 'catch' + tr.idx })) return;
       tr.catchState ? cancelCatch(tr) : startCatch(tr);
     };
-    el.querySelector('[data-bpm]').ondblclick = () => {
-      const v = prompt(tr.name + ' の BPM', tr.bpm.toFixed(2));
-      if (v === null) return;
-      const n = parseFloat(v);
-      if (isFinite(n) && n >= 20 && n <= 300) { cancelCatch(tr); tr.bpm = n; refreshTrackKnobs(tr); }
-    };
+    el.querySelector('[data-bpm]').ondblclick = () => editBpmInline(tr);
     el.querySelector('[data-kind]').onchange = e => {
       tr.kind = e.target.value;
       buildTrackBody(tr); buildGrid(tr); renderTrackHead(tr);
@@ -987,7 +1512,6 @@ function buildTracks () {
         tr.loopBars = +b.dataset.v;
         paintOpts(el, 'data-loop', tr.loopBars);
         buildGrid(tr);
-        if (tr.kind === 'sample' && tr.sample) autoBaseBpm(tr);
       };
     });
 
@@ -995,6 +1519,36 @@ function buildTracks () {
     buildGrid(tr);
   });
   renderAllHeads();
+}
+
+/* Inline BPM entry. prompt() would freeze the main thread and with it
+   the lookahead scheduler -- the audio would stall. An <input> swapped
+   into the header keeps everything running while the user types. */
+function editBpmInline (tr) {
+  const el = trackEl(tr);
+  const span = el.querySelector('[data-bpmv]');
+  if (span.style.display === 'none') return;           // already editing
+  const inp = document.createElement('input');
+  inp.className = 'bpmEdit num';
+  inp.type = 'text'; inp.inputMode = 'decimal';
+  inp.value = targetBpm(tr).toFixed(2);
+  span.style.display = 'none';
+  span.parentNode.insertBefore(inp, span);
+  inp.focus(); inp.select();
+  let done = false;
+  const cleanup = () => { done = true; inp.remove(); span.style.display = ''; };
+  const commit = () => {
+    if (done) return;
+    const n = parseFloat(inp.value);
+    cleanup();
+    if (isFinite(n) && n >= 20 && n <= 300) { setTrackBpm(tr, n); refreshTrackKnobs(tr); }
+  };
+  inp.onkeydown = e => {
+    e.stopPropagation();                               // keep 1-4/space shortcuts out
+    if (e.key === 'Enter') commit();
+    else if (e.key === 'Escape') cleanup();
+  };
+  inp.onblur = commit;
 }
 
 function paintOpts (el, sel, v) {
@@ -1020,8 +1574,8 @@ function buildTrackBody (tr) {
 
   tr._bpmKnob = add({ label: 'BPM', min: 30, max: 240, def: tr.bpm, id: 'bpm' + tr.idx,
         color: ACC_HEX[tr.idx],
-        get: () => tr.bpm,
-        set: v => { cancelCatch(tr); tr.bpm = v; renderTrackHead(tr); },
+        get: () => targetBpm(tr),
+        set: v => setTrackBpm(tr, v),
         fmt: v => v.toFixed(2) });
 
   add({ label: 'GAIN', min: 0, max: 1, def: 0.25, id: 'gain' + tr.idx,
@@ -1031,12 +1585,11 @@ function buildTrackBody (tr) {
 
   if (tr.kind === 'sample') {
     add({ label: 'TUNE', min: -2400, max: 2400, def: 0, id: 'tune' + tr.idx,
-          get: () => tr.sample ? 1200 * Math.log2(tr.bpm / tr.sample.baseBpm) : 0,
+          get: () => tr.sample ? 1200 * Math.log2(targetBpm(tr) / tr.sample.baseBpm) : 0,
           set: v => {
             if (!tr.sample) return;
-            cancelCatch(tr);
-            tr.bpm = tr.sample.baseBpm * Math.pow(2, v / 1200);
-            renderTrackHead(tr); refreshTrackKnobs(tr);
+            setTrackBpm(tr, tr.sample.baseBpm * Math.pow(2, v / 1200));
+            refreshTrackKnobs(tr);
           },
           fmt: v => (v >= 0 ? '+' : '') + v.toFixed(0) + ' ¢' });
 
@@ -1046,16 +1599,31 @@ function buildTrackBody (tr) {
     inp.type = 'file'; inp.accept = 'audio/*';
     const lbl = document.createElement('span');
     lbl.textContent = tr.sample ? tr.sample.name : '(no sample)';
-    const base = document.createElement('button');
-    base.className = 'fbtn';
-    base.textContent = 'BASE BPM: ' + (tr.sample ? tr.sample.baseBpm.toFixed(2) : '—');
-    base.onclick = () => {
-      if (!tr.sample) return;
-      const v = prompt('サンプルの原BPM', tr.sample.baseBpm.toFixed(2));
-      if (v === null) return;
-      const n = parseFloat(v);
-      if (isFinite(n) && n > 0) { tr.sample.baseBpm = n; buildTrackBody(tr); }
+
+    const baseLbl = document.createElement('span');
+    baseLbl.textContent = 'BASE BPM';
+    const base = document.createElement('input');
+    base.className = 'numIn';
+    base.type = 'number'; base.min = '20'; base.max = '999'; base.step = '0.01';
+    base.value = tr.sample ? tr.sample.baseBpm.toFixed(2) : '120.00';
+    base.disabled = !tr.sample;
+    base.onchange = () => {
+      const n = parseFloat(base.value);
+      if (tr.sample && isFinite(n) && n > 0) tr.sample.baseBpm = n;
+      else base.value = tr.sample ? tr.sample.baseBpm.toFixed(2) : '120.00';
+      refreshTrackKnobs(tr);
     };
+    const fit = document.createElement('button');
+    fit.className = 'fbtn'; fit.textContent = 'FIT LOOP';
+    fit.title = 'サンプル全体がこのループ長ぴったりだとみなして原BPMを算出';
+    fit.onclick = () => {
+      if (!tr.sample) return;
+      autoBaseBpm(tr);
+      base.value = tr.sample.baseBpm.toFixed(2);
+      refreshTrackKnobs(tr);
+      toast('ループ尺から ' + tr.sample.baseBpm.toFixed(2) + ' BPM と算出しました');
+    };
+
     btn.onclick = () => inp.click();
     inp.onchange = async e => {
       const f = e.target.files[0];
@@ -1063,13 +1631,13 @@ function buildTrackBody (tr) {
       initAudio();
       try {
         const buf = await ctx.decodeAudioData(await f.arrayBuffer());
+        // no BPM metadata in raw audio -- assume 120, let FIT/手入力 refine
         tr.sample = { buf, name: f.name, baseBpm: 120 };
-        autoBaseBpm(tr);
         buildTrackBody(tr);
-        toast(f.name + ' を読み込みました');
+        toast(f.name + ' を読み込みました（原BPM=120 と仮定）');
       } catch (err) { toast('デコードできませんでした'); }
     };
-    fr.append(btn, inp, lbl, base);
+    fr.append(btn, inp, lbl, baseLbl, base, fit);
     const note = document.createElement('span');
     note.textContent = 'テープ方式: BPM がピッチを動かします';
     note.style.color = 'var(--dim2)';
@@ -1136,9 +1704,10 @@ function renderTrackHead (tr) {
   el.querySelector('[data-master]').classList.toggle('on', tr === masterTrack());
   el.querySelector('[data-mute]').classList.toggle('on', tr.muted);
   const cb = el.querySelector('[data-catch]');
+  const catching = !!(tr.catchState && tr.catchState.fixedBpm == null);
   cb.disabled = tr === masterTrack();
-  cb.classList.toggle('run', !!tr.catchState);
-  cb.textContent = tr.catchState ? 'CANCEL' : 'CATCH';
+  cb.classList.toggle('run', catching);
+  cb.textContent = catching ? 'CANCEL' : 'CATCH';
 }
 function renderAllHeads () { tracks.forEach(renderTrackHead); }
 
@@ -1163,11 +1732,18 @@ function paintLegend () {
 }
 
 function statusText (tr, now) {
-  if (tr === masterTrack()) return 'MASTER · ' + tr.bpm.toFixed(2) + ' BPM';
   const c = tr.catchState;
+  if (tr === masterTrack()) {
+    let s = 'MASTER · ' + tr.bpm.toFixed(2) + ' BPM';
+    if (c && c.isGlide) s += ' → ' + c.fixedBpm.toFixed(2);
+    return s;
+  }
   let s = tr.bpm.toFixed(2) + ' BPM';
   if (c) {
-    if (c.stage === 'converge') {
+    if (c.isGlide) {
+      const left = Math.max(0, c.ramp.t0 + c.ramp.dur - now);
+      s += ' → ' + c.fixedBpm.toFixed(2) + ' · ' + left.toFixed(1) + 's';
+    } else if (c.stage === 'converge') {
       const left = Math.max(0, c.ramp.t0 + c.ramp.dur - now);
       s += ' · 収束 ' + left.toFixed(1) + 's';
     } else {
@@ -1201,6 +1777,21 @@ function frame () {
     document.getElementById('clipLed').classList.toggle('on', peak >= 0.985);
   }
 
+  // recorder status
+  const rs = document.getElementById('recStat');
+  if (Recorder.active && ctx) {
+    const sec = Math.max(0, now - Recorder.startFrame / ctx.sampleRate);
+    rs.innerHTML = '<b>● ' + sec.toFixed(1) + ' s</b> · ' +
+      (Recorder.bytes / 1048576).toFixed(0) + ' MB · ' +
+      Recorder.taps.length + ' ファイル · ' + ctx.sampleRate + ' Hz';
+  } else {
+    const sr = ctx ? ctx.sampleRate + ' Hz' : (S.recSr ? S.recSr + ' Hz' : 'デバイスレート');
+    rs.textContent = (S.recBit === 32 ? '32bit float' : S.recBit + 'bit') + ' ' +
+      S.recFmt.toUpperCase() + ' · ' + sr +
+      (S.recPara ? ' · パラ ON: マスター+非ミュート各トラックを同時書き出し' : ' · マスターのみ') +
+      ' — R キーでも開始/停止';
+  }
+
   // legend + live BPM readouts (they move continuously during a catch)
   tracks.forEach(tr => {
     const e = document.getElementById('lg' + tr.idx);
@@ -1216,15 +1807,15 @@ function frame () {
   // scope
   const W = scope.width, H = scope.height, cx = W / 2, cy = H / 2;
   sctx.clearRect(0, 0, W, H);
-  sctx.strokeStyle = '#23252b';
+  sctx.strokeStyle = '#aeb1b8';
   sctx.lineWidth = 2;
   sctx.beginPath(); sctx.moveTo(cx, 12); sctx.lineTo(cx, H - 12); sctx.stroke();
-  sctx.strokeStyle = '#16181d';
+  sctx.strokeStyle = '#c9ccd2';
   sctx.beginPath(); sctx.moveTo(12, cy); sctx.lineTo(W - 12, cy); sctx.stroke();
 
   tracks.forEach((tr, i) => {
     const R = 210 - i * 34;
-    sctx.strokeStyle = '#1c1e24';
+    sctx.strokeStyle = 'rgba(0,0,0,.10)';        // recessed ring track
     sctx.lineWidth = 12;
     sctx.beginPath(); sctx.arc(cx, cy, R, 0, Math.PI * 2); sctx.stroke();
 
@@ -1235,7 +1826,7 @@ function frame () {
     const ang = -Math.PI / 2 + frac * Math.PI * 2;
 
     // bar ticks
-    sctx.strokeStyle = '#2c2f37'; sctx.lineWidth = 2;
+    sctx.strokeStyle = '#8d9097'; sctx.lineWidth = 2;
     for (let b = 0; b < tr.loopBars; b++) {
       const a = -Math.PI / 2 + (b / tr.loopBars) * Math.PI * 2;
       sctx.beginPath();
@@ -1245,7 +1836,7 @@ function frame () {
     }
     // travelled arc
     sctx.strokeStyle = ACC_HEX[i]; sctx.lineWidth = 12;
-    sctx.globalAlpha = 0.28;
+    sctx.globalAlpha = 0.35;
     sctx.beginPath(); sctx.arc(cx, cy, R, -Math.PI / 2, ang); sctx.stroke();
     sctx.globalAlpha = 1;
     // head
@@ -1344,6 +1935,7 @@ const Midi = {
     }
     if (m.kind === 'btn') {
       if (val < 0.5) return;
+      if (m.id === 'rec') { Recorder.toggle(); return; }
       const i = +m.id.replace('catch', '');
       const tr = tracks[i];
       if (tr) tr.catchState ? cancelCatch(tr) : startCatch(tr);
@@ -1403,11 +1995,15 @@ function loadProject (obj) {
     if (tr.node) tr.node.gain.value = tr.gain;
     if (d.sample && tr.sample) tr.sample.baseBpm = d.sample.baseBpm;
   });
+  if (S.recFmt === 'aif' && S.recBit === 32) S.recBit = 24;
   buildTracks();
   Object.values(knobs).forEach(k => k.refresh());
-  ['optMode', 'optCurve', 'optDir', 'optMaster'].forEach(id => segPaint(id,
-    () => id === 'optMode' ? S.mode : id === 'optCurve' ? S.curve
-        : id === 'optDir' ? S.dir : S.masterIdx));
+  const SEGS = {
+    optMode: () => S.mode, optCurve: () => S.curve, optDir: () => S.dir,
+    optMaster: () => S.masterIdx, optRecFmt: () => S.recFmt, optRecBit: () => S.recBit,
+    optRecSr: () => S.recSr, optRecPara: () => S.recPara ? 1 : 0
+  };
+  Object.keys(SEGS).forEach(id => segPaint(id, SEGS[id]));
   if (master) master.gain.value = S.vol;
   paintLegend();
   toast('プロジェクトを読み込みました' + (obj.tracks.some(t => t.sample)
@@ -1442,9 +2038,11 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); S.playing ? stop() : start(); }
   if (e.key >= '1' && e.key <= '4') startCatch(tracks[+e.key - 1]);
   if (e.key === '0') alignAll();
+  if (e.key === 'r' || e.key === 'R') Recorder.toggle();
 });
 
 buildConsole();
+buildRecorder();
 buildTracks();
 paintLegend();
 Midi.paintMapped();

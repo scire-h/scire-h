@@ -3,6 +3,33 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## POLYTEMPO — recorder, BPM glide, Aqua look
+
+* **Recorder**: hi-res capture to WAV (16 / 24 / 32-bit float) or AIFF
+  (16 / 24-bit) at 44.1 / 48 / 88.2 / 96 kHz. Captures the master bus
+  (post soft-clip, pre monitor volume) and, with PARA on, every unmuted
+  track's dry post-gain signal in parallel. Raw Float32 capture via an
+  AudioWorklet driven by explicit start/end frame numbers, so all stems
+  cover the identical frame range and are sample-aligned. Worklet module
+  loads via data: URL with blob: fallback (Chromium rejects blob:
+  worklets on file:// pages). Encoders are pure functions, including a
+  hand-rolled IEEE 754 80-bit extended writer for the AIFF sample-rate
+  field.
+* **BPM changes glide**: turning a BPM/TUNE knob, typing a value or
+  sending MIDI CC no longer jumps the tempo — it glides from the current
+  playing tempo at the console's CATCH RATE / CURVE, re-planning when
+  re-aimed mid-flight. CATCH RATE range extended to 120 s. Instant while
+  stopped.
+* **Non-blocking BPM entry**: the double-click editor is now an inline
+  input; the old prompt() froze the main thread and stalled the audio.
+* Samples load with BASE BPM = 120 (audio files carry no tempo
+  metadata); FIT LOOP derives it from the loop length instead of the
+  previous silent auto-guess.
+* **Aqua reskin**: Mac OS X Tiger-era look — brushed metal, gel
+  buttons, recessed wells, engraved labels, Lucida Grande.
+* Tests: 57 new assertions (glide behaviour + WAV/AIFF writers
+  re-parsed with independent readers), 233 total.
+
 ## POLYTEMPO — four-track polytempo loop machine
 
 * New single-file app `polytempo.html`: four loops, each with its own

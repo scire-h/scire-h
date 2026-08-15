@@ -291,6 +291,47 @@ suite('PHASE SYNC is robust across tempos and offsets', () => {
      (worst * 1000).toFixed(2) + ' ms, ' + worstCase + ')');
 });
 
+suite('BPM glide (fixed-target)', () => {
+  // a knob move glides to the value instead of jumping
+  const m = mkTrack(120), s = mkTrack(100);
+  T.beginGlide(s, 0, 140, { curve: 'exp', dur: 3 });
+  ok(s.catchState.isGlide && s.catchState.fixedBpm === 140, 'glide state carries its target');
+  const { events } = run(s, m, 8, 3);
+  near(s.bpm, 140, 0.01, 'glide lands on the typed/knob value');
+  ok(s.catchState === null, 'glide releases when done');
+  ok(events.some(e => e.ev === 'bpm-locked'), 'glide completes through the same machinery');
+
+  // the master's own BPM is irrelevant to a fixed-target glide
+  const m2 = mkTrack(60), s2 = mkTrack(100);
+  T.beginGlide(s2, 0, 90, { curve: 'linear', dur: 2 });
+  run(s2, m2, 6, 2);
+  near(s2.bpm, 90, 0.01, 'fixed target wins over whatever the master is doing');
+
+  // mid-glide the tempo actually moves through intermediate values
+  const m3 = mkTrack(120), s3 = mkTrack(100);
+  T.beginGlide(s3, 0, 140, { curve: 'linear', dur: 4 });
+  const mid = T.bpmAt(s3, () => 140, 2);
+  ok(mid > 105 && mid < 135, 'halfway through, the BPM is between start and target (' +
+     mid.toFixed(1) + ')');
+
+  // retargeting mid-flight re-plans from the current live BPM
+  const m4 = mkTrack(120), s4 = mkTrack(100);
+  T.beginGlide(s4, 0, 140, { curve: 'exp', dur: 10 });
+  run(s4, m4, 2, 10);
+  const liveAt2 = s4.bpm;
+  T.beginGlide(s4, 2, 80, { curve: 'exp', dur: 3 });
+  near(s4.catchState.ramp.startBpm, liveAt2, 0.5, 'retarget starts from the live tempo, not the old target');
+  run(s4, m4, 8, 3);
+  near(s4.bpm, 80, 0.01, 'second target wins');
+
+  // the CATCH RATE knob re-times glides too
+  const m5 = mkTrack(120), s5 = mkTrack(100);
+  T.beginGlide(s5, 0, 130, { curve: 'exp', dur: 60 });
+  ok(T.retimeCatch(s5, 1, 0.5, 101), 'retimeCatch applies to a glide');
+  run(s5, m5, 4, 0.5);
+  near(s5.bpm, 130, 0.01, 'shortened glide still lands on target');
+});
+
 suite('advance', () => {
   const tr = mkTrack(120);
   const times = [];

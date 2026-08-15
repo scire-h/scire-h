@@ -10,8 +10,9 @@ cd "$(dirname "$0")"
 command -v node >/dev/null || { echo "node not found"; exit 1; }
 
 TESTS=(
-    "tempo:test_tempo.js"     # timing math + catch-up state machine
-    "voices:test_voices.js"   # 808/909 voices against a strict Web Audio stub
+    "tempo:test_tempo.js"       # timing math + catch-up/glide state machine
+    "voices:test_voices.js"     # 808/909 voices against a strict Web Audio stub
+    "recorder:test_recorder.js" # WAV/AIFF encoders re-parsed with independent readers
 )
 
 PASS=0
