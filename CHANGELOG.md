@@ -3,6 +3,27 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## POLYTEMPO — FX, fill, memories, performance controls, Platinum
+
+* Per-track FX: send into a shared convolver reverb (generated
+  exponential-noise IR) plus a per-track ping-pong L/R echo whose time
+  is a note value against that track's own tempo — updated every tick,
+  so echoes sweep with glides and catch-ups. Stems record dry.
+* FILL button / `F` key: every unmuted drum track plays one bar of
+  randomly generated fill (six template families + jitter) from its
+  own next bar head, then returns to its pattern automatically.
+* Drum tracks: four pattern memories (P1-P4), instant switch, saved in
+  the project JSON.
+* Step grids paint with press-and-slide (pointer capture; the first
+  cell decides on/off, `touch-action: pan-y` keeps page scroll alive).
+* Header now carries A-D track on/off toggles next to PLAY (muting
+  also chokes sustained voices) and a FILL button.
+* Track selection (click a card or Numpad 1-4) + numpad BPM nudge:
+  +/- = 1, Shift = 0.1, * and / = 10 BPM — all through the glide.
+* Mac OS 8 Platinum reskin: deliberate monochrome, hard bevels,
+  striped title bars, hard offset shadows; top panels compacted into
+  one row (page is roughly half as tall to the first track).
+
 ## POLYTEMPO — voice editing
 
 * Every synth voice is now editable per track (VOICE EDIT panel):

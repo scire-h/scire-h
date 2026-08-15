@@ -3,287 +3,240 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#c2c3c8" />
+<meta name="theme-color" content="#d4d4d4" />
 <title>POLYTEMPO — 4-track polytempo loop machine</title>
 <style>
   /* ================================================================
-     AQUA SKIN — Mac OS X Tiger era: brushed metal, gel buttons,
-     recessed wells, engraved labels. Lucida Grande where available.
+     PLATINUM SKIN — Mac OS 8: deliberate monochrome, hard bevels,
+     striped title bars, hard offset shadows. Identity comes from
+     letters and structure, not hue.
      ================================================================ */
   :root{
-    --bg:#c2c3c8; --panel:#dcdce0; --panel2:#f2f2f5; --line:#a2a3aa;
-    --text:#26282c; --dim:#5d6066; --dim2:#7d8087;
-    --a:#2f7cf0; --b:#1f6fd6; --c:#e23a8e; --d:#46b03c;
-    --hot:#e5301f; --ok:#54a919;
-    --gel-hi:rgba(255,255,255,.95); --gel-mid:rgba(255,255,255,.35);
+    --bg:#d4d4d4; --panel:#e2e2e2; --panel2:#efefef; --line:#8e8e8e;
+    --text:#111214; --dim:#4c4d50; --dim2:#77787c;
+    --a:#1d1e20; --b:#2c2d30; --c:#4a4b4f; --d:#6b6c70;
+    --hot:#1d1e20; --ok:#1d1e20;
+    --bevH:#ffffff; --bevS:#9c9c9c; --edge:#3c3c3e;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;
-    background:
-      repeating-linear-gradient(0deg, rgba(0,0,0,.030) 0 1px, rgba(255,255,255,0) 1px 3px),
-      linear-gradient(180deg,#cdced3,#b6b7bd);
-    color:var(--text);
-    font-family:"Lucida Grande","Lucida Sans Unicode",-apple-system,BlinkMacSystemFont,
-      "Hiragino Sans",system-ui,sans-serif;
-    font-size:13px;overscroll-behavior:none}
-  .app{max-width:1180px;margin:0 auto;padding:0 0 64px}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:"Charcoal","Chicago",Geneva,Verdana,"Hiragino Sans",system-ui,sans-serif;
+    font-size:12px;overscroll-behavior:none}
+  .app{max-width:1180px;margin:0 auto;padding:0 0 40px}
   button{font-family:inherit;color:inherit}
   .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 
-  /* ---------- header: metal toolbar ---------- */
-  .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-    padding:9px 14px;
-    background:
-      repeating-linear-gradient(0deg, rgba(0,0,0,.025) 0 1px, rgba(255,255,255,0) 1px 3px),
-      linear-gradient(180deg,#f2f2f5 0%,#d6d6db 55%,#c4c5ca 100%);
-    border-bottom:1px solid #85868c;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 1px 4px rgba(0,0,0,.22)}
-  .logo{font-weight:800;letter-spacing:.16em;font-size:14px;color:#3c3f45;
-    text-shadow:0 1px 0 rgba(255,255,255,.85)}
-  .logo small{display:block;letter-spacing:.06em;font-size:9px;color:var(--dim2);font-weight:600;
-    text-shadow:0 1px 0 rgba(255,255,255,.7)}
+  /* ---------- header ---------- */
+  .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+    padding:7px 12px;background:linear-gradient(180deg,#e8e8e8,#cfcfcf);
+    border-bottom:1px solid var(--edge);
+    box-shadow:inset 0 1px 0 var(--bevH), 0 1px 0 rgba(0,0,0,.15)}
+  .logo{font-weight:800;letter-spacing:.14em;font-size:13px;color:#131315}
+  .logo small{display:block;letter-spacing:.06em;font-size:8px;color:var(--dim2);font-weight:700}
   .top .sp{flex:1}
 
-  /* gel buttons */
-  .tbtn{height:34px;padding:0 16px;border-radius:17px;border:1px solid #8f9096;
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#fdfdfe,#cfcfd6);
-    color:#333;font-size:12px;font-weight:700;letter-spacing:.05em;cursor:pointer;
-    text-shadow:0 1px 0 rgba(255,255,255,.8);
-    box-shadow:inset 0 1px 1px rgba(255,255,255,.7), 0 1px 2px rgba(0,0,0,.28)}
-  .tbtn:hover{filter:brightness(1.04)}
-  .tbtn:active{filter:brightness(.92)}
-  .tbtn.on{border-color:#1b55b5;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#8fc3fa,#2569d8)}
-  .tbtn.play{width:78px;border-color:#3f8710;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#b3e77a,#54a919)}
-  .tbtn.play.playing{border-color:#b02015;
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#ff9d8a,#e5301f)}
-  .tbtn.warn.on{border-color:#b52b70;
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#ffadd0,#e23a8e)}
+  /* platinum buttons */
+  .tbtn{height:28px;padding:0 13px;border-radius:5px;border:1px solid var(--edge);
+    background:linear-gradient(180deg,#f6f6f6,#cfcfcf);
+    color:#131315;font-size:11px;font-weight:700;letter-spacing:.05em;cursor:pointer;
+    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS)}
+  .tbtn:active{background:linear-gradient(180deg,#c2c2c2,#d8d8d8);
+    box-shadow:inset 1px 1px 0 var(--bevS), inset -1px -1px 0 var(--bevH)}
+  .tbtn.on,.tbtn.play.playing,.tbtn.warn.on{
+    background:#2b2c2f;color:#fff;border-color:#000;
+    box-shadow:inset 1px 1px 0 #4a4b4f, inset -1px -1px 0 #000}
+  .tbtn.play{font-weight:800;box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS),
+    0 0 0 2px #cfcfcf, 0 0 0 3px var(--edge)}  /* OS8 default-button ring */
+  .tbtn.play.playing{box-shadow:inset 1px 1px 0 #4a4b4f, inset -1px -1px 0 #000,
+    0 0 0 2px #cfcfcf, 0 0 0 3px var(--edge)}
 
-  /* ---------- meter: recessed glass tube ---------- */
-  .meter{display:flex;align-items:center;gap:7px}
-  .mbar{position:relative;width:108px;height:10px;border-radius:5px;background:#fbfbfd;
-    border:1px solid #94959c;overflow:hidden;
-    box-shadow:inset 0 1px 3px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.8)}
+  /* track on/off, sits next to PLAY */
+  .trkTgl{display:flex;border:1px solid var(--edge);border-radius:5px;overflow:hidden;
+    box-shadow:inset 1px 1px 0 var(--bevH)}
+  .trkTgl button{width:30px;height:26px;border:0;border-right:1px solid var(--line);
+    background:linear-gradient(180deg,#f2f2f2,#d2d2d2);
+    font-size:11px;font-weight:800;cursor:pointer;color:#9b9c9f}
+  .trkTgl button:last-child{border-right:0}
+  .trkTgl button.on{background:#2b2c2f;color:#fff}
+
+  /* ---------- meter (monochrome) ---------- */
+  .meter{display:flex;align-items:center;gap:6px}
+  .mbar{position:relative;width:100px;height:9px;background:#fff;
+    border:1px solid var(--edge);overflow:hidden;
+    box-shadow:inset 1px 1px 2px rgba(0,0,0,.25)}
   .mfill{position:absolute;inset:0;width:0%;
-    background:linear-gradient(90deg,#2f8f4f 0%,#8bc34a 62%,#ffc107 82%,#ff4d3d 100%)}
-  .mfill::after{content:"";position:absolute;inset:0 0 50% 0;
-    background:linear-gradient(180deg,rgba(255,255,255,.65),rgba(255,255,255,.1))}
-  .mpk{position:absolute;top:0;bottom:0;width:2px;background:#333;left:0;opacity:.8}
-  .clip{width:10px;height:10px;border-radius:50%;background:#e9dcdc;border:1px solid #b09090;
-    box-shadow:inset 0 1px 1px rgba(255,255,255,.8)}
-  .clip.on{background:radial-gradient(circle at 35% 30%,#ff8a7a,var(--hot));
-    border-color:#b02015;box-shadow:0 0 8px var(--hot)}
-  .mdb{font-size:10px;color:#4a4d52;min-width:46px;text-align:right}
+    background:repeating-linear-gradient(90deg,#3a3b3e 0 3px,#6a6b6e 3px 4px)}
+  .mpk{position:absolute;top:0;bottom:0;width:2px;background:#000;left:0}
+  .clip{width:9px;height:9px;border-radius:50%;background:#fff;border:1px solid var(--edge)}
+  .clip.on{background:#000}
+  .mdb{font-size:10px;color:var(--dim);min-width:44px;text-align:right}
 
-  /* ---------- generic panel: brushed metal card ---------- */
-  .panel{
-    background:
-      repeating-linear-gradient(0deg, rgba(0,0,0,.022) 0 1px, rgba(255,255,255,0) 1px 3px),
-      linear-gradient(180deg,#e9e9ec,#d4d4d9);
-    border:1px solid #97989e;border-radius:9px;margin:12px 14px;padding:12px;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 2px 5px rgba(0,0,0,.20)}
-  .ptitle{font-size:10px;font-weight:800;letter-spacing:.18em;color:#6a6d73;margin:0 0 10px;
-    text-shadow:0 1px 0 rgba(255,255,255,.8)}
+  /* ---------- panels ---------- */
+  .panelRow{display:grid;grid-template-columns:minmax(380px,5fr) minmax(330px,4fr) minmax(250px,3fr);
+    gap:10px;margin:10px 12px}
+  .panelRow .panel{margin:0}
+  @media (max-width:1020px){ .panelRow{grid-template-columns:1fr} }
+  .panel{background:var(--panel);border:1px solid var(--edge);border-radius:2px;
+    margin:10px 12px;padding:9px 10px;
+    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS),
+      2px 2px 0 rgba(0,0,0,.18)}
+  /* OS8 striped title */
+  .ptitle{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:800;
+    letter-spacing:.14em;color:#131315;margin:0 0 8px;white-space:nowrap}
+  .ptitle::before,.ptitle::after{content:"";flex:1;height:9px;min-width:12px;
+    background:repeating-linear-gradient(180deg,#fdfdfd 0 1px,#b9b9b9 1px 2px);
+    border:1px solid #9a9a9a}
+  .ptitle::before{min-width:8px;flex:0 0 8px}
 
-  /* ---------- knob: aluminium ---------- */
-  .knob{display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;flex:none;
+  /* ---------- knob ---------- */
+  .knob{display:flex;flex-direction:column;align-items:center;gap:4px;width:72px;flex:none;
     cursor:ns-resize;touch-action:none}
-  .knob .dial{position:relative;flex:none;width:52px;height:52px;border-radius:50%;
-    background:radial-gradient(circle at 35% 28%, #ffffff, #dededf 52%, #b3b3b8 82%, #97979c 100%);
-    border:1px solid #7d7e84;
-    box-shadow:0 2px 4px rgba(0,0,0,.30), inset 0 -4px 7px rgba(0,0,0,.16),
-      inset 0 2px 3px rgba(255,255,255,.9)}
-  .knob .dial i{position:absolute;left:50%;top:5px;width:2px;height:17px;margin-left:-1px;
-    background:#3a3f47;border-radius:1px;transform-origin:50% 21px;
-    box-shadow:0 0 2px rgba(0,0,0,.4)}
-  .knob .kl{font-size:9px;font-weight:800;letter-spacing:.12em;color:#6a6d73;white-space:nowrap;
-    text-shadow:0 1px 0 rgba(255,255,255,.8)}
-  .knob .kv{font-size:11px;font-weight:700;color:#222;white-space:nowrap}
-  /* toolbar variant: dial and readout side by side, sized to the button row */
-  .knob.inline{flex-direction:row;align-items:center;width:auto;height:34px;gap:7px;cursor:ns-resize}
-  .knob.inline .dial{width:30px;height:30px}
-  .knob.inline .dial i{height:10px;top:4px;margin-left:-1px;transform-origin:50% 11px}
-  .knob.inline .kl{font-size:9px}
-  .knob.inline .kv{font-size:11px;min-width:52px;text-align:right}
-  .knob.big{width:104px}
-  .knob.big .dial{width:74px;height:74px}
-  .knob.big .dial i{height:24px;top:6px;transform-origin:50% 31px;width:3px}
-  .knob.big .kv{font-size:14px;color:var(--a)}
-  .knob.learn{outline:2px dashed var(--c);outline-offset:3px;border-radius:8px}
-  .knob.mapped .kl::after{content:" ●";color:var(--b)}
+  .knob .dial{position:relative;flex:none;width:46px;height:46px;border-radius:50%;
+    background:radial-gradient(circle at 36% 30%, #fbfbfb, #d9d9d9 55%, #b6b6b6 100%);
+    border:1px solid var(--edge);
+    box-shadow:inset 1px 1px 0 var(--bevH), inset -2px -3px 4px rgba(0,0,0,.18),
+      1px 1px 0 rgba(0,0,0,.2)}
+  .knob .dial i{position:absolute;left:50%;top:4px;width:2px;height:15px;margin-left:-1px;
+    background:#0c0c0e;border-radius:1px;transform-origin:50% 19px}
+  .knob .kl{font-size:8px;font-weight:800;letter-spacing:.1em;color:var(--dim2);white-space:nowrap}
+  .knob .kv{font-size:10px;font-weight:700;color:#131315;white-space:nowrap}
+  .knob.inline{flex-direction:row;align-items:center;width:auto;height:28px;gap:6px;cursor:ns-resize}
+  .knob.inline .dial{width:26px;height:26px}
+  .knob.inline .dial i{height:9px;top:3px;margin-left:-1px;transform-origin:50% 10px}
+  .knob.inline .kl{font-size:8px}
+  .knob.inline .kv{font-size:10px;min-width:48px;text-align:right}
+  .knob.big{width:92px}
+  .knob.big .dial{width:62px;height:62px}
+  .knob.big .dial i{height:20px;top:5px;transform-origin:50% 26px;width:3px}
+  .knob.big .kv{font-size:12px;color:#131315}
+  .knob.sm{width:52px;gap:3px}
+  .knob.sm .dial{width:30px;height:30px}
+  .knob.sm .dial i{height:10px;top:3px;transform-origin:50% 12px}
+  .knob.sm .kl{font-size:7px}
+  .knob.sm .kv{font-size:9px}
+  .knob.learn{outline:2px dashed #131315;outline-offset:3px}
+  .knob.mapped .kl::after{content:" ●";color:#131315}
 
   /* ---------- recorder ---------- */
-  .recBtn{height:46px;padding:0 24px;border-radius:23px;border:1px solid #a35953;
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#f3d9d6,#d9a49e);
-    color:#8c1d12;font-size:14px;font-weight:800;letter-spacing:.08em;cursor:pointer;
-    text-shadow:0 1px 0 rgba(255,255,255,.6);
-    box-shadow:inset 0 1px 1px rgba(255,255,255,.7), 0 1px 2px rgba(0,0,0,.28)}
-  .recBtn.on{border-color:#b02015;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#ff9d8a,#e5301f);
-    animation:recpulse 1.1s ease-in-out infinite}
-  @keyframes recpulse{0%,100%{box-shadow:0 0 0 0 rgba(229,48,31,.5)}50%{box-shadow:0 0 0 10px rgba(229,48,31,0)}}
-  #recStat b{color:var(--hot)}
+  .recBtn{height:38px;padding:0 18px;border-radius:5px;border:1px solid var(--edge);
+    background:linear-gradient(180deg,#f6f6f6,#cfcfcf);
+    color:#131315;font-size:12px;font-weight:800;letter-spacing:.08em;cursor:pointer;
+    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS)}
+  .recBtn.on{background:#1d1e20;color:#fff;border-color:#000;
+    box-shadow:inset 1px 1px 0 #4a4b4f;animation:recpulse 1.1s ease-in-out infinite}
+  @keyframes recpulse{0%,100%{box-shadow:inset 1px 1px 0 #4a4b4f,0 0 0 0 rgba(0,0,0,.4)}
+    50%{box-shadow:inset 1px 1px 0 #4a4b4f,0 0 0 7px rgba(0,0,0,0)}}
+  #recStat b{color:#000}
 
-  /* ---------- catch console ---------- */
-  .console{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
-  .segs{display:flex;flex-direction:column;gap:8px;min-width:210px}
-  .seg{display:flex;align-items:center;gap:8px}
-  .seg .sl{font-size:9px;font-weight:800;letter-spacing:.12em;color:#6a6d73;width:64px;flex:none;
-    text-shadow:0 1px 0 rgba(255,255,255,.8)}
-  .opts{display:flex;border:1px solid #8f9096;border-radius:13px;overflow:hidden;
-    box-shadow:0 1px 2px rgba(0,0,0,.22), inset 0 1px 1px rgba(255,255,255,.6)}
-  .opts button{border:0;color:#3c3f45;font-size:10px;font-weight:800;
-    letter-spacing:.06em;padding:7px 11px;cursor:pointer;border-right:1px solid #a8a9af;
-    text-shadow:0 1px 0 rgba(255,255,255,.75);
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#fbfbfd,#d6d6db)}
+  /* ---------- console ---------- */
+  .console{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+  .segs{display:flex;flex-direction:column;gap:6px;min-width:200px}
+  .seg{display:flex;align-items:center;gap:7px}
+  .seg .sl{font-size:8px;font-weight:800;letter-spacing:.1em;color:var(--dim2);width:56px;flex:none}
+  .opts{display:flex;border:1px solid var(--edge);border-radius:4px;overflow:hidden;
+    box-shadow:inset 1px 1px 0 var(--bevH)}
+  .opts button{border:0;color:#131315;font-size:9px;font-weight:800;
+    letter-spacing:.05em;padding:6px 9px;cursor:pointer;border-right:1px solid var(--line);
+    background:linear-gradient(180deg,#f2f2f2,#d2d2d2)}
   .opts button:last-child{border-right:0}
-  .opts button.on{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#8fc3fa,#2569d8)}
-  .opts.learn{outline:2px dashed var(--c);outline-offset:2px}
-  .hint{font-size:10px;color:#54575d;line-height:1.7;max-width:330px}
-  .hint b{color:#26282c;font-weight:700}
+  .opts button.on{background:#2b2c2f;color:#fff}
+  .opts.learn{outline:2px dashed #131315;outline-offset:2px}
+  .hint{font-size:10px;color:var(--dim);line-height:1.7;max-width:320px}
+  .hint b{color:#131315;font-weight:700}
 
   /* ---------- phase scope ---------- */
-  .scopeWrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-  canvas#scope{width:230px;height:230px;flex:none}
-  .legend{display:flex;flex-direction:column;gap:6px;font-size:11px}
-  .legend .row{display:flex;align-items:center;gap:8px}
-  .legend .sw{width:10px;height:10px;border-radius:3px;
-    box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 1px rgba(0,0,0,.25)}
-  .legend .nm{width:16px;font-weight:800}
-  .legend .st{color:#54575d;font-size:10px;min-width:150px}
+  .scopeWrap{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+  canvas#scope{width:170px;height:170px;flex:none;background:#fff;
+    border:1px solid var(--edge);box-shadow:inset 1px 1px 2px rgba(0,0,0,.15)}
+  .legend{display:flex;flex-direction:column;gap:5px;font-size:10px}
+  .legend .row{display:flex;align-items:center;gap:6px}
+  .legend .sw{width:9px;height:9px;border:1px solid #000}
+  .legend .nm{width:14px;font-weight:800}
+  .legend .st{color:var(--dim);font-size:9px;min-width:120px}
 
-  /* ---------- tracks: candy-striped metal cards ---------- */
-  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 14px}
+  /* ---------- tracks ---------- */
+  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 12px}
   @media (max-width:900px){ .tracks{grid-template-columns:1fr} }
-  .trk{
-    background:
-      repeating-linear-gradient(0deg, rgba(0,0,0,.022) 0 1px, rgba(255,255,255,0) 1px 3px),
-      linear-gradient(180deg,#eaeaed,#d6d6db);
-    border:1px solid #97989e;border-radius:9px;padding:11px;
-    border-top:4px solid var(--ac);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.8), 0 2px 5px rgba(0,0,0,.20)}
-  .trk.master{box-shadow:0 0 0 2px var(--ac), inset 0 1px 0 rgba(255,255,255,.8),
-    0 2px 8px rgba(0,0,0,.25)}
-  .thead{display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap}
-  .tid{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;
-    font-weight:900;font-size:13px;color:#fff;flex:none;
-    text-shadow:0 -1px 0 rgba(0,0,0,.3);border:1px solid rgba(0,0,0,.25);
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      var(--ac);
-    box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.25)}
-  .tbpm{font-size:21px;font-weight:800;color:var(--ac);letter-spacing:.02em;cursor:text;
-    text-shadow:0 1px 0 rgba(255,255,255,.75)}
-  .tbpm small{font-size:9px;color:var(--dim2);letter-spacing:.14em;margin-left:3px;font-weight:700}
+  .trk{background:var(--panel);border:1px solid var(--edge);border-radius:2px;padding:9px;
+    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS),
+      2px 2px 0 rgba(0,0,0,.18)}
+  .trk.master{border-color:#000;box-shadow:0 0 0 1px #000,
+    inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS), 2px 2px 0 rgba(0,0,0,.25)}
+  .trk.selected{outline:2px dashed #6a6b6e;outline-offset:2px}
+  .thead{display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap}
+  .tid{width:24px;height:24px;display:flex;align-items:center;justify-content:center;
+    font-weight:900;font-size:12px;color:#fff;flex:none;background:#1d1e20;
+    border:1px solid #000;box-shadow:inset 1px 1px 0 #4a4b4f}
+  .tbpm{font-size:19px;font-weight:800;color:#131315;letter-spacing:.02em;cursor:text}
+  .tbpm small{font-size:8px;color:var(--dim2);letter-spacing:.12em;margin-left:3px;font-weight:700}
   .thead .sp{flex:1}
-  .mini{height:26px;padding:0 10px;border-radius:13px;border:1px solid #8f9096;
-    font-size:10px;font-weight:800;letter-spacing:.06em;cursor:pointer;color:#4a4d52;
-    text-shadow:0 1px 0 rgba(255,255,255,.75);
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#fbfbfd,#d6d6db);
-    box-shadow:inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.22)}
-  .mini.on{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:rgba(0,0,0,.3);
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      var(--ac)}
-  .mini.catch{color:#26282c}
-  .mini.catch.run{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:#b52b70;
-    background:
-      linear-gradient(180deg, var(--gel-hi) 0%, var(--gel-mid) 46%, rgba(255,255,255,0) 52%),
-      linear-gradient(180deg,#ffadd0,#e23a8e)}
-  .mini.learn{outline:2px dashed var(--c);outline-offset:2px}
+  .mini{height:24px;padding:0 9px;border-radius:4px;border:1px solid var(--edge);
+    font-size:9px;font-weight:800;letter-spacing:.05em;cursor:pointer;color:#131315;
+    background:linear-gradient(180deg,#f2f2f2,#d2d2d2);
+    box-shadow:inset 1px 1px 0 var(--bevH), inset -1px -1px 0 var(--bevS)}
+  .mini.on,.mini.catch.run{background:#2b2c2f;color:#fff;border-color:#000;
+    box-shadow:inset 1px 1px 0 #4a4b4f}
+  .mini.learn{outline:2px dashed #131315;outline-offset:2px}
   .mini:disabled{opacity:.35;cursor:default}
-  .trow{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:9px}
-  .stat{font-size:10px;color:#5d6066;letter-spacing:.04em}
-  .stat b{color:var(--b);font-weight:700}
-  .stat.lock b{color:#3f8710}
+  .mini.pm{width:34px}
+  .trow{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
+  .stat{font-size:9px;color:var(--dim);letter-spacing:.03em}
+  .stat b{color:#000;font-weight:700}
+  .stat.lock b{color:#000}
 
-  /* grid: recessed wells with candy pips */
-  .grid{display:flex;flex-direction:column;gap:3px;margin-top:4px}
-  .grow{display:grid;grid-template-columns:30px 1fr;gap:4px;align-items:center}
-  .rlbl{font-size:9px;font-weight:800;color:#6a6d73;text-align:right;letter-spacing:.04em;
-    text-shadow:0 1px 0 rgba(255,255,255,.8)}
-  .cells{display:grid;gap:2px}
-  .cell{height:20px;border-radius:4px;border:1px solid #a6a8b0;background:#f7f8fa;cursor:pointer;
-    box-shadow:inset 0 1px 2px rgba(0,0,0,.16)}
-  .cell.beat{background:#e8ebf1}
-  .cell.on{border-color:rgba(0,0,0,.3);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,.85) 0%, rgba(255,255,255,.25) 46%, rgba(255,255,255,0) 55%),
-      var(--ac);
-    box-shadow:inset 0 1px 1px rgba(255,255,255,.5), 0 1px 1px rgba(0,0,0,.2)}
-  .cell.now{outline:2px solid #33363c;outline-offset:-2px}
+  /* grid */
+  .grid{display:flex;flex-direction:column;gap:2px;margin-top:3px}
+  .grow{display:grid;grid-template-columns:28px 1fr;gap:4px;align-items:center}
+  .rlbl{font-size:8px;font-weight:800;color:var(--dim2);text-align:right;letter-spacing:.03em}
+  .cells{display:grid;gap:2px;touch-action:pan-y;user-select:none}
+  .pmRow{display:flex;gap:5px;margin:2px 0 6px}
+  .pmRow:empty{display:none}
+  .cell{height:18px;border:1px solid #85868a;background:#fff;cursor:pointer;
+    box-shadow:inset 1px 1px 1px rgba(0,0,0,.14)}
+  .cell.beat{background:#e4e4e6}
+  .cell.on{background:#2b2c2f;border-color:#000;box-shadow:inset 1px 1px 0 #4a4b4f}
+  .cell.now{outline:2px solid #000;outline-offset:-2px}
   .cell.on.now{outline-color:#fff}
-  /* voice editor */
-  details.vedit{margin:2px 0 9px;border:1px solid #a6a8b0;border-radius:8px;
-    background:linear-gradient(180deg,#f2f2f5,#e2e2e6);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
-  details.vedit summary{cursor:pointer;font-size:9px;font-weight:800;letter-spacing:.14em;
-    color:#6a6d73;padding:6px 10px;text-shadow:0 1px 0 rgba(255,255,255,.8)}
-  details.vedit[open] summary{border-bottom:1px solid #c3c5cb}
-  .vrow{display:flex;align-items:center;gap:8px;padding:6px 10px;flex-wrap:wrap}
-  .vrow + .vrow{border-top:1px solid #dcdee3}
-  .vlbl{width:34px;flex:none;font-size:9px;font-weight:800;color:var(--ac);
-    letter-spacing:.06em;text-shadow:0 1px 0 rgba(255,255,255,.8)}
-  .opts.sm button{padding:5px 7px;font-size:9px}
-  .knob.sm{width:56px;gap:3px}
-  .knob.sm .dial{width:32px;height:32px}
-  .knob.sm .dial i{height:11px;top:3px;transform-origin:50% 13px}
-  .knob.sm .kl{font-size:8px}
-  .knob.sm .kv{font-size:10px}
-
-  .fileRow{display:flex;gap:8px;align-items:center;font-size:10px;color:#4a4d52;flex-wrap:wrap}
+  .fileRow{display:flex;gap:7px;align-items:center;font-size:9px;color:var(--dim);flex-wrap:wrap}
   .fileRow input[type=file]{display:none}
-  .bpmEdit{width:96px;background:transparent;border:none;border-bottom:2px solid var(--ac);
-    color:var(--ac);font:inherit;font-size:21px;font-weight:800;outline:none;padding:0}
-  .numIn{width:78px;height:26px;border-radius:6px;border:1px solid #94959c;
-    background:#fff;color:#26282c;font-size:11px;padding:0 6px;
-    font-variant-numeric:tabular-nums;
-    box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
+  .bpmEdit{width:88px;background:transparent;border:none;border-bottom:2px solid #000;
+    color:#131315;font:inherit;font-size:19px;font-weight:800;outline:none;padding:0}
+  .numIn{width:72px;height:24px;border:1px solid var(--edge);border-radius:0;
+    background:#fff;color:#131315;font-size:10px;padding:0 5px;
+    font-variant-numeric:tabular-nums;box-shadow:inset 1px 1px 2px rgba(0,0,0,.18)}
   .numIn:disabled{opacity:.4}
-  .fbtn{height:26px;padding:0 10px;border-radius:13px;border:1px dashed #8f9096;background:rgba(255,255,255,.5);
-    color:#4a4d52;font-size:10px;font-weight:700;cursor:pointer}
+  .fbtn{height:24px;padding:0 9px;border:1px dashed #77787c;border-radius:3px;
+    background:#f4f4f4;color:var(--dim);font-size:9px;font-weight:700;cursor:pointer}
   .fbtn:hover{background:#fff}
-  .sel{height:26px;border-radius:6px;border:1px solid #94959c;background:#fff;
-    color:#26282c;font-size:11px;padding:0 6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.12)}
+  .sel{height:24px;border:1px solid var(--edge);border-radius:0;background:#fff;
+    color:#131315;font-size:10px;padding:0 4px;box-shadow:inset 1px 1px 2px rgba(0,0,0,.12)}
+
+  /* voice / fx editor */
+  details.vedit{margin:2px 0 7px;border:1px solid var(--line);background:#f2f2f2;
+    box-shadow:inset 1px 1px 0 var(--bevH)}
+  details.vedit summary{cursor:pointer;font-size:8px;font-weight:800;letter-spacing:.12em;
+    color:var(--dim);padding:5px 8px;
+    background:repeating-linear-gradient(180deg,#fbfbfb 0 1px,#dcdcdc 1px 2px)}
+  details.vedit[open] summary{border-bottom:1px solid var(--line)}
+  .vrow{display:flex;align-items:center;gap:7px;padding:5px 8px;flex-wrap:wrap}
+  .vrow + .vrow{border-top:1px solid #d9d9db}
+  .vlbl{width:32px;flex:none;font-size:8px;font-weight:800;color:#131315;letter-spacing:.05em}
+  .opts.sm button{padding:4px 6px;font-size:8px}
 
   /* footer / docs */
-  details.doc{margin:14px;border:1px solid #97989e;border-radius:9px;padding:10px 12px;
-    background:linear-gradient(180deg,#f4f4f6,#e4e4e8);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 2px 5px rgba(0,0,0,.15)}
-  details.doc summary{cursor:pointer;font-size:11px;font-weight:800;letter-spacing:.12em;color:#6a6d73;
-    text-shadow:0 1px 0 rgba(255,255,255,.8)}
-  details.doc div{font-size:12px;color:#44474d;line-height:1.9;margin-top:10px}
-  details.doc b{color:#1c1e22}
-  details.doc code{background:#fff;border:1px solid #b6b7bd;border-radius:4px;padding:1px 5px;font-size:11px}
+  details.doc{margin:12px;border:1px solid var(--edge);background:var(--panel);
+    padding:8px 10px;border-radius:2px;
+    box-shadow:inset 1px 1px 0 var(--bevH), 2px 2px 0 rgba(0,0,0,.15)}
+  details.doc summary{cursor:pointer;font-size:10px;font-weight:800;letter-spacing:.1em;color:#131315}
+  details.doc div{font-size:11px;color:var(--dim);line-height:1.85;margin-top:8px}
+  details.doc b{color:#000}
+  details.doc code{background:#fff;border:1px solid var(--line);padding:1px 4px;font-size:10px}
 
-  /* Aqua help-tag toast */
-  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:200;
-    background:#ffffca;border:1px solid #b9b98a;border-radius:4px;padding:8px 16px;font-size:12px;
-    color:#333;box-shadow:0 2px 8px rgba(0,0,0,.3);
-    opacity:0;pointer-events:none;transition:opacity .18s}
+  /* OS8 alert toast: hard shadow */
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:200;
+    background:#efefef;border:1px solid #000;padding:7px 14px;font-size:11px;color:#131315;
+    box-shadow:2px 2px 0 rgba(0,0,0,.45), inset 1px 1px 0 var(--bevH);
+    opacity:0;pointer-events:none;transition:opacity .15s}
   .toast.show{opacity:1}
 </style>
 </head>
@@ -294,6 +247,10 @@
     <div class="logo">POLYTEMPO<small>LOOP MACHINE</small></div>
     <button class="tbtn play" id="btnPlay">PLAY</button>
     <button class="tbtn" id="btnAlign" title="全トラックの位相を今すぐ揃える">ALIGN</button>
+    <div class="trkTgl" id="trkTgl" title="トラック ON/OFF">
+      <button data-i="0">A</button><button data-i="1">B</button><button data-i="2">C</button><button data-i="3">D</button>
+    </div>
+    <button class="tbtn" id="btnFill" title="次の小節頭で1小節のフィル（ドラムトラック）">FILL</button>
     <div class="sp"></div>
     <div class="meter">
       <div class="clip" id="clipLed" title="clip"></div>
@@ -308,6 +265,7 @@
     <input type="file" id="fileProj" accept="application/json" style="display:none" />
   </div>
 
+  <div class="panelRow">
   <div class="panel">
     <div class="ptitle">CATCH-UP CONSOLE</div>
     <div class="console">
@@ -338,13 +296,7 @@
           <button class="tbtn" id="btnCancelAll">CANCEL</button>
         </div>
       </div>
-      <div class="hint">
-        <b>CATCH RATE</b> は合流にかける時間。左に回すほど速く、右に回すほどゆっくり追いつく。
-        追従の途中で回すと、その時点から新しい時間で再計画される。<br>
-        <b>BPM SYNC</b> はテンポだけ一致（小節頭はズレたまま並走）。
-        <b>PHASE SYNC</b> はテンポを合わせたあと目標BPMを一瞬追い越して小節頭を合わせ、
-        一致した瞬間にロックする。
-      </div>
+      
     </div>
   </div>
 
@@ -386,6 +338,8 @@
     </div>
   </div>
 
+  </div>
+
   <div class="tracks" id="tracks"></div>
 
   <details class="doc">
@@ -411,6 +365,25 @@
       サスティンを上げた音は同じ行の次のヒット（CH と OH は相互）まで持続し、
       新しいヒットが前の音をチョークする。停止時と8秒の安全上限でも解放される。
       エディット値は 808/909 を切り替えても保持され、プロジェクトに保存される。<br>
+      <b>操作の要点</b>: <code>CATCH RATE</code> は合流にかける時間（左=速い/右=遅い、
+      追従の途中で回すと再計画）。BPM SYNC はテンポのみ一致で小節頭はズレたまま並走、
+      PHASE SYNC は目標BPMを一瞬追い越して小節頭を合わせロックする。
+      ヘッダーの A–D でトラックの ON/OFF。グリッドはクリックのほか
+      <b>押しながらスライドで連続入力</b>（最初のセルで ON/OFF が決まる）。
+      トラックカードをクリックすると選択（破線枠）され、テンキー 1–4 で選択、
+      <code>+</code>/<code>-</code> で ±1 BPM、Shift+テンキー± で ±0.1、
+      <code>*</code>/<code>/</code> で ±10（すべてグライド経由）。<br>
+      <b>FX</b>: 各トラックに共有リバーブへのセンドと、トラック専用のピンポン
+      （L·R）エコー。エコーのタイムは 1/16〜1/2 の音価指定で、
+      <b>そのトラック自身のテンポ</b>に追従する — 追いつかせの最中はエコーも一緒に
+      うねる。FB はフィードバック量。録音のパラ・ステムはドライ信号のまま
+      （FX はマスターにのみ乗る）。<br>
+      <b>FILL</b>: ヘッダーの FILL（または F キー）で、各ドラムトラックの
+      次の小節頭から1小節、ランダム生成のフィル（6系統のテンプレート+揺らぎ）が
+      入り、自動で元のパターンに戻る。トラックごとに自分のテンポで入るので、
+      ポリテンポのままフィルが回る。<br>
+      <b>パターンメモリ</b>: ドラムトラックは P1–P4 の4つのパターンを持ち、
+      ボタンで即切替（編集はスロットごとに保持、プロジェクトに保存）。<br>
       <b>録音</b>: RECORDER の REC（または R キー）で開始/停止。マスター
       （ソフトクリップ後・モニター音量前）と、PARA ON なら非ミュートの各トラック
       （トラックゲイン後・マスターチェーン前のドライ信号）を AudioWorklet で
@@ -761,11 +734,12 @@ const RecorderCore = (function () {
 const LOOKAHEAD = 0.12;      // seconds of audio scheduled ahead
 const TICK_MS   = 25;
 const ACC = ['a', 'b', 'c', 'd'];
-/* candy colours tuned for the light Aqua panels */
-const ACC_HEX = ['#f59714', '#2a9fe0', '#ef3f7b', '#46b03c'];
+/* deliberate monochrome: tracks are told apart by letter, position and
+   these four grey values (darkest = A) */
+const ACC_HEX = ['#141416', '#454649', '#77787c', '#a2a3a7'];
 
 let ctx = null, master = null, busGain = null, analyser = null, noiseBuf = null;
-let anaBuf = null, recTap = null, transportT0 = 0;
+let anaBuf = null, recTap = null, transportT0 = 0, revBus = null;
 
 function initAudio () {
   if (ctx) return;
@@ -813,6 +787,66 @@ function initAudio () {
   noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
   const nd = noiseBuf.getChannelData(0);
   for (let i = 0; i < len; i++) nd[i] = Math.random() * 2 - 1;
+
+  // shared reverb bus: decorrelated exponential noise burst IR
+  revBus = ctx.createGain();
+  revBus.gain.value = 1;
+  const conv = ctx.createConvolver();
+  const irLen = Math.floor(ctx.sampleRate * 2.6);
+  const ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    let lp = 0;
+    for (let i = 0; i < irLen; i++) {
+      const t = i / ctx.sampleRate;
+      // one-pole lowpass on the noise = darker tail, less metallic
+      lp += 0.28 * ((Math.random() * 2 - 1) - lp);
+      d[i] = lp * Math.exp(-3.1 * t) * (t < 0.012 ? t / 0.012 : 1);
+    }
+  }
+  conv.buffer = ir;
+  revBus.connect(conv).connect(busGain);
+}
+
+/* Build a track's output node plus its FX sends: a shared-bus reverb
+   send and a per-track ping-pong (L/R echo) delay whose time follows
+   the TRACK's own tempo -- each loop echoes in its own time. */
+function ensureTrackNode (tr) {
+  if (tr.node) return;
+  tr.node = ctx.createGain();
+  tr.node.gain.value = tr.gain;
+  tr.node.connect(busGain);
+
+  tr.revSend = ctx.createGain();
+  tr.revSend.gain.value = tr.fx.rev;
+  tr.node.connect(tr.revSend).connect(revBus);
+
+  const send = ctx.createGain();
+  send.gain.value = tr.fx.dly;
+  const dL = ctx.createDelay(8), dR = ctx.createDelay(8);
+  const fbL = ctx.createGain(), fbR = ctx.createGain();
+  fbL.gain.value = fbR.gain.value = tr.fx.fb;
+  const pL = ctx.createStereoPanner(), pR = ctx.createStereoPanner();
+  pL.pan.value = -0.8; pR.pan.value = 0.8;
+  tr.node.connect(send).connect(dL);
+  dL.connect(pL).connect(busGain);
+  dR.connect(pR).connect(busGain);
+  dL.connect(fbL).connect(dR);                     // ping ...
+  dR.connect(fbR).connect(dL);                     // ... pong
+  tr.dlySend = send;
+  tr.dl = { dL, dR, fbL, fbR };
+  updateDelayTime(tr, true);
+}
+
+/* delay time = the track's live tempo x note division, smoothed */
+function updateDelayTime (tr, hard) {
+  if (!tr.dl) return;
+  const sec = Math.min(7.8, 60 / Math.max(20, tr.bpm) * tr.fx.div);
+  const now = ctx.currentTime;
+  for (const d of [tr.dl.dL, tr.dl.dR]) {
+    if (hard) d.delayTime.setValueAtTime(sec, now);
+    else d.delayTime.setTargetAtTime(sec, now, 0.09);
+  }
 }
 
 /*<<<VOICES>>>*/
@@ -1016,13 +1050,16 @@ function mkTrack (i, cfg) {
     catchState: null,
     muted: false, gain: 0.25,                    // -12 dB headroom per track
     key: 0, oct: 0, fine: 0,
-    pat: blankPat(),
+    pats: [blankPat(), blankPat(), blankPat(), blankPat()],
+    patIdx: 0,
     vp: defaultVp(cfg.lib),                      // voice-edit params
+    fx: { rev: 0, dly: 0, div: 0.75, fb: 0.45 }, // sends; div in beats (0.75 = dotted 8th)
     live: {},                                    // per-row sounding voice (mono rows)
     sample: null,                                // {buf,name,baseBpm}
     node: null, srcNode: null,
     flash: 0
   };
+  t.pat = t.pats[0];
   (cfg.pat || []).forEach(([row, steps]) => steps.forEach(s => { t.pat[row][s] = true; }));
   return t;
 }
@@ -1041,6 +1078,7 @@ const tracks = [
 const S = {
   playing: false,
   masterIdx: 0,
+  selIdx: 0,                   // keyboard-focused track (numpad BPM nudge)
   mode: 'phase', curve: 'exp', dir: 'nearest',
   catchTime: 8.0,
   vol: 0.35,
@@ -1081,8 +1119,67 @@ function setTrackBpm (tr, v) {
   renderTrackHead(tr);
 }
 
+/* ---- FILL: one bar of generated pattern, in at the next bar head,
+        out again by itself. Six template families + random jitter. ---- */
+function genFill () {
+  const P = [0, 1, 2, 3].map(() => new Array(16).fill(false));
+  const R = Math.random;
+  const t = Math.floor(R() * 6);
+  if (t === 0) {              // accelerating snare roll
+    for (let s = 0; s < 8; s += 2) P[1][s] = true;
+    for (let s = 8; s < 16; s++) P[1][s] = true;
+    P[0][0] = true;
+  } else if (t === 1) {       // kick/snare alternation into a turnaround
+    for (let s = 0; s < 16; s += 2) (s % 4 === 0 ? P[0] : P[1])[s] = true;
+    P[1][14] = P[1][15] = true;
+  } else if (t === 2) {       // half-bar break, then a roll
+    P[0][0] = true; P[2][0] = true;
+    for (let s = 10; s < 16; s++) P[1][s] = true;
+  } else if (t === 3) {       // hat rush
+    for (let s = 0; s < 16; s++) P[2][s] = true;
+    P[1][4] = P[1][12] = true; P[0][0] = P[0][8] = true;
+  } else if (t === 4) {       // syncopated kicks
+    [0, 3, 6, 10, 13].forEach(s => { P[0][s] = true; });
+    P[1][8] = true; if (R() < 0.5) P[1][15] = true;
+  } else {                    // sparse chaos
+    for (let s = 0; s < 16; s++) {
+      if (R() < 0.28) P[1][s] = true;
+      if (R() < 0.20) P[0][s] = true;
+      if (R() < 0.30) P[2][s] = true;
+    }
+    P[1][15] = true;
+  }
+  for (let r = 0; r < 4; r++)
+    for (let s = 0; s < 16; s++) if (R() < 0.06) P[r][s] = !P[r][s];
+  if (R() < 0.5) P[3][15] = true;    // open-hat tail into the downbeat
+  return P;
+}
+
+function fillNow () {
+  if (!S.playing) { toast('先に PLAY を押してください'); return; }
+  let n = 0;
+  tracks.forEach(tr => {
+    if (tr.kind !== 'drums' || tr.muted) return;
+    tr.fillPat = genFill();
+    const off = (SPBar - (tr.stepIndex % SPBar)) % SPBar;
+    tr.fillAt = tr.stepIndex + off;          // this track's next bar head
+    tr.fillUntil = tr.fillAt + SPBar;
+    n++;
+  });
+  if (n) toast('FILL — 各トラックの次の小節頭から1小節');
+}
+
+/* pattern lookup with the fill window overlaid */
+function patAt (tr, row, step, abs) {
+  if (tr.fillAt != null && abs !== undefined) {
+    if (abs >= tr.fillUntil) { tr.fillAt = null; }
+    else if (abs >= tr.fillAt) return tr.fillPat[row][abs - tr.fillAt];
+  }
+  return tr.pat[row][step];
+}
+
 /* ---- one step of one track ---- */
-function playStep (tr, step, time) {
+function playStep (tr, step, time, abs) {
   if (tr.muted) return;
   const out = tr.node, lib = tr.lib, tune = tuneMul(tr);
 
@@ -1100,11 +1197,11 @@ function playStep (tr, step, time) {
 
   if (tr.kind === 'drums') {
     const vp = tr.vp;
-    if (tr.pat[0][step]) trig(tr, 'kick', time, () => Voices.kick(time, out, lib, tune, vp.kick));
-    if (tr.pat[1][step]) trig(tr, 'snr',  time, () => Voices.snare(time, out, lib, tune, vp.snr));
+    if (patAt(tr, 0, step, abs)) trig(tr, 'kick', time, () => Voices.kick(time, out, lib, tune, vp.kick));
+    if (patAt(tr, 1, step, abs)) trig(tr, 'snr',  time, () => Voices.snare(time, out, lib, tune, vp.snr));
     // CH and OH share one slot: they choke each other, like real hats
-    if (tr.pat[2][step]) trig(tr, 'hat',  time, () => Voices.hat(time, out, lib, tune, vp.ch));
-    if (tr.pat[3][step]) trig(tr, 'hat',  time, () => Voices.hat(time, out, lib, tune, vp.oh));
+    if (patAt(tr, 2, step, abs)) trig(tr, 'hat',  time, () => Voices.hat(time, out, lib, tune, vp.ch));
+    if (patAt(tr, 3, step, abs)) trig(tr, 'hat',  time, () => Voices.hat(time, out, lib, tune, vp.oh));
     return;
   }
 
@@ -1161,7 +1258,9 @@ function tick () {
   }
   for (const tr of tracks) {
     if (tr.catchState) tr.bpm = liveBpm(tr, now);
-    TempoCore.advance(tr, horizon, bpmFnFor(tr), (step, time) => playStep(tr, step, time));
+    updateDelayTime(tr);                 // echoes ride each track's own tempo
+    TempoCore.advance(tr, horizon, bpmFnFor(tr),
+      (step, time, abs) => playStep(tr, step, time, abs));
   }
 }
 
@@ -1169,7 +1268,7 @@ function start () {
   initAudio();
   if (ctx.state === 'suspended') ctx.resume();
   tracks.forEach(tr => {
-    if (!tr.node) { tr.node = ctx.createGain(); tr.node.connect(busGain); }
+    ensureTrackNode(tr);
     tr.node.gain.value = tr.gain;
   });
   const t0 = ctx.currentTime + 0.15;
@@ -1189,6 +1288,7 @@ function stop () {
   const tNow = ctx ? ctx.currentTime : 0;
   tracks.forEach(tr => {
     tr.catchState = null;
+    tr.fillAt = null;
     if (tr.srcNode) { try { tr.srcNode.stop(); } catch (e) {} tr.srcNode = null; }
     Object.values(tr.live).forEach(h => { try { h.release(tNow); } catch (e) {} });
     tr.live = {};
@@ -1293,7 +1393,7 @@ const Recorder = {
     const targets = [{ name: 'master', src: recTap }];
     if (S.recPara) tracks.forEach(tr => {
       if (tr.muted) return;
-      if (!tr.node) { tr.node = ctx.createGain(); tr.node.gain.value = tr.gain; tr.node.connect(busGain); }
+      ensureTrackNode(tr);
       targets.push({ name: tr.name, src: tr.node });
     });
 
@@ -1395,8 +1495,11 @@ function setAudioRate (v) {
   if (ctx) {
     try { ctx.close(); } catch (e) {}
     ctx = null; master = null; busGain = null; analyser = null; anaBuf = null;
-    noiseBuf = null; recTap = null;
-    tracks.forEach(tr => { tr.node = null; tr.srcNode = null; });
+    noiseBuf = null; recTap = null; revBus = null;
+    tracks.forEach(tr => {
+      tr.node = null; tr.srcNode = null;
+      tr.revSend = null; tr.dlySend = null; tr.dl = null; tr.live = {};
+    });
   }
   toast(v ? v + ' Hz で再初期化します' : 'デバイスレートで再初期化します');
 }
@@ -1594,13 +1697,17 @@ function buildTracks () {
       '</div>' +
       '<div class="fileRow" data-file></div>' +
       '<div data-vedit></div>' +
+      '<div data-fx></div>' +
+      '<div class="pmRow" data-pmem></div>' +
       '<div class="grid" data-grid></div>';
     host.appendChild(el);
 
+    // any press inside the card focuses the track for numpad nudging
+    el.addEventListener('pointerdown', () => {
+      if (S.selIdx !== tr.idx) { S.selIdx = tr.idx; renderAllHeads(); }
+    }, true);
     el.querySelector('[data-master]').onclick = () => setMaster(tr.idx);
-    el.querySelector('[data-mute]').onclick = () => {
-      tr.muted = !tr.muted; renderTrackHead(tr);
-    };
+    el.querySelector('[data-mute]').onclick = () => toggleMute(tr);
     const cb = el.querySelector('[data-catch]');
     cb.onclick = () => {
       if (Midi.armFromClick({ el: cb, isBtn: true, id: 'catch' + tr.idx })) return;
@@ -1761,11 +1868,98 @@ function buildTrackBody (tr) {
   }
 
   buildVoiceEdit(tr);
+  buildFx(tr);
+  buildPatMem(tr);
   el.querySelector('[data-kind]').value = tr.kind;
   paintOpts(el, 'data-lib', tr.lib);
   paintOpts(el, 'data-loop', tr.loopBars);
   tr._shownBpm = undefined;                      // force the readout to repaint
   Midi.paintMapped();
+}
+
+/* ---- per-track FX: reverb send + tempo-synced L/R echo ---- */
+const DLY_DIVS = [[0.25, '1/16'], [0.5, '1/8'], [0.75, '1/8.'], [1, '1/4'], [2, '1/2']];
+
+function buildFx (tr) {
+  const host = trackEl(tr).querySelector('[data-fx]');
+  host.innerHTML = '';
+  const det = document.createElement('details');
+  det.className = 'vedit';
+  det.open = !!tr._fxOpen;
+  det.ontoggle = () => { tr._fxOpen = det.open; };
+  const sum = document.createElement('summary');
+  sum.textContent = 'FX — リバーブ / L·R エコー';
+  det.appendChild(sum);
+
+  const row = document.createElement('div');
+  row.className = 'vrow';
+  const lb = document.createElement('span');
+  lb.className = 'vlbl'; lb.textContent = 'SEND';
+  row.appendChild(lb);
+
+  const addK = o => {
+    const dEl = document.createElement('div');
+    dEl.className = 'knob sm';
+    row.appendChild(dEl);
+    const k = new Knob(dEl, o);
+    trackKnobs[tr.idx].push(k);
+    return k;
+  };
+  addK({ label: 'REV', min: 0, max: 1, def: 0, id: 'fx' + tr.idx + 'R',
+         get: () => tr.fx.rev,
+         set: v => { tr.fx.rev = v; if (tr.revSend) tr.revSend.gain.value = v; },
+         fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+  addK({ label: 'ECHO', min: 0, max: 1, def: 0, id: 'fx' + tr.idx + 'D',
+         get: () => tr.fx.dly,
+         set: v => { tr.fx.dly = v; if (tr.dlySend) tr.dlySend.gain.value = v; },
+         fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+  addK({ label: 'FB', min: 0, max: 0.9, def: 0.45, id: 'fx' + tr.idx + 'F',
+         get: () => tr.fx.fb,
+         set: v => {
+           tr.fx.fb = v;
+           if (tr.dl) tr.dl.fbL.gain.value = tr.dl.fbR.gain.value = v;
+         },
+         fmt: v => (v * 100).toFixed(0) + '%' });
+
+  const seg = document.createElement('div');
+  seg.className = 'opts sm';
+  seg.id = 'fxT' + tr.idx;
+  DLY_DIVS.forEach(([v, nm]) => {
+    const b = document.createElement('button');
+    b.dataset.v = v; b.textContent = nm;
+    seg.appendChild(b);
+  });
+  row.appendChild(seg);
+
+  const note = document.createElement('span');
+  note.className = 'stat';
+  note.textContent = 'エコーはこのトラック自身のテンポに同期';
+  row.appendChild(note);
+
+  det.appendChild(row);
+  host.appendChild(det);
+  segInit(seg.id, () => tr.fx.div,
+    v => { tr.fx.div = +v; if (ctx) updateDelayTime(tr); });
+}
+
+/* ---- pattern memories P1-P4 (drum tracks) ---- */
+function buildPatMem (tr) {
+  const host = trackEl(tr).querySelector('[data-pmem]');
+  host.innerHTML = '';
+  if (tr.kind !== 'drums') return;
+  for (let i = 0; i < 4; i++) {
+    const b = document.createElement('button');
+    b.className = 'mini pm' + (i === tr.patIdx ? ' on' : '');
+    b.textContent = 'P' + (i + 1);
+    b.onclick = () => {
+      tr.patIdx = i;
+      tr.pat = tr.pats[i];          // live edits already sit in their slot
+      buildGrid(tr);
+      host.querySelectorAll('button').forEach((x, j) =>
+        x.classList.toggle('on', j === i));
+    };
+    host.appendChild(b);
+  }
 }
 
 /* ---- voice editor: WAVE / PITCH(CUTOFF) / DECAY / SUS per row ---- */
@@ -1875,12 +2069,37 @@ function buildGrid (tr) {
       const c = document.createElement('div');
       c.className = 'cell' + (s % SPB === 0 ? ' beat' : '') + (tr.pat[r][s] ? ' on' : '');
       c.dataset.r = r; c.dataset.s = s;
-      c.onclick = () => {
-        tr.pat[r][s] = !tr.pat[r][s];
-        c.classList.toggle('on', tr.pat[r][s]);
-      };
       cells.appendChild(c);
     }
+    /* press-and-slide painting: the first cell decides on/off, then the
+       drag applies that state to every cell it crosses in this row.
+       touch-action pan-y keeps vertical page scrolling alive on phones. */
+    let paint = null;
+    const setCell = (c, v) => {
+      tr.pat[r][+c.dataset.s] = v;
+      c.classList.toggle('on', v);
+    };
+    const cellAt = e => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const c = el && el.closest ? el.closest('.cell') : null;
+      return c && c.parentNode === cells ? c : null;
+    };
+    cells.addEventListener('pointerdown', e => {
+      const c = cellAt(e);
+      if (!c) return;
+      paint = !tr.pat[r][+c.dataset.s];
+      setCell(c, paint);
+      try { cells.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+    cells.addEventListener('pointermove', e => {
+      if (paint === null) return;
+      const c = cellAt(e);
+      if (c) setCell(c, paint);
+    });
+    const done = () => { paint = null; };
+    cells.addEventListener('pointerup', done);
+    cells.addEventListener('pointercancel', done);
     row.append(lb, cells);
     g.appendChild(row);
   });
@@ -1890,6 +2109,7 @@ function renderTrackHead (tr) {
   const el = trackEl(tr);
   if (!el) return;
   el.classList.toggle('master', tr === masterTrack());
+  el.classList.toggle('selected', tr.idx === S.selIdx);
   el.querySelector('[data-master]').classList.toggle('on', tr === masterTrack());
   el.querySelector('[data-mute]').classList.toggle('on', tr.muted);
   const cb = el.querySelector('[data-catch]');
@@ -1899,6 +2119,22 @@ function renderTrackHead (tr) {
   cb.textContent = catching ? 'CANCEL' : 'CATCH';
 }
 function renderAllHeads () { tracks.forEach(renderTrackHead); }
+
+/* one mute model behind two controls: the header A-D toggles and each
+   card's MUTE button. Muting also chokes anything still sustaining. */
+function toggleMute (tr) {
+  tr.muted = !tr.muted;
+  if (tr.muted && ctx) {
+    Object.values(tr.live).forEach(h => { try { h.release(ctx.currentTime); } catch (e) {} });
+    tr.live = {};
+  }
+  renderTrackHead(tr);
+  paintTrkTgl();
+}
+function paintTrkTgl () {
+  document.querySelectorAll('#trkTgl button').forEach(b =>
+    b.classList.toggle('on', !tracks[+b.dataset.i].muted));
+}
 
 /* ===================================================================
    PHASE SCOPE + meters (rAF)
@@ -1966,6 +2202,9 @@ function frame () {
     document.getElementById('clipLed').classList.toggle('on', peak >= 0.985);
   }
 
+  document.getElementById('btnFill').classList
+    .toggle('on', tracks.some(tr => tr.fillAt != null));
+
   // recorder status
   const rs = document.getElementById('recStat');
   if (Recorder.active && ctx) {
@@ -1996,15 +2235,15 @@ function frame () {
   // scope
   const W = scope.width, H = scope.height, cx = W / 2, cy = H / 2;
   sctx.clearRect(0, 0, W, H);
-  sctx.strokeStyle = '#aeb1b8';
+  sctx.strokeStyle = '#c9c9cb';
   sctx.lineWidth = 2;
   sctx.beginPath(); sctx.moveTo(cx, 12); sctx.lineTo(cx, H - 12); sctx.stroke();
-  sctx.strokeStyle = '#c9ccd2';
+  sctx.strokeStyle = '#e2e2e4';
   sctx.beginPath(); sctx.moveTo(12, cy); sctx.lineTo(W - 12, cy); sctx.stroke();
 
   tracks.forEach((tr, i) => {
     const R = 210 - i * 34;
-    sctx.strokeStyle = 'rgba(0,0,0,.10)';        // recessed ring track
+    sctx.strokeStyle = 'rgba(0,0,0,.08)';        // recessed ring track
     sctx.lineWidth = 12;
     sctx.beginPath(); sctx.arc(cx, cy, R, 0, Math.PI * 2); sctx.stroke();
 
@@ -2015,7 +2254,7 @@ function frame () {
     const ang = -Math.PI / 2 + frac * Math.PI * 2;
 
     // bar ticks
-    sctx.strokeStyle = '#8d9097'; sctx.lineWidth = 2;
+    sctx.strokeStyle = '#a8a8aa'; sctx.lineWidth = 2;
     for (let b = 0; b < tr.loopBars; b++) {
       const a = -Math.PI / 2 + (b / tr.loopBars) * Math.PI * 2;
       sctx.beginPath();
@@ -2125,6 +2364,7 @@ const Midi = {
     if (m.kind === 'btn') {
       if (val < 0.5) return;
       if (m.id === 'rec') { Recorder.toggle(); return; }
+      if (m.id === 'fill') { fillNow(); return; }
       const i = +m.id.replace('catch', '');
       const tr = tracks[i];
       if (tr) tr.catchState ? cancelCatch(tr) : startCatch(tr);
@@ -2157,8 +2397,11 @@ function saveProject () {
     tracks: tracks.map(tr => ({
       kind: tr.kind, lib: tr.lib, bpm: tr.bpm, loopBars: tr.loopBars,
       gain: tr.gain, muted: tr.muted, key: tr.key, oct: tr.oct, fine: tr.fine,
-      pat: tr.pat.map(r => r.slice(0, 32)),
+      pat: tr.pat.map(r => r.slice(0, 32)),          // kept for older loaders
+      pats: tr.pats.map(p => p.map(r => r.slice(0, 32))),
+      patIdx: tr.patIdx,
       vp: JSON.parse(JSON.stringify(tr.vp)),
+      fx: { ...tr.fx },
       sample: tr.sample ? { name: tr.sample.name, baseBpm: tr.sample.baseBpm } : null
     }))
   };
@@ -2181,13 +2424,25 @@ function loadProject (obj) {
       gain: d.gain, muted: d.muted, key: d.key, oct: d.oct, fine: d.fine,
       catchState: null
     });
-    tr.pat = d.pat.map(r => r.slice());
-    // older project files predate the voice editor: fall back to defaults
+    if (d.pats) {
+      tr.pats = d.pats.map(p => p.map(r => r.slice()));
+      while (tr.pats.length < 4) tr.pats.push(blankPat());
+      tr.patIdx = Math.min(3, d.patIdx || 0);
+    } else {
+      tr.pats = [d.pat.map(r => r.slice()), blankPat(), blankPat(), blankPat()];
+      tr.patIdx = 0;
+    }
+    tr.pat = tr.pats[tr.patIdx];
+    // older project files predate the voice editor / FX: fall back to defaults
     const base = defaultVp(d.lib);
     tr.vp = d.vp
       ? Object.fromEntries(Object.keys(base).map(k => [k, { ...base[k], ...d.vp[k] }]))
       : base;
+    tr.fx = { rev: 0, dly: 0, div: 0.75, fb: 0.45, ...(d.fx || {}) };
     if (tr.node) tr.node.gain.value = tr.gain;
+    if (tr.revSend) tr.revSend.gain.value = tr.fx.rev;
+    if (tr.dlySend) tr.dlySend.gain.value = tr.fx.dly;
+    if (tr.dl) { tr.dl.fbL.gain.value = tr.dl.fbR.gain.value = tr.fx.fb; updateDelayTime(tr, true); }
     if (d.sample && tr.sample) tr.sample.baseBpm = d.sample.baseBpm;
   });
   if (S.recFmt === 'aif' && S.recBit === 32) S.recBit = 24;
@@ -2199,6 +2454,7 @@ function loadProject (obj) {
     optRecSr: () => S.recSr, optRecPara: () => S.recPara ? 1 : 0
   };
   Object.keys(SEGS).forEach(id => segPaint(id, SEGS[id]));
+  paintTrkTgl();
   if (master) master.gain.value = S.vol;
   paintLegend();
   toast('プロジェクトを読み込みました' + (obj.tracks.some(t => t.sample)
@@ -2219,6 +2475,10 @@ function toast (msg) {
 
 document.getElementById('btnPlay').onclick = () => S.playing ? stop() : start();
 document.getElementById('btnAlign').onclick = alignAll;
+document.getElementById('btnFill').onclick = () => {
+  if (Midi.armFromClick({ el: document.getElementById('btnFill'), isBtn: true, id: 'fill' })) return;
+  fillNow();
+};
 document.getElementById('btnMidi').onclick = () => Midi.enable();
 document.getElementById('btnLearn').onclick = () => Midi.setLearn(!Midi.learnOn);
 document.getElementById('btnSave').onclick = saveProject;
@@ -2228,17 +2488,42 @@ document.getElementById('fileProj').onchange = async e => {
   if (!f) return;
   try { loadProject(JSON.parse(await f.text())); } catch (err) { toast('JSON を解析できません'); }
 };
+/* numpad: 1-4 select a track, +/- nudge its BPM (through the glide,
+   so nudges are musical). Shift = fine, * and / = coarse. */
+function nudgeSelected (delta) {
+  const tr = tracks[S.selIdx];
+  if (!tr) return;
+  setTrackBpm(tr, targetBpm(tr) + delta);
+  refreshTrackKnobs(tr);
+  toast(tr.name + ' → ' + targetBpm(tr).toFixed(2) + ' BPM');
+}
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code.startsWith('Numpad')) {
+    const d = e.code.slice(6);
+    if (d >= '1' && d <= '4') { S.selIdx = +d - 1; renderAllHeads(); e.preventDefault(); return; }
+    if (e.code === 'NumpadAdd')      { nudgeSelected(e.shiftKey ? 0.1 : 1); e.preventDefault(); return; }
+    if (e.code === 'NumpadSubtract') { nudgeSelected(e.shiftKey ? -0.1 : -1); e.preventDefault(); return; }
+    if (e.code === 'NumpadMultiply') { nudgeSelected(10); e.preventDefault(); return; }
+    if (e.code === 'NumpadDivide')   { nudgeSelected(-10); e.preventDefault(); return; }
+  }
+  if (e.key === '+') { nudgeSelected(1); return; }    // '+' is often Shift+'='
+  if (e.key === '-') { nudgeSelected(-1); return; }
   if (e.code === 'Space') { e.preventDefault(); S.playing ? stop() : start(); }
   if (e.key >= '1' && e.key <= '4') startCatch(tracks[+e.key - 1]);
   if (e.key === '0') alignAll();
   if (e.key === 'r' || e.key === 'R') Recorder.toggle();
+  if (e.key === 'f' || e.key === 'F') fillNow();
+});
+
+document.querySelectorAll('#trkTgl button').forEach(b => {
+  b.onclick = () => toggleMute(tracks[+b.dataset.i]);
 });
 
 buildConsole();
 buildRecorder();
 buildTracks();
+paintTrkTgl();
 paintLegend();
 Midi.paintMapped();
 requestAnimationFrame(frame);

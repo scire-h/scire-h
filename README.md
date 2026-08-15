@@ -110,9 +110,27 @@ directly — tuning *is* tempo, which is the point of the machine.
 Audio files carry no BPM metadata, so a loaded sample's BASE BPM
 defaults to 120; FIT LOOP derives it from the loop length, or type it.
 
-**Look.** Mac OS X Tiger-era Aqua — brushed metal, gel buttons,
-recessed wells, engraved labels — in the spirit of pluggo and Max
-patches of that period.
+**Per-track FX.** Each track has a send into a shared reverb and its
+own ping-pong L/R echo. The echo time is set as a note value (1/16 -
+1/2) against that track's OWN tempo, so during a catch-up the echoes
+sweep along with the pitch. Recorded stems stay dry; FX print only on
+the master.
+
+**FILL.** One button (or `F`): every unmuted drum track drops into a
+one-bar randomly generated fill (six template families plus jitter) at
+its own next bar head, then falls back to its pattern by itself — the
+fills roll around the polytempo field rather than landing together.
+
+**Patterns and playing surface.** Drum tracks hold four pattern
+memories (P1-P4, saved in the project). Steps paint with press-and-
+slide, not just clicks. The header carries A-D on/off toggles next to
+PLAY, and a selected track (click it, or Numpad 1-4) takes BPM nudges
+from the keyboard: `+`/`-` for ±1, Shift for ±0.1, `*`//` for ±10 —
+all through the glide.
+
+**Look.** Mac OS 8 Platinum: deliberate monochrome, hard bevels,
+striped title bars, hard offset shadows. Tracks are told apart by
+letter and four grey values, not hue.
 
 **Level safety.** Every track starts with 12 dB of headroom; the master
 bus is 20 Hz high-pass → limiter → tanh soft clip, and boots quiet. A
