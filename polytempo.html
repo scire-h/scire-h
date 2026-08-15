@@ -236,6 +236,24 @@
     box-shadow:inset 0 1px 1px rgba(255,255,255,.5), 0 1px 1px rgba(0,0,0,.2)}
   .cell.now{outline:2px solid #33363c;outline-offset:-2px}
   .cell.on.now{outline-color:#fff}
+  /* voice editor */
+  details.vedit{margin:2px 0 9px;border:1px solid #a6a8b0;border-radius:8px;
+    background:linear-gradient(180deg,#f2f2f5,#e2e2e6);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+  details.vedit summary{cursor:pointer;font-size:9px;font-weight:800;letter-spacing:.14em;
+    color:#6a6d73;padding:6px 10px;text-shadow:0 1px 0 rgba(255,255,255,.8)}
+  details.vedit[open] summary{border-bottom:1px solid #c3c5cb}
+  .vrow{display:flex;align-items:center;gap:8px;padding:6px 10px;flex-wrap:wrap}
+  .vrow + .vrow{border-top:1px solid #dcdee3}
+  .vlbl{width:34px;flex:none;font-size:9px;font-weight:800;color:var(--ac);
+    letter-spacing:.06em;text-shadow:0 1px 0 rgba(255,255,255,.8)}
+  .opts.sm button{padding:5px 7px;font-size:9px}
+  .knob.sm{width:56px;gap:3px}
+  .knob.sm .dial{width:32px;height:32px}
+  .knob.sm .dial i{height:11px;top:3px;transform-origin:50% 13px}
+  .knob.sm .kl{font-size:8px}
+  .knob.sm .kv{font-size:10px}
+
   .fileRow{display:flex;gap:8px;align-items:center;font-size:10px;color:#4a4d52;flex-wrap:wrap}
   .fileRow input[type=file]{display:none}
   .bpmEdit{width:96px;background:transparent;border:none;border-bottom:2px solid var(--ac);
@@ -387,6 +405,12 @@
       BPMそのものを動かす（チューニング＝テンポの一部）。
       音声ファイルにはBPM情報が無いため、読み込み時の BASE BPM は 120 とし、
       FIT LOOP（サンプル全体＝ループ長とみなして算出）か手入力で合わせる。<br>
+      <b>音色エディット</b>: 各トラックの VOICE EDIT で、シンセボイスごとに
+      波形（AUTO/SIN/TRI/SQR/SAW）・ピッチ（コードはカットオフ）・ディケイ・
+      サスティンを編集できる。AUTO はライブラリ本来の波形。各行はモノボイスで、
+      サスティンを上げた音は同じ行の次のヒット（CH と OH は相互）まで持続し、
+      新しいヒットが前の音をチョークする。停止時と8秒の安全上限でも解放される。
+      エディット値は 808/909 を切り替えても保持され、プロジェクトに保存される。<br>
       <b>録音</b>: RECORDER の REC（または R キー）で開始/停止。マスター
       （ソフトクリップ後・モニター音量前）と、PARA ON なら非ミュートの各トラック
       （トラックゲイン後・マスターチェーン前のドライ信号）を AudioWorklet で
@@ -793,7 +817,21 @@ function initAudio () {
 
 /*<<<VOICES>>>*/
 /* --- voice construction: only touches `ctx` and `noiseBuf`, so
-       tests/web/test_voices.js can run it against a stub AudioContext --- */
+       tests/web/test_voices.js can run it against a stub AudioContext.
+
+   Every voice takes a params object p:
+     wave  'auto' | 'sine' | 'triangle' | 'square' | 'sawtooth'
+           ('auto' = the library's stock waveform)
+     pitch base frequency in Hz (chord voices take `cutoff` instead)
+     decay seconds
+     sus   0..1 sustain level. 0 = one-shot. >0 = the envelope decays
+           to sus×peak and holds until the voice is choked by the next
+           hit on its row (rows are mono; CH/OH choke each other), or
+           the SUS_CAP safety limit.
+   Every voice returns a handle; release(t) chokes it via a dedicated
+   output gain, so no envelope automation ever needs cancelling. --- */
+const SUS_CAP = 8;
+
 function noiseSrc (t, dur) {
   const s = ctx.createBufferSource();
   s.buffer = noiseBuf;
@@ -803,103 +841,144 @@ function noiseSrc (t, dur) {
   s.stop(t + dur);
   return s;
 }
-function ampEnv (p, t, atk, peak, dec) {
+
+/* AD(S): attack to peak, decay toward sus×peak. Returns the time at
+   which the voice's sources may safely stop. */
+function ampEnvADS (p, t, atk, peak, decay, sus) {
   p.setValueAtTime(0.0001, t);
   p.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + atk);
-  p.exponentialRampToValueAtTime(0.0001, t + atk + dec);
+  if (sus > 0.001) {
+    p.setTargetAtTime(Math.max(0.0002, peak * sus), t + atk, Math.max(0.005, decay) / 3);
+    p.setTargetAtTime(0.0001, t + SUS_CAP - 0.3, 0.06);   // safety fade
+    return t + SUS_CAP;
+  }
+  p.exponentialRampToValueAtTime(0.0001, t + atk + decay);
+  return t + atk + decay + 0.05;
 }
 
-/* ---- drum + tone voices: 808 / 909 ---- */
+function mkVoice (out) {
+  const choke = ctx.createGain();
+  choke.gain.value = 1;
+  choke.connect(out);
+  return {
+    in: choke,
+    release (t) {
+      /* separate gain, so internal envelopes stay untouched — no
+         cancelScheduledValues, no Firefox cancelAndHold gap */
+      choke.gain.setValueAtTime(1, t);
+      choke.gain.exponentialRampToValueAtTime(0.0008, t + 0.014);
+    }
+  };
+}
+function wv (p, def) { return !p.wave || p.wave === 'auto' ? def : p.wave; }
+
 const Voices = {
-  kick (t, out, lib, tune) {
-    const o = ctx.createOscillator(); o.type = 'sine';
-    const g = ctx.createGain();
-    let tail;
+  kick (t, out, lib, tune, p) {
+    const v = mkVoice(out);
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = wv(p, 'sine');
+    const f0 = p.pitch * tune;
+    let end;
     if (lib === '909') {
-      const f0 = 48 * tune;
       o.frequency.setValueAtTime(f0 * 4.6, t);
       o.frequency.exponentialRampToValueAtTime(f0, t + 0.032);
-      ampEnv(g.gain, t, 0.001, 1.0, 0.40);
+      end = ampEnvADS(g.gain, t, 0.001, 1.0, p.decay, p.sus);
       const cn = noiseSrc(t, 0.02), cf = ctx.createBiquadFilter(), cg = ctx.createGain();
       cf.type = 'highpass'; cf.frequency.value = 1200;
-      ampEnv(cg.gain, t, 0.0005, 0.35, 0.012);
-      cn.connect(cf).connect(cg).connect(out);
-      tail = 0.5;
+      ampEnvADS(cg.gain, t, 0.0005, 0.35, 0.012, 0);
+      cn.connect(cf).connect(cg).connect(v.in);
     } else {
-      const f0 = 50 * tune;
       o.frequency.setValueAtTime(f0 * 3.1, t);
       o.frequency.exponentialRampToValueAtTime(f0, t + 0.065);
-      ampEnv(g.gain, t, 0.003, 0.95, 0.62);
-      tail = 0.75;
+      end = ampEnvADS(g.gain, t, 0.003, 0.95, p.decay, p.sus);
     }
-    o.connect(g).connect(out);
-    o.start(t); o.stop(t + tail);
+    o.connect(g).connect(v.in);
+    o.start(t); o.stop(end);
+    return v;
   },
 
-  snare (t, out, lib, tune) {
+  snare (t, out, lib, tune, p) {
+    const v = mkVoice(out);
     const bright = lib === '909';
-    const f1 = (bright ? 190 : 180) * tune, f2 = (bright ? 335 : 330) * tune;
-    [f1, f2].forEach((f, i) => {
-      const o = ctx.createOscillator(); o.type = 'triangle';
+    const w = wv(p, 'triangle');
+    [p.pitch * tune, p.pitch * 1.83 * tune].forEach((f, i) => {
+      const o = ctx.createOscillator(); o.type = w;
       o.frequency.setValueAtTime(f, t);
       const g = ctx.createGain();
-      ampEnv(g.gain, t, 0.001, (i ? 0.22 : 0.30), bright ? 0.10 : 0.13);
-      o.connect(g).connect(out); o.start(t); o.stop(t + 0.3);
+      const end = ampEnvADS(g.gain, t, 0.001, (i ? 0.22 : 0.30), p.decay * 0.7, p.sus);
+      o.connect(g).connect(v.in); o.start(t); o.stop(end);
     });
-    const dur = bright ? 0.26 : 0.19;
-    const nz = noiseSrc(t, dur + 0.05), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    const nzLife = p.sus > 0.001 ? SUS_CAP : p.decay + 0.1;
+    const nz = noiseSrc(t, nzLife), f = ctx.createBiquadFilter(), g = ctx.createGain();
     if (bright) { f.type = 'highpass'; f.frequency.value = 500; }
     else        { f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.9; }
-    ampEnv(g.gain, t, 0.001, bright ? 0.55 : 0.40, dur);
-    nz.connect(f).connect(g).connect(out);
+    ampEnvADS(g.gain, t, 0.001, bright ? 0.55 : 0.40, p.decay, p.sus);
+    nz.connect(f).connect(g).connect(v.in);
+    return v;
   },
 
-  hat (t, out, lib, tune, open) {
+  hat (t, out, lib, tune, p) {
+    const v = mkVoice(out);
     const ratios = [1, 1.4471, 1.6170, 1.9265, 2.5028, 2.6637];
-    const base = (lib === '909' ? 44 : 40) * tune;
+    const w = wv(p, 'square');
+    const base = p.pitch * tune;
     const hp = ctx.createBiquadFilter();
     hp.type = 'highpass'; hp.frequency.value = lib === '909' ? 9000 : 7400;
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass'; bp.frequency.value = lib === '909' ? 11000 : 9500; bp.Q.value = 0.7;
     const g = ctx.createGain();
-    const dec = open ? (lib === '909' ? 0.30 : 0.36) : (lib === '909' ? 0.030 : 0.042);
-    ampEnv(g.gain, t, 0.0006, open ? 0.30 : 0.26, dec);
+    const end = ampEnvADS(g.gain, t, 0.0006, 0.28, p.decay, p.sus);
     ratios.forEach(r => {
-      const o = ctx.createOscillator(); o.type = 'square';
+      const o = ctx.createOscillator(); o.type = w;
       o.frequency.setValueAtTime(base * r, t);
-      o.connect(hp); o.start(t); o.stop(t + dec + 0.06);
+      o.connect(hp); o.start(t); o.stop(end + 0.05);
     });
-    hp.connect(bp).connect(g).connect(out);
+    hp.connect(bp).connect(g).connect(v.in);
+    return v;
   },
 
-  tone (t, out, lib, freq, dec) {
-    if (lib === '909') {                       // brighter, harmonically rich
+  /* one tone into a shared destination (used by chord()) */
+  tone (t, dest, lib, freq, p) {
+    if (lib === '909') {
+      const cf = p.cutoff / 2600;                  // stock sweep, scaled
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass'; lp.Q.value = 6;
-      lp.frequency.setValueAtTime(Math.min(6000, freq * 12), t);
-      lp.frequency.exponentialRampToValueAtTime(Math.max(220, freq * 2.2), t + dec * 0.8);
+      lp.frequency.setValueAtTime(Math.max(120, Math.min(9000, freq * 12 * cf)), t);
+      lp.frequency.exponentialRampToValueAtTime(
+        Math.max(100, freq * 2.2 * cf), t + Math.min(p.decay, 3) * 0.8);
       const g = ctx.createGain();
-      ampEnv(g.gain, t, 0.008, 0.20, dec);
+      const end = ampEnvADS(g.gain, t, 0.008, 0.20, p.decay, p.sus);
+      const w = wv(p, 'sawtooth');
       [-6, 6].forEach(cents => {
-        const o = ctx.createOscillator(); o.type = 'sawtooth';
+        const o = ctx.createOscillator(); o.type = w;
         o.frequency.setValueAtTime(freq * Math.pow(2, cents / 1200), t);
-        o.connect(lp); o.start(t); o.stop(t + dec + 0.1);
+        o.connect(lp); o.start(t); o.stop(end + 0.1);
       });
-      lp.connect(g).connect(out);
-    } else {                                   // round 808 tone
+      lp.connect(g).connect(dest);
+    } else {
       const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 0.6;
+      lp.type = 'lowpass'; lp.frequency.value = p.cutoff; lp.Q.value = 0.6;
       const g = ctx.createGain();
-      ampEnv(g.gain, t, 0.014, 0.24, dec);
-      const o1 = ctx.createOscillator(); o1.type = 'sine';
-      const o2 = ctx.createOscillator(); o2.type = 'triangle';
+      const end = ampEnvADS(g.gain, t, 0.014, 0.24, p.decay, p.sus);
+      const o1 = ctx.createOscillator();
+      const o2 = ctx.createOscillator();
+      if (!p.wave || p.wave === 'auto') { o1.type = 'sine'; o2.type = 'triangle'; }
+      else { o1.type = p.wave; o2.type = p.wave; }
       o1.frequency.setValueAtTime(freq, t);
       o2.frequency.setValueAtTime(freq * 2.005, t);
       const g2 = ctx.createGain(); g2.gain.value = 0.28;
       o1.connect(lp); o2.connect(g2).connect(lp);
-      o1.start(t); o2.start(t); o1.stop(t + dec + 0.1); o2.stop(t + dec + 0.1);
-      lp.connect(g).connect(out);
+      o1.start(t); o2.start(t); o1.stop(end + 0.1); o2.stop(end + 0.1);
+      lp.connect(g).connect(dest);
     }
+  },
+
+  /* one chord hit = all its notes under one choke, so the next hit on
+     the track replaces the previous one cleanly */
+  chord (t, out, lib, freqs, p) {
+    const v = mkVoice(out);
+    freqs.forEach(f => Voices.tone(t, v.in, lib, f, p));
+    return v;
   }
 };
 /*<<<END_VOICES>>>*/
@@ -915,6 +994,18 @@ const SPB = TempoCore.STEPS_PER_BEAT, SPBar = TempoCore.STEPS_PER_BAR;
 
 function blankPat () { return [0, 1, 2, 3].map(() => new Array(32).fill(false)); }
 
+/* per-voice edit params; defaults reproduce the library's stock sound */
+function defaultVp (lib) {
+  const x = lib === '909';
+  return {
+    kick:  { wave: 'auto', pitch: x ? 48 : 50,   decay: x ? 0.40 : 0.62,   sus: 0 },
+    snr:   { wave: 'auto', pitch: x ? 190 : 180, decay: x ? 0.26 : 0.19,   sus: 0 },
+    ch:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.030 : 0.042, sus: 0 },
+    oh:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.30 : 0.36,   sus: 0 },
+    chord: { wave: 'auto', cutoff: 2600,         decay: 1.2,               sus: 0 }
+  };
+}
+
 function mkTrack (i, cfg) {
   const t = {
     idx: i, name: 'ABCD'[i],
@@ -926,6 +1017,8 @@ function mkTrack (i, cfg) {
     muted: false, gain: 0.25,                    // -12 dB headroom per track
     key: 0, oct: 0, fine: 0,
     pat: blankPat(),
+    vp: defaultVp(cfg.lib),                      // voice-edit params
+    live: {},                                    // per-row sounding voice (mono rows)
     sample: null,                                // {buf,name,baseBpm}
     node: null, srcNode: null,
     flash: 0
@@ -1006,24 +1099,34 @@ function playStep (tr, step, time) {
   }
 
   if (tr.kind === 'drums') {
-    if (tr.pat[0][step]) Voices.kick(time, out, lib, tune);
-    if (tr.pat[1][step]) Voices.snare(time, out, lib, tune);
-    if (tr.pat[2][step]) Voices.hat(time, out, lib, tune, false);
-    if (tr.pat[3][step]) Voices.hat(time, out, lib, tune, true);
+    const vp = tr.vp;
+    if (tr.pat[0][step]) trig(tr, 'kick', time, () => Voices.kick(time, out, lib, tune, vp.kick));
+    if (tr.pat[1][step]) trig(tr, 'snr',  time, () => Voices.snare(time, out, lib, tune, vp.snr));
+    // CH and OH share one slot: they choke each other, like real hats
+    if (tr.pat[2][step]) trig(tr, 'hat',  time, () => Voices.hat(time, out, lib, tune, vp.ch));
+    if (tr.pat[3][step]) trig(tr, 'hat',  time, () => Voices.hat(time, out, lib, tune, vp.oh));
     return;
   }
 
   // chord: rows are scale degrees over KEY + OCTAVE + FINE
   const rootMidi = 48 + tr.key + 12 * tr.oct;
-  const dec = Math.min(2.2, 60 / liveBpm(tr, time) * 2.0);
+  const freqs = [];
   CHORD_ROWS.forEach((deg, r) => {
     if (!tr.pat[r][step]) return;
     CHORD_INTS[deg].forEach(iv => {
-      const midi = rootMidi + iv;
-      const f = 440 * Math.pow(2, (midi - 69) / 12) * Math.pow(2, tr.fine / 1200);
-      Voices.tone(time, out, lib, f, dec);
+      freqs.push(440 * Math.pow(2, (rootMidi + iv - 69) / 12) * Math.pow(2, tr.fine / 1200));
     });
   });
+  if (freqs.length) trig(tr, 'chord', time, () => Voices.chord(time, out, lib, freqs, tr.vp.chord));
+}
+
+/* Rows are mono: a new hit chokes whatever the row is still playing.
+   This is also what makes SUSTAIN workable in a step sequencer --
+   a sustained voice rings until the row speaks again. */
+function trig (tr, slot, time, mk) {
+  const prev = tr.live[slot];
+  if (prev) prev.release(time);
+  tr.live[slot] = mk();
 }
 
 /* ===================================================================
@@ -1083,9 +1186,12 @@ function stop () {
   S.playing = false;
   if (timer) clearInterval(timer);
   timer = null;
+  const tNow = ctx ? ctx.currentTime : 0;
   tracks.forEach(tr => {
     tr.catchState = null;
     if (tr.srcNode) { try { tr.srcNode.stop(); } catch (e) {} tr.srcNode = null; }
+    Object.values(tr.live).forEach(h => { try { h.release(tNow); } catch (e) {} });
+    tr.live = {};
   });
   document.getElementById('btnPlay').classList.remove('playing');
   document.getElementById('btnPlay').textContent = 'PLAY';
@@ -1487,6 +1593,7 @@ function buildTracks () {
         '<div class="stat" data-stat></div>' +
       '</div>' +
       '<div class="fileRow" data-file></div>' +
+      '<div data-vedit></div>' +
       '<div class="grid" data-grid></div>';
     host.appendChild(el);
 
@@ -1653,11 +1760,93 @@ function buildTrackBody (tr) {
           fmt: v => (v >= 0 ? '+' : '') + v.toFixed(0) + ' ¢' });
   }
 
+  buildVoiceEdit(tr);
   el.querySelector('[data-kind]').value = tr.kind;
   paintOpts(el, 'data-lib', tr.lib);
   paintOpts(el, 'data-loop', tr.loopBars);
   tr._shownBpm = undefined;                      // force the readout to repaint
   Midi.paintMapped();
+}
+
+/* ---- voice editor: WAVE / PITCH(CUTOFF) / DECAY / SUS per row ---- */
+const VOICE_DEFS = {
+  drums: [
+    { slot: 'kick', label: 'KICK', pk: 'pitch',  pl: 'PITCH',  pmin: 25,  pmax: 150,  dmin: 0.03,  dmax: 3 },
+    { slot: 'snr',  label: 'SNR',  pk: 'pitch',  pl: 'PITCH',  pmin: 80,  pmax: 500,  dmin: 0.03,  dmax: 2 },
+    { slot: 'ch',   label: 'CH',   pk: 'pitch',  pl: 'PITCH',  pmin: 15,  pmax: 90,   dmin: 0.008, dmax: 1 },
+    { slot: 'oh',   label: 'OH',   pk: 'pitch',  pl: 'PITCH',  pmin: 15,  pmax: 90,   dmin: 0.02,  dmax: 3 }
+  ],
+  chord: [
+    { slot: 'chord', label: 'TONE', pk: 'cutoff', pl: 'CUTOFF', pmin: 200, pmax: 9000, dmin: 0.05, dmax: 6 }
+  ]
+};
+const WAVES = [['auto', 'AUTO'], ['sine', 'SIN'], ['triangle', 'TRI'],
+               ['square', 'SQR'], ['sawtooth', 'SAW']];
+
+function buildVoiceEdit (tr) {
+  const host = trackEl(tr).querySelector('[data-vedit]');
+  host.innerHTML = '';
+  const defs = VOICE_DEFS[tr.kind];
+  if (!defs) return;                             // sample tracks have no synth
+
+  const det = document.createElement('details');
+  det.className = 'vedit';
+  det.open = !!tr._veditOpen;
+  det.ontoggle = () => { tr._veditOpen = det.open; };
+  const sum = document.createElement('summary');
+  sum.textContent = 'VOICE EDIT — 波形 / ピッチ / ディケイ / サスティン';
+  det.appendChild(sum);
+
+  defs.forEach(d => {
+    const p = tr.vp[d.slot];
+    const row = document.createElement('div');
+    row.className = 'vrow';
+    const lb = document.createElement('span');
+    lb.className = 'vlbl'; lb.textContent = d.label;
+    row.appendChild(lb);
+
+    const seg = document.createElement('div');
+    seg.className = 'opts sm';
+    seg.id = 'vw' + tr.idx + d.slot;
+    WAVES.forEach(([v, nm]) => {
+      const b = document.createElement('button');
+      b.dataset.v = v; b.textContent = nm;
+      seg.appendChild(b);
+    });
+    row.appendChild(seg);
+
+    const addK = o => {
+      const dEl = document.createElement('div');
+      dEl.className = 'knob sm';
+      row.appendChild(dEl);
+      const k = new Knob(dEl, o);
+      trackKnobs[tr.idx].push(k);
+      return k;
+    };
+    addK({ label: d.pl, min: d.pmin, max: d.pmax, def: p[d.pk], log: true,
+           id: 'vp' + tr.idx + d.slot + 'P',
+           get: () => tr.vp[d.slot][d.pk],
+           set: v => tr.vp[d.slot][d.pk] = v,
+           fmt: v => v >= 1000 ? (v / 1000).toFixed(2) + 'k' : v.toFixed(0) + ' Hz' });
+    addK({ label: 'DECAY', min: d.dmin, max: d.dmax, def: p.decay, log: true,
+           id: 'vp' + tr.idx + d.slot + 'D',
+           get: () => tr.vp[d.slot].decay,
+           set: v => tr.vp[d.slot].decay = v,
+           fmt: v => v < 0.1 ? (v * 1000).toFixed(0) + ' ms' : v.toFixed(2) + ' s' });
+    addK({ label: 'SUS', min: 0, max: 1, def: p.sus,
+           id: 'vp' + tr.idx + d.slot + 'S',
+           get: () => tr.vp[d.slot].sus,
+           set: v => tr.vp[d.slot].sus = v,
+           fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+
+    det.appendChild(row);
+  });
+  host.appendChild(det);
+  // segInit resolves by id, so wire the wave selectors once attached
+  defs.forEach(d => {
+    segInit('vw' + tr.idx + d.slot,
+      () => tr.vp[d.slot].wave, v => tr.vp[d.slot].wave = v);
+  });
 }
 
 /* A loop-length sample fills the loop exactly: derive its native BPM. */
@@ -1969,6 +2158,7 @@ function saveProject () {
       kind: tr.kind, lib: tr.lib, bpm: tr.bpm, loopBars: tr.loopBars,
       gain: tr.gain, muted: tr.muted, key: tr.key, oct: tr.oct, fine: tr.fine,
       pat: tr.pat.map(r => r.slice(0, 32)),
+      vp: JSON.parse(JSON.stringify(tr.vp)),
       sample: tr.sample ? { name: tr.sample.name, baseBpm: tr.sample.baseBpm } : null
     }))
   };
@@ -1992,6 +2182,11 @@ function loadProject (obj) {
       catchState: null
     });
     tr.pat = d.pat.map(r => r.slice());
+    // older project files predate the voice editor: fall back to defaults
+    const base = defaultVp(d.lib);
+    tr.vp = d.vp
+      ? Object.fromEntries(Object.keys(base).map(k => [k, { ...base[k], ...d.vp[k] }]))
+      : base;
     if (tr.node) tr.node.gain.value = tr.gain;
     if (d.sample && tr.sample) tr.sample.baseBpm = d.sample.baseBpm;
   });

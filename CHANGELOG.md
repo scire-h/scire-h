@@ -3,6 +3,25 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## POLYTEMPO — voice editing
+
+* Every synth voice is now editable per track (VOICE EDIT panel):
+  waveform (AUTO / sine / triangle / square / saw), pitch (cutoff for
+  the chord voice), decay and sustain. AUTO keeps the library's stock
+  shape, so untouched tracks sound as before.
+* Rows became mono voices with choke: a new hit releases the previous
+  one through a dedicated choke gain (no envelope cancellation, no
+  cancelAndHoldAtTime portability issues), closed and open hat choke
+  each other, and one chord hit chokes the previous chord. This is
+  what makes SUSTAIN musical in a step sequencer: a sustained voice
+  holds until its row speaks again (8 s safety cap, released on STOP).
+* Envelopes moved from fixed AD to AD(S): decay approaches
+  sus x peak via setTargetAtTime; sus=0 reproduces the old one-shots.
+* Chord decay is a knob now instead of silently tracking tempo.
+* Edit values survive 808/909 switches, are MIDI-learnable, and are
+  saved in the project JSON (older files load with stock defaults).
+* test_voices.js rewritten for the new contract: 296 assertions total.
+
 ## POLYTEMPO — recorder, BPM glide, Aqua look
 
 * **Recorder**: hi-res capture to WAV (16 / 24 / 32-bit float) or AIFF

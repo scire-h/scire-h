@@ -92,6 +92,16 @@ open hat), a chord voice playing scale degrees I / IV / V / vi over
 KEY + OCTAVE + FINE, or a loaded sample. Libraries can be swapped while
 running — the pattern stays, only the voicing changes.
 
+**Voice editing.** Every synth voice is editable in the track's VOICE
+EDIT panel: waveform (AUTO / sine / triangle / square / saw — AUTO is
+the library's stock shape), pitch (cutoff for the chord voice), decay,
+and sustain. Rows are mono voices: a sustained sound rings until the
+same row hits again (closed and open hat choke each other, as on the
+originals), which is what makes SUSTAIN meaningful in a step
+sequencer — the new hit chokes the old voice through a dedicated gain,
+so no envelope automation is ever cancelled. Edits survive 808↔909
+switches and are saved in the project file.
+
 **Pitch.** Synth tracks are clock-driven, so tempo changes do not move
 their pitch; KEY / OCTAVE / FINE tune them independently. Sample tracks
 are the tape case: `playbackRate = BPM / BASE BPM`, so a catch-up is
@@ -118,8 +128,9 @@ catch, `0` to realign.
 cd tests/web && ./run_all.sh     # or: make test-web
 ```
 
-233 assertions over the timing math, the catch-up/glide state machine,
-the voice library and the file writers. All three suites read the code
+296 assertions over the timing math, the catch-up/glide state machine,
+the voice library (including the waveform/decay/sustain edit layer and
+the choke handles) and the file writers. All three suites read the code
 straight out of `polytempo.html`, so there is no duplicated copy to
 fall out of date: `test_tempo.js` simulates the scheduler against a
 fake clock and checks that phase lock converges to under 3 ms across
