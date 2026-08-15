@@ -15,9 +15,10 @@ scire-h/
 
 A single self-contained HTML page — "the universe too has its mornings
 and its nights" — that simulates the insect chorus of a quiet Japanese
-autumn night as an instrument, and renders it as a weightless cosmology:
-ether smoke, slow inflation, and grains that condense into strange
-tumbling bodies, all in time with the sound.
+autumn night as an instrument, and draws it as falling sand: every
+movement of the waveform pours grains out of the dark onto a plain,
+where they roll to their angle of repose and heap into mountains that
+never stop growing, one under each singing voice.
 
 * Every voice is a **sine carrier with wing-stroke amplitude
   modulation** (real cricket stridulation is nearly pure-tone), so it
@@ -30,7 +31,9 @@ tumbling bodies, all in time with the sound.
 * 気温 (temperature) follows Dolbear's law: cold nights sing slower
   and slightly flatter. 間 (ma) makes the whole field fall silent now
   and then. 地 (ji) is a barely-there continuo drone — two low sines
-  beating slowly, breathing over tens of seconds, drifting a few cents.
+  beating slowly, breathing over tens of seconds, drifting a few cents,
+  with 霞 (noise haze) and 揺 (how far it wanders). 風 (wind) leans the
+  falling sand, so the dunes lean with it.
 * Per species, timing is either 野 (free, natural intervals) or 拍 —
   a TR-808-style 16-step grid with swing (うねり) and per-hit timing
   looseness (ゆらぎ).

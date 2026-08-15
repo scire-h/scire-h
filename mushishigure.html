@@ -1296,33 +1296,70 @@ function loadSaved(){
 }
 
 /* ---------------- the night canvas ----------------
-   Weightless space. A nameless ether drifts through it like smoke;
-   the space itself slowly inflates. While the sound moves, every
-   grain tries to cast a thread toward another grain a little way
-   off — the thread is drawn slowly, takes hold, and tenses like
-   silk — so a complex web knots itself across space, in time with
-   the sound. Threads age, over-stretch, snap; in silence the web
-   stops growing and quietly comes apart. Every grain is the same
-   size at any distance — depth is fog and parallax alone. */
+   Sand falls out of the dark, endlessly, in time with the sound.
+   It lands on the plain, rolls until the slope can hold it, and
+   stays — so mountains rise where the voices sing, and never stop
+   growing. The night wind (風) leans the falling column, so the
+   dunes lean with it. Every grain is the same size wherever it is;
+   depth is the plain's own perspective. */
 const cv = $("#night");
 const cx2 = cv.getContext("2d");
 let anaNode = null, anaBuf = null;
 let W=0, H=0, DPR=1;
 
-/* world: centered at the origin, roughly a sphere of radius ~2 */
-const CAM = 2.6;                  // camera distance
-let free = [];                    // the dust
-let webs = [];                    // silk threads between grains
-let wisps = [];                   // the ether
-let loci = [];                    // where voices sounded recently
-let burst = 0, ampEnv = 0, lastTs = 0, rotY = 0, frameN = 0;
-let blobSprite = null;
+/* camera — fixed, a little above the plain, facing the horizon */
+const CAM = 2.0, CAMY = 0.5;
+let FOC = 500, HY = 400;
 
+/* the plain, as a heightmap */
+const HX = 300, HZ = 150;
+const X0 = -2.6, X1 = 2.6, Z0 = -1.45, Z1 = 1.1;
+const DXC = (X1-X0)/HX, DZC = (Z1-Z0)/HZ;
+const REPOSE = 0.016;               // angle of repose, per cell
+const DH = 0.006;                   // what one grain adds
+let heights = new Float32Array(HX*HZ);
+
+let fall = [];                      // sand still in the air
+let wisps = [];                     // the ether
+let loci = [];                      // where voices sounded recently
+let burst = 0, ampEnv = 0, lastTs = 0, frameN = 0, settledCount = 0;
+let sed = null, sedCtx = null, blobSprite = null;
+
+/* every settled grain is kept, so the plain can be re-drawn sharp
+   when the window changes size */
+const SCAP = 400000;
+const sX = new Float32Array(SCAP), sZ = new Float32Array(SCAP),
+      sH = new Float32Array(SCAP), sC = new Uint8Array(SCAP);
+
+function cellOf(x, z){
+  const ix = clamp(((x - X0)/DXC)|0, 0, HX-1);
+  const iz = clamp(((z - Z0)/DZC)|0, 0, HZ-1);
+  return iz*HX + ix;
+}
+function project(x, y, z){
+  const d = z + CAM;
+  if(d < 0.25) return null;
+  const k = FOC/d;
+  return [ W*0.5 + x*k, HY + (CAMY - y)*k, k, d ];
+}
+
+let rebakeTimer = null;
 function resizeCanvas(){
   DPR = Math.min(2, window.devicePixelRatio||1);
   W = cv.clientWidth; H = cv.clientHeight;
   cv.width = W*DPR; cv.height = H*DPR;
   cx2.setTransform(DPR,0,0,DPR,0,0);
+  FOC = 0.62*Math.min(W, H);
+  HY  = H*0.52;
+  const old = sed;
+  sed = document.createElement("canvas");
+  sed.width = W*DPR; sed.height = H*DPR;
+  sedCtx = sed.getContext("2d");
+  sedCtx.setTransform(DPR,0,0,DPR,0,0);
+  if(old && old.width) sedCtx.drawImage(old, 0, 0, W, H);
+  clearTimeout(rebakeTimer);
+  rebakeTimer = setTimeout(rebakeSand, 300);
+
   if(!blobSprite){
     blobSprite = document.createElement("canvas");
     blobSprite.width = blobSprite.height = 256;
@@ -1335,126 +1372,101 @@ function resizeCanvas(){
     bc.fillRect(0,0,256,256);
   }
   if(wisps.length === 0){
-    for(let i=0;i<34;i++){
+    for(let i=0;i<26;i++){
       wisps.push({
-        x: rand(-1.5,1.5), y: rand(-1.1,1.1), z: rand(-1.5,1.5),
-        r: rand(0.28, 0.72), ph: rand(0, Math.PI*2), sp: rand(0.4, 1.1),
+        x: rand(-1.6,1.6), y: rand(0.2,1.3), z: rand(-0.9,1.1),
+        r: rand(0.30, 0.80), ph: rand(0, Math.PI*2), sp: rand(0.4, 1.1),
       });
     }
   }
 }
 window.addEventListener("resize", resizeCanvas);
 
-/* the ether current — a slow, smoky pseudo-curl field */
+function bakeGrain(x, z, h, c){
+  const p = project(x, h, z);
+  if(!p) return;
+  const a = clamp(0.62*Math.pow(1.9/p[3], 1.3), 0.12, 0.62);
+  sedCtx.fillStyle = `rgba(${c},${c},${c+2},${a})`;
+  sedCtx.fillRect(p[0], p[1], 0.9, 0.9);
+}
+function rebakeSand(){
+  if(!sedCtx) return;
+  sedCtx.clearRect(0, 0, W, H);
+  const n = Math.min(settledCount, SCAP);
+  for(let i=0;i<n;i++) bakeGrain(sX[i], sZ[i], sH[i], sC[i]);
+}
+
+/* the night wind — one direction, turning very slowly */
+let WDx = 1, WDz = 0;
+function updateWindDir(t){
+  const th = t*0.014;
+  WDx = Math.cos(th); WDz = Math.sin(th)*0.5;
+}
 function flowX(x,y,z,t){ return Math.sin(1.7*y + t*0.21) + Math.cos(2.3*z - t*0.17); }
 function flowY(x,y,z,t){ return Math.sin(1.9*z + t*0.16) + Math.cos(2.1*x + t*0.19); }
 function flowZ(x,y,z,t){ return Math.sin(1.6*x - t*0.18) + Math.cos(2.4*y + t*0.15); }
 
-/* projection with a slow drift of the vantage — parallax, no ground */
-function project(x, y, z){
-  const c = Math.cos(rotY), s = Math.sin(rotY);
-  const xr = x*c - z*s, zr = x*s + z*c;
-  const dz = Math.max(0.35, zr + CAM);
-  const k = 0.62*Math.min(W,H)/dz;
-  return [ W*0.5 + xr*k, H*0.5 + y*k, k, dz ];
-}
-
-/* a call marks a place in space and adds pressure */
+/* a call marks the place on the plain the sand will pour onto */
 function addGlow(sp, ind, when, vel, dur){
   const delay = ctx ? Math.max(0, (when - ctx.currentTime)*1000) : 0;
   setTimeout(()=>{
     burst = Math.min(2.2, burst + 0.5*Math.min(1, vel));
     const d = indDist(sp, ind);
     loci.push({
-      x: ind.pan*1.1,
-      y: rand(-0.7, 0.7),
-      z: (d*2 - 1)*1.1,
-      until: performance.now() + Math.max(400, Math.min(dur, 3)*1000),
+      x: clamp(ind.pan*1.25, -1.5, 1.5),
+      z: clamp(lerp(-1.15, 0.95, d), Z0+0.05, Z1-0.05),
+      until: performance.now() + Math.max(500, Math.min(dur, 3)*1000),
     });
     if(loci.length > 24) loci.shift();
   }, delay);
 }
 
-function spawnFree(){
-  if(free.length >= 2600) return;
-  let x, y, z;
-  const active = loci.length && Math.random() < 0.45;
-  if(active){
+function spawnSand(){
+  if(fall.length >= 3200) return;
+  let tx, tz;
+  if(loci.length && Math.random() < 0.92){
     const l = loci[(Math.random()*loci.length)|0];
-    x = l.x + gauss()*0.14; y = l.y + gauss()*0.14; z = l.z + gauss()*0.14;
+    tx = l.x; tz = l.z;
   } else {
-    const rr = Math.pow(Math.random(), 0.6)*1.5;
-    const th = rand(0, Math.PI*2), ph = Math.acos(rand(-1,1));
-    x = rr*Math.sin(ph)*Math.cos(th);
-    y = rr*Math.cos(ph)*0.8;
-    z = rr*Math.sin(ph)*Math.sin(th);
+    tx = rand(-1.4, 1.4); tz = rand(-1.1, 0.95);
   }
-  free.push({
-    x, y, z,
-    vx: gauss()*0.05, vy: gauss()*0.05, vz: gauss()*0.05,
-    c: 192 + Math.random()*44 | 0,
-    links: 0, dead: false,
+  fall.push({
+    x: clamp(tx + gauss()*0.035, X0+0.02, X1-0.02),
+    z: clamp(tz + gauss()*0.035, Z0+0.02, Z1-0.02),
+    h: 1.45 + Math.random()*0.6,
+    vx: gauss()*0.012, vz: gauss()*0.012, vy: -rand(0, 0.05),
+    c: 196 + Math.random()*44 | 0,
   });
 }
 
-/* ---- the night wind: one direction through all of space ----
-   it turns very slowly; every thread is cast exactly along it,
-   so the lines stand parallel, as if the wind combed the dust */
-let WDx=1, WDy=0, WDz=0, WUx=0, WUy=0, WUz=1, WVx=0, WVy=1, WVz=0;
-function updateWindDir(t){
-  const th = t*0.012, ph = 0.35*Math.sin(t*0.0073);
-  const cp = Math.cos(ph);
-  WDx = cp*Math.cos(th); WDy = Math.sin(ph); WDz = cp*Math.sin(th);
-  // U ⟂ D (horizontal-ish), V = D × U
-  const ul = Math.hypot(WDz, WDx) || 1;
-  WUx = WDz/ul; WUy = 0; WUz = -WDx/ul;
-  WVx = WDy*WUz - WDz*WUy;
-  WVy = WDz*WUx - WDx*WUz;
-  WVz = WDx*WUy - WDy*WUx;
-}
-
-/* cast threads: partners are sought straight up/down the wind line —
-   nearly zero sideways offset, a fair way off along the wind */
-function castStrands(nowMs, attempts){
-  if(webs.length >= 1500 || free.length < 8) return;
-  const cell = 0.05, map = new Map();
-  const jog = Math.random()*cell;
-  for(const g of free){
-    const u = g.x*WUx + g.y*WUy + g.z*WUz;
-    const v = g.x*WVx + g.y*WVy + g.z*WVz;
-    const w = g.x*WDx + g.y*WDy + g.z*WDz;
-    g._u = u; g._v = v; g._w = w;
-    const key = (((u+jog)/cell)|0)*73856093 ^ (((v+jog)/cell)|0)*19349663;
-    let arr = map.get(key);
-    if(!arr){ arr = []; map.set(key, arr); }
-    if(arr.length < 24) arr.push(g);
-  }
-  while(attempts-- > 0){
-    if(webs.length >= 1500) return;
-    const a = free[(Math.random()*free.length)|0];
-    if(!a || a.links >= 5) continue;
-    const key = (((a._u+jog)/cell)|0)*73856093 ^ (((a._v+jog)/cell)|0)*19349663;
-    const arr = map.get(key);
-    if(!arr) continue;
-    for(const b of arr){
-      if(b === a || b.links >= 5) continue;
-      const du = b._u-a._u, dv = b._v-a._v;
-      if(du*du + dv*dv > 0.00035) continue;          // truly parallel
-      const dw = Math.abs(b._w - a._w);
-      if(dw < 0.06 || dw > 0.35) continue;           // a little far away
-      const grow = rand(400, 1400);
-      webs.push({
-        a, b, born: nowMs, grow,
-        until: nowMs + grow + rand(6000, 16000),
-        rest: dw*0.8,
-      });
-      a.links++; b.links++;
-      break;
+/* land: roll downhill while the slope is steeper than sand can hold,
+   then rest there and raise the plain */
+function settleSand(s){
+  let ci = cellOf(s.x, s.z);
+  for(let step=0; step<26; step++){
+    const ix = ci % HX, iz = (ci / HX) | 0;
+    let best = ci, bh = heights[ci];
+    for(let n=0;n<4;n++){
+      const nx = ix + (n===0?1:n===1?-1:0);
+      const nz = iz + (n===2?1:n===3?-1:0);
+      if(nx<0||nx>=HX||nz<0||nz>=HZ) continue;
+      const ni = nz*HX + nx;
+      if(heights[ni] < bh - REPOSE){ bh = heights[ni]; best = ni; }
     }
+    if(best === ci) break;
+    ci = best;
   }
-}
-function releaseStrand(w){
-  w.a.links--; w.b.links--;
+  const ix = ci % HX, iz = (ci / HX) | 0;
+  const rx = X0 + (ix + 0.5)*DXC + rand(-0.4, 0.4)*DXC;
+  const rz = Z0 + (iz + 0.5)*DZC + rand(-0.4, 0.4)*DZC;
+  heights[ci] += DH;
+  const rh = heights[ci];
+  if(settledCount < SCAP){
+    sX[settledCount] = rx; sZ[settledCount] = rz;
+    sH[settledCount] = rh; sC[settledCount] = s.c;
+  }
+  settledCount++;
+  bakeGrain(rx, rz, rh, s.c);
 }
 
 function draw(ts){
@@ -1473,89 +1485,36 @@ function draw(ts){
     }
   }
   ampEnv = Math.max(amp, ampEnv*Math.pow(0.3, dt));
-
-  rotY += dt*0.032;                                 // the vantage drifts
   updateWindDir(t);
-  const HBL = 0.006 + ampEnv*0.05;                  // inflation, sound-paced
-  // 風 governs how much the dust is allowed to move at all
-  const stir = (0.02 + S.wind*1.35) * (0.25 + ampEnv*1.3);
-  const adv  = S.wind * 0.09 * (0.4 + ampEnv);      // carried down the wind
+  frameN++;
 
-  // matter is born of the waveform, and only of the waveform
+  // sand is born of the waveform, and of nothing else
   burst *= Math.pow(0.25, dt);
   loci = loci.filter(l => l.until > nowMs);
   if(amp > 0.0035){
-    let k = Math.min(22, Math.round((amp - 0.002) * 320 * (0.45 + burst)));
-    while(k-- > 0) spawnFree();
-    // and every grain wants to cast silk while the air moves
-    const n = Math.min(34, Math.round(amp * 560 * (0.5 + burst)));
-    if(n > 0) castStrands(nowMs, n);
+    let k = Math.min(26, Math.round((amp - 0.002) * 380 * (0.45 + burst)));
+    while(k-- > 0) spawnSand();
   }
 
-  // ---- threads: finish growing, tense like silk, age, snap ----
-  for(let i=webs.length-1; i>=0; i--){
-    const w = webs[i];
-    if(w.a.dead || w.b.dead || nowMs > w.until){
-      releaseStrand(w);
-      webs[i] = webs[webs.length-1]; webs.pop(); continue;
-    }
-    const dx = w.b.x-w.a.x, dy = w.b.y-w.a.y, dz = w.b.z-w.a.z;
-    const d = Math.hypot(dx, dy, dz);
-    if(d > 0.55){                                   // over-stretched: snaps
-      releaseStrand(w);
-      webs[i] = webs[webs.length-1]; webs.pop(); continue;
-    }
-    if(nowMs - w.born >= w.grow && d > w.rest){
-      // silk only pulls, never pushes
-      const f = 0.55*(d - w.rest)/Math.max(d, 1e-6)*dt;
-      w.a.vx += dx*f; w.a.vy += dy*f; w.a.vz += dz*f;
-      w.b.vx -= dx*f; w.b.vy -= dy*f; w.b.vz -= dz*f;
-    }
-  }
-
-  // ---- short-range separation: a web, never a lump ----
-  frameN++;
-  {
-    const cell = 0.05, map = new Map();
-    for(let i=0;i<free.length;i++){
-      const g = free[i];
-      const key = ((g.x/cell)|0)*73856093 ^ ((g.y/cell)|0)*19349663 ^ ((g.z/cell)|0)*83492791;
-      let arr = map.get(key);
-      if(!arr){ arr = []; map.set(key, arr); }
-      if(arr.length < 8) arr.push(g);
-    }
-    for(const arr of map.values()){
-      for(let a=0;a<arr.length;a++) for(let b=a+1;b<arr.length;b++){
-        const g = arr[a], h = arr[b];
-        const dx = g.x-h.x, dy = g.y-h.y, dz = g.z-h.z;
-        const d2 = dx*dx+dy*dy+dz*dz;
-        if(d2 < 0.0009 && d2 > 1e-8){
-          const f = 1.6*dt/Math.sqrt(d2);
-          g.vx += dx*f; g.vy += dy*f; g.vz += dz*f;
-          h.vx -= dx*f; h.vy -= dy*f; h.vz -= dz*f;
-        }
-      }
-    }
-  }
-
-  // ---- integrate: ether, inflation, dissipation ----
-  for(let i=free.length-1; i>=0; i--){
-    const g = free[i];
+  // ---- falling ----
+  const gust = S.wind * (0.22 + ampEnv*0.5);
+  for(let i=fall.length-1; i>=0; i--){
+    const s = fall[i];
+    s.vy -= 1.15*dt;
+    s.vx += (WDx*gust - s.vx)*0.7*dt;
+    s.vz += (WDz*gust - s.vz)*0.7*dt;
     if(((i + frameN) & 1) === 0){
-      g.vx += (flowX(g.x,g.y,g.z,t)*stir - g.vx)*1.0*dt;
-      g.vy += (flowY(g.x,g.y,g.z,t)*stir - g.vy)*1.0*dt;
-      g.vz += (flowZ(g.x,g.y,g.z,t)*stir - g.vz)*1.0*dt;
+      const sw = S.wind*0.14;
+      s.vx += flowX(s.x, s.h, s.z, t)*sw*dt;
+      s.vz += flowZ(s.x, s.h, s.z, t)*sw*dt;
     }
-    // and the wind carries everything gently along its one line
-    g.vx += WDx*adv*dt; g.vy += WDy*adv*dt; g.vz += WDz*adv*dt;
-    const sp2 = g.vx*g.vx + g.vy*g.vy + g.vz*g.vz;
-    if(sp2 > 0.36){ const s = 0.6/Math.sqrt(sp2); g.vx*=s; g.vy*=s; g.vz*=s; }
-    g.x += g.vx*dt + g.x*HBL*dt;
-    g.y += g.vy*dt + g.y*HBL*dt;
-    g.z += g.vz*dt + g.z*HBL*dt;
-    if(g.x*g.x + g.y*g.y + g.z*g.z > 5.3){          // dispersed, gone
-      g.dead = true;
-      free[i] = free[free.length-1]; free.pop();
+    s.x += s.vx*dt; s.z += s.vz*dt; s.h += s.vy*dt;
+    if(s.x < X0 || s.x > X1 || s.z < Z0 || s.z > Z1){
+      fall[i] = fall[fall.length-1]; fall.pop(); continue;
+    }
+    if(s.h <= heights[cellOf(s.x, s.z)]){
+      settleSand(s);
+      fall[i] = fall[fall.length-1]; fall.pop();
     }
   }
 
@@ -1563,62 +1522,45 @@ function draw(ts){
   cx2.fillStyle = "#000";
   cx2.fillRect(0,0,W,H);
 
-  // the ether — smoke, thick with 地, stirred by the sound
-  const etherA = 0.045*(0.35 + S.drone*0.65)*(0.6 + ampEnv*1.8);
+  // the ether — smoke above the plain, thick with 地
+  const etherA = 0.04*(0.35 + S.drone*0.65)*(0.6 + ampEnv*1.6);
   cx2.globalCompositeOperation = "lighter";
   for(const wp of wisps){
-    wp.x += flowX(wp.x,wp.y,wp.z,t)*stir*0.12*wp.sp*dt + wp.x*HBL*dt*0.5;
-    wp.y += flowY(wp.x,wp.y,wp.z,t)*stir*0.12*wp.sp*dt + wp.y*HBL*dt*0.5;
-    wp.z += flowZ(wp.x,wp.y,wp.z,t)*stir*0.12*wp.sp*dt + wp.z*HBL*dt*0.5;
-    if(wp.x*wp.x + wp.y*wp.y + wp.z*wp.z > 4.6){
-      wp.x = rand(-0.6,0.6); wp.y = rand(-0.5,0.5); wp.z = rand(-0.6,0.6);
+    const sw = 0.05 + S.wind*0.10;
+    wp.x += (flowX(wp.x,wp.y,wp.z,t)*sw + WDx*S.wind*0.05)*wp.sp*dt;
+    wp.y += flowY(wp.x,wp.y,wp.z,t)*sw*0.4*wp.sp*dt;
+    wp.z += (flowZ(wp.x,wp.y,wp.z,t)*sw + WDz*S.wind*0.05)*wp.sp*dt;
+    if(wp.x < -2.2 || wp.x > 2.2 || wp.z < -1.2 || wp.z > 1.4 ||
+       wp.y < 0.05 || wp.y > 1.8){
+      wp.x = rand(-1.6,1.6); wp.y = rand(0.2,1.3); wp.z = rand(-0.9,1.1);
     }
-    const [px, py, k, dz] = project(wp.x, wp.y, wp.z);
-    const R = wp.r*(1 + 0.18*Math.sin(t*0.5*wp.sp + wp.ph))*k;
+    const p = project(wp.x, wp.y, wp.z);
+    if(!p) continue;
+    const R = wp.r*(1 + 0.18*Math.sin(t*0.5*wp.sp + wp.ph))*p[2];
     if(R < 4) continue;
-    cx2.globalAlpha = etherA*clamp(2.2/dz, 0.3, 1);
-    cx2.drawImage(blobSprite, px-R, py-R, R*2, R*2);
+    cx2.globalAlpha = etherA*clamp(2.2/p[3], 0.3, 1);
+    cx2.drawImage(blobSprite, p[0]-R, p[1]-R, R*2, R*2);
   }
   cx2.globalAlpha = 1;
   cx2.globalCompositeOperation = "source-over";
 
-  // the lines — all of them at exactly one angle on screen: the
-  // wind's own angle, turning slowly as the wind turns
-  {
-    const cR = Math.cos(rotY), sR = Math.sin(rotY);
-    let ux = WDx*cR - WDz*sR, uy = WDy;
-    const ul = Math.hypot(ux, uy);
-    if(ul > 1e-4){ ux/=ul; uy/=ul; }
-    cx2.lineWidth = 0.5;
-    for(const w of webs){
-      const p = Math.min(1, (nowMs - w.born)/w.grow);
-      const e = 1 - Math.pow(1-p, 3);               // cast quickly, land softly
-      const [x1, y1, k1, dz1] = project(w.a.x, w.a.y, w.a.z);
-      const [x2, y2, k2, dz2] = project(w.b.x, w.b.y, w.b.z);
-      // only the component along the wind's screen angle survives —
-      // every line is therefore perfectly parallel
-      const L = (x2-x1)*ux + (y2-y1)*uy;
-      const tx = x1 + ux*L*e, ty = y1 + uy*L*e;
-      const fade = clamp((w.until - nowMs)/900, 0, 1);
-      const a = clamp(0.36*Math.pow(1.5/((dz1+dz2)/2), 1.6), 0.02, 0.36)
-                * (0.45 + ampEnv*1.5) * fade * (0.45 + 0.55*p);
-      cx2.strokeStyle = `rgba(216,217,219,${a})`;
-      cx2.beginPath();
-      cx2.moveTo(x1, y1); cx2.lineTo(tx, ty);
-      cx2.stroke();
-      if(p < 1){                                    // the reaching tip
-        cx2.fillStyle = `rgba(238,239,240,${Math.min(0.8, a*2.6)})`;
-        cx2.fillRect(tx, ty, 1, 1);
-      }
-    }
-  }
+  // the horizon — breathes with 地
+  const hy = Math.round(HY) + 0.5;
+  const ha = 0.05 + 0.06*S.drone*(0.5 + 0.5*Math.sin(nowMs*0.00021));
+  cx2.strokeStyle = `rgba(224,225,226,${ha})`;
+  cx2.lineWidth = 1;
+  cx2.beginPath(); cx2.moveTo(0,hy); cx2.lineTo(W,hy); cx2.stroke();
 
-  // the dust — the same size at any depth
-  for(const g of free){
-    const [px, py, k, dz] = project(g.x, g.y, g.z);
-    const a = clamp(0.8*Math.pow(1.45/dz, 1.7), 0.05, 0.8);
-    cx2.fillStyle = `rgba(${g.c},${g.c},${g.c+2},${a})`;
-    cx2.fillRect(px, py, 0.8, 0.8);
+  // everything that has already fallen
+  if(sed) cx2.drawImage(sed, 0, 0, W, H);
+
+  // and what is still in the air
+  for(const s of fall){
+    const p = project(s.x, s.h, s.z);
+    if(!p) continue;
+    const a = clamp(0.85*Math.pow(1.8/p[3], 1.3), 0.14, 0.85);
+    cx2.fillStyle = `rgba(${s.c},${s.c},${s.c+2},${a})`;
+    cx2.fillRect(p[0], p[1], 0.9, 0.9);
   }
 }
 
