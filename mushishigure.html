@@ -1,0 +1,1575 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#101112" />
+<title>宇宙には朝も夜もある — in universo et mane et nox sunt</title>
+<style>
+  :root{
+    --bg:    #000000;
+    --line:  #26282a;   /* hairlines */
+    --line2: #37393c;
+    --ink:   #e3e3e3;
+    --dim:   #9a9da1;
+    --faint: #606367;
+    --hi:    #f5f5f3;   /* the only "on" — white */
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Helvetica Neue", "Neue Haas Grotesk Text", Helvetica, Arial,
+                 "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+    font-weight: 300;
+    font-size: 12px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+  button{ font-weight: 300; }
+  #app{
+    max-width: 840px;
+    margin: 0 auto;
+    padding: 10px 20px 90px;
+  }
+
+  /* ---------- title — one thought, four tongues ----------
+     it withdraws completely while the universe is running */
+  header{
+    position: absolute; top: 46px; left: 48px;
+    z-index: 2;
+    pointer-events: none;
+    transition: opacity 2s ease;
+  }
+  #scene.running header{ opacity: 0; }
+  header .t-ja{
+    font-size: 13px; font-weight: 400;
+    letter-spacing: 0.5em;
+    color: var(--ink);
+  }
+  header .t-sub{
+    margin-top: 12px;
+    font-size: 8px; letter-spacing: 0.34em;
+    color: var(--faint);
+    line-height: 2.3;
+  }
+
+  /* ---------- night scene — the work itself, full bleed ---------- */
+  #scene{
+    position: relative;
+    height: 100vh;
+    height: 100svh;
+    overflow: hidden;
+    background: #000;
+  }
+  #scene canvas{ display: block; width: 100%; height: 100%; }
+  #scene:fullscreen{ height: 100%; }
+  /* the switch is one grain, resting at the exact centre */
+  #seedBtn{
+    position: absolute; top: 50%; left: 50%;
+    width: 44px; height: 44px;
+    margin: -22px 0 0 -22px;
+    padding: 0;
+    background: none; border: 0; cursor: pointer;
+    z-index: 3;
+  }
+  #seedBtn::after{
+    content: "";
+    position: absolute; top: 50%; left: 50%;
+    width: 2px; height: 2px;
+    margin: -1px 0 0 -1px;
+    background: var(--hi);
+    animation: seedpulse 4.5s ease-in-out infinite;
+    transition: opacity 2.5s ease;
+  }
+  #scene.running #seedBtn::after{ animation: none; opacity: 0; }
+  @keyframes seedpulse{ 0%,100%{ opacity: 0.3; } 50%{ opacity: 1; } }
+  /* fullscreen — a small empty frame; gone while running */
+  #fsBtn{
+    position: absolute; top: 36px; right: 40px;
+    width: 28px; height: 28px;
+    padding: 0;
+    background: none;
+    border: 1px solid var(--line2);
+    cursor: pointer;
+    z-index: 2;
+    transition: opacity 1.5s ease, border-color 0.3s;
+  }
+  #fsBtn::after{
+    content: ""; position: absolute; inset: 8px;
+    border: 1px solid var(--dim);
+  }
+  #fsBtn:hover{ border-color: var(--dim); }
+  #scene.running #fsBtn{ opacity: 0; pointer-events: none; }
+  #hint{
+    position: absolute; left: 0; right: 0; bottom: 34px;
+    text-align: center;
+    font-size: 9.5px; letter-spacing: 0.6em; text-indent: 0.6em;
+    color: var(--dim);
+    transition: opacity 2.5s ease;
+    pointer-events: none;
+  }
+  #scene.running #hint, #hint.gone{ opacity: 0; }
+
+  /* ---------- species rows ---------- */
+  #speciesList{ margin-top: 54px; }
+  .sp-row{
+    border-top: 1px solid var(--line);
+    padding: 17px 2px;
+    transition: opacity 0.6s ease;
+  }
+  .sp-row:last-child{ border-bottom: 1px solid var(--line); }
+  .sp-row.silent{ opacity: 0.34; }
+  .sp-main{
+    display: flex; align-items: center; gap: 18px;
+    flex-wrap: wrap;
+  }
+  .sp-name{ width: 120px; flex-shrink: 0; }
+  .sp-name .kanji{
+    font-size: 14px; font-weight: 400;
+    letter-spacing: 0.38em;
+    color: var(--ink);
+  }
+  .sp-name .yomi{
+    font-size: 8px; letter-spacing: 0.32em;
+    color: var(--faint);
+    margin-top: 2px;
+  }
+  .sp-call{
+    width: 110px; flex-shrink: 0;
+    font-size: 9px; letter-spacing: 0.2em;
+    color: var(--dim);
+  }
+  /* population — hairline circles, tap n-th to set count */
+  .pop{
+    display: flex; gap: 9px; align-items: center;
+    flex-shrink: 0;
+    padding: 6px 2px;
+    cursor: pointer;
+  }
+  .pop .p{
+    width: 8px; height: 8px; border-radius: 50%;
+    border: 1px solid var(--faint);
+    background: transparent;
+    transition: background 0.35s, border-color 0.35s;
+  }
+  .pop .p.on{
+    background: var(--hi);
+    border-color: var(--hi);
+  }
+  .sp-knobs{ display: flex; gap: 14px; align-items: flex-start; }
+  .sp-spacer{ flex: 1; }
+  /* mode toggle 野 / 拍 — words, not switches */
+  .mode{
+    display: flex; gap: 16px;
+    flex-shrink: 0;
+  }
+  .mode button{
+    background: none; border: 0;
+    color: var(--faint);
+    font: inherit; font-size: 12px;
+    letter-spacing: 0.1em;
+    padding: 2px 0 3px;
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: color 0.3s, border-color 0.3s;
+  }
+  .mode button.on{
+    color: var(--hi);
+    border-bottom-color: var(--hi);
+  }
+  /* 16-step row */
+  .sp-steps{
+    display: none;
+    margin-top: 14px;
+    padding-left: 2px;
+    gap: 9px;
+    align-items: center;
+  }
+  .sp-row.grid .sp-steps{ display: flex; flex-wrap: wrap; }
+  .step{
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    border: 1px solid var(--line2);
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    position: relative;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .step:nth-child(4n+1){ margin-left: 12px; }
+  .step:first-child{ margin-left: 0; }
+  .step.on{ background: var(--hi); border-color: var(--hi); }
+  .step.soft{ border-color: var(--dim); }
+  .step.soft::after{
+    content:""; position:absolute; inset: 3.5px;
+    border-radius: 50%;
+    background: var(--dim);
+  }
+  .step.cur{ box-shadow: 0 0 0 2px rgba(236,236,234,0.22); }
+
+  /* ---------- knobs ---------- */
+  .knob{
+    display: flex; flex-direction: column; align-items: center;
+    width: 44px;
+    position: relative;
+  }
+  .knob svg{
+    width: 32px; height: 32px; display: block;
+    touch-action: none;
+    cursor: ns-resize;
+  }
+  .knob .track{ fill: none; stroke: var(--line2); stroke-width: 1; }
+  .knob .fill { fill: none; stroke: var(--dim); stroke-width: 1; }
+  .knob .ptr  { stroke: var(--ink); stroke-width: 1.2; stroke-linecap: butt; }
+  .knob.active .fill{ stroke: var(--hi); }
+  .knob .lbl{
+    margin-top: 5px;
+    font-size: 8.5px; letter-spacing: 0.3em; text-indent: 0.3em;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  .knob .pop-v{
+    position: absolute; top: -24px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    border: 1px solid var(--line2);
+    color: var(--hi);
+    font-size: 9.5px; letter-spacing: 0.12em;
+    padding: 2px 9px;
+    white-space: nowrap;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.12s;
+    z-index: 10;
+  }
+  .knob.active .pop-v{ opacity: 1; }
+
+  /* ---------- global sections ---------- */
+  #globals{
+    margin-top: 58px;
+    display: flex;
+    gap: 56px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .g-group{
+    display: flex; gap: 16px;
+    align-items: flex-start;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    position: relative;
+    min-width: 120px;
+  }
+  .g-group .g-title{
+    position: absolute; top: -20px; left: 0;
+    font-size: 8.5px; letter-spacing: 0.5em;
+    color: var(--faint);
+  }
+  .g-group .knob{ width: 50px; }
+  .g-group .knob svg{ width: 36px; height: 36px; }
+
+  footer{
+    margin-top: 64px;
+    font-size: 8.5px; letter-spacing: 0.32em;
+    color: var(--faint);
+    text-align: center;
+  }
+
+  @media (max-width: 640px){
+    .sp-call{ display: none; }
+    .sp-name{ width: 96px; }
+    .sp-name .kanji{ font-size: 13px; }
+    #fsBtn{ top: 22px; right: 22px; width: 24px; height: 24px; }
+    #fsBtn::after{ inset: 7px; }
+    header{ top: 30px; left: 26px; }
+    header .t-ja{ font-size: 12px; letter-spacing: 0.4em; }
+    header .t-sub{ font-size: 7.5px; }
+    #globals{ gap: 34px; row-gap: 44px; }
+    .g-group{ gap: 8px; min-width: 0; }
+    .g-group .knob{ width: 44px; }
+    .sp-main{ gap: 12px; }
+    .sp-knobs{ gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div id="scene">
+  <canvas id="night"></canvas>
+  <header>
+    <div class="t-ja">宇宙には朝も夜もある</div>
+    <div class="t-sub">
+      <div>THE UNIVERSE TOO HAS ITS MORNINGS AND ITS NIGHTS</div>
+      <div>IN UNIVERSO ET MANE ET NOX SUNT</div>
+      <div>宇宙亦有朝暮</div>
+    </div>
+  </header>
+  <button id="seedBtn" aria-label="start / stop"></button>
+  <button id="fsBtn" aria-label="fullscreen"></button>
+  <div id="hint">中心の粒に触れる</div>
+</div>
+
+<div id="app">
+
+  <section id="speciesList"></section>
+
+  <section id="globals">
+    <div class="g-group" id="gNight">
+      <span class="g-title">夜　気</span>
+    </div>
+    <div class="g-group" id="gDrone">
+      <span class="g-title">地</span>
+    </div>
+    <div class="g-group" id="gBeat">
+      <span class="g-title">拍</span>
+    </div>
+    <div class="g-group" id="gOut">
+      <span class="g-title">出</span>
+    </div>
+  </section>
+
+  <footer>空白鍵で開始と停止 · fか二回打で全画面 · 「野」は自然の間合い · 「拍」は十六歩の刻み</footer>
+</div>
+
+<script>
+/* =====================================================================
+   虫時雨 MUSHI-SHIGURE — a quiet autumn-night field, as an instrument.
+
+   Design notes:
+   · every voice is a sine carrier with wing-stroke AM (real cricket
+     stridulation is nearly pure-tone) — no noise-burst "static"
+   · pitch is alive: per-individual Ornstein–Uhlenbeck drift, onset
+     glide inside each ring, and a slow sub-Hz waver
+   · individuals are persistent characters: own detune, own pace, own
+     place in the garden, occasional long rests, call-and-response
+   · 気温 (temperature) follows Dolbear's law — cold nights are slower
+     and slightly flatter
+   · 間 (ma) — sometimes the whole field falls silent, then returns
+   · per-species 野 (free) / 拍 (16-step grid, swing + ゆらぎ) timing
+   ===================================================================== */
+"use strict";
+
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b)=> v<a?a:v>b?b:v;
+const lerp  = (a,b,t)=> a+(b-a)*t;
+const rand  = (a,b)=> a+Math.random()*(b-a);
+function gauss(){
+  let u=0,v=0;
+  while(!u) u=Math.random();
+  while(!v) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+
+/* ---------------- species definitions ---------------- */
+/* interval = mean seconds between phrases per individual (at 19°C) */
+const SPECIES = [
+  { id:"suzu", kanji:"鈴虫", yomi:"すずむし", call:"リーン、リーン",
+    hue: 42, baseFreq: 4300, interval: 7.5, drift: 0.006,
+    pop: 2, vol: 0.62, pitch: 1.0, dist: 0.35 },
+  { id:"matsu", kanji:"松虫", yomi:"まつむし", call:"チンチロリン",
+    hue: 52, baseFreq: 5200, interval: 11, drift: 0.007,
+    pop: 1, vol: 0.5, pitch: 1.0, dist: 0.45 },
+  { id:"korogi", kanji:"蟋蟀", yomi:"こおろぎ", call:"コロコロリー",
+    hue: 30, baseFreq: 1750, interval: 9, drift: 0.008,
+    pop: 2, vol: 0.6, pitch: 1.0, dist: 0.25 },
+  { id:"kane", kanji:"鉦叩", yomi:"かねたたき", call:"チン、チン、チン",
+    hue: 58, baseFreq: 5900, interval: 14, drift: 0.005,
+    pop: 1, vol: 0.42, pitch: 1.0, dist: 0.55 },
+  { id:"umaoi", kanji:"馬追", yomi:"うまおい", call:"スイーッチョン",
+    hue: 48, baseFreq: 5400, interval: 17, drift: 0.009,
+    pop: 1, vol: 0.44, pitch: 1.0, dist: 0.4 },
+  { id:"higu", kanji:"遠蜩", yomi:"とおひぐらし", call:"カナカナカナ…",
+    hue: 20, baseFreq: 3050, interval: 34, drift: 0.006,
+    pop: 0, vol: 0.5, pitch: 1.0, dist: 0.8 },
+];
+const MAXPOP = 4;
+
+/* ---------------- global state ---------------- */
+const S = {
+  running: false,
+  temp: 19,          // 気温 °C  (14–26)
+  drone: 0.25,       // 地 — the continuo under the field
+  wind: 0.35,        // 風 — how strongly the night wind moves the dust
+  droneNoise: 0.25,  // 霞 — haze of noise inside the drone
+  droneWobble: 0.35, // 揺 — how far the drone is allowed to wander
+  dew: 0.5,          // 露 — reverb depth
+  ma: 0.5,           // 間 — hush frequency (0 = never)
+  bpm: 72, swing: 0.12, yuragi: 0.5,
+  masterVol: 0.8,
+  step: 0, stepTime: null,
+  nextHush: Infinity, hushUntil: 0,
+  droneMoveAt: 0,
+};
+function tempRate(){ return lerp(0.5, 1.45, (S.temp-14)/12); }   // Dolbear-ish
+function tempPitch(){ return lerp(0.955, 1.045, (S.temp-14)/12); }
+
+/* ---------------- audio graph ---------------- */
+let ctx=null, insectBus, fieldGain, mixBus, shaper,
+    dryGain, revBus, conv, revReturn, comp, masterGain;
+
+function initAudio(){
+  if(ctx) return;
+  ctx = new (window.AudioContext||window.webkitAudioContext)({ latencyHint:"playback" });
+
+  insectBus = ctx.createGain();
+  fieldGain = ctx.createGain();               // 間 (hush) rides here
+  insectBus.connect(fieldGain);
+
+  mixBus = ctx.createGain();
+  fieldGain.connect(mixBus);
+
+  // gentle analog-ish saturation
+  shaper = ctx.createWaveShaper();
+  const curve = new Float32Array(1024);
+  for(let i=0;i<1024;i++){
+    const x = i/511.5 - 1;
+    curve[i] = Math.tanh(1.4*x)/Math.tanh(1.4);
+  }
+  shaper.curve = curve;
+  shaper.oversample = "2x";
+  mixBus.connect(shaper);
+
+  // soften the very top — night air absorbs it
+  const airLPF = ctx.createBiquadFilter();
+  airLPF.type = "lowpass"; airLPF.frequency.value = 12500; airLPF.Q.value = 0.5;
+  shaper.connect(airLPF);
+
+  dryGain = ctx.createGain();
+  airLPF.connect(dryGain);
+
+  revBus = ctx.createGain();
+  conv = ctx.createConvolver();
+  conv.buffer = makeIR(3.2);
+  revReturn = ctx.createGain();
+  revBus.connect(conv).connect(revReturn);
+
+  comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -26; comp.knee.value = 18;
+  comp.ratio.value = 2.5; comp.attack.value = 0.02; comp.release.value = 0.45;
+  dryGain.connect(comp);
+  revReturn.connect(comp);
+
+  masterGain = ctx.createGain();
+  masterGain.gain.value = 0;
+  comp.connect(masterGain).connect(ctx.destination);
+
+  anaNode = ctx.createAnalyser();
+  anaNode.fftSize = 1024;
+  anaNode.smoothingTimeConstant = 0;
+  masterGain.connect(anaNode);
+  anaBuf = new Float32Array(anaNode.fftSize);
+
+  buildDrone();
+  for(const sp of SPECIES) buildIndividuals(sp);
+  applyGlobals();
+}
+
+/* dark exponential-decay IR, brightness dying over the tail */
+function makeIR(seconds){
+  const sr = ctx.sampleRate, len = Math.floor(sr*seconds);
+  const buf = ctx.createBuffer(2, len, sr);
+  for(let ch=0; ch<2; ch++){
+    const d = buf.getChannelData(ch);
+    let lp = 0;
+    for(let i=0;i<len;i++){
+      const t = i/len;
+      const a = Math.pow(1-t, 2.4);
+      // one-pole lowpass whose coefficient darkens along the tail
+      const k = lerp(0.25, 0.02, t);
+      lp += k * ((Math.random()*2-1) - lp);
+      d[i] = lp * a;
+    }
+  }
+  return buf;
+}
+
+/* ---------------- 地 — the continuo drone ----------------
+   Two low sines a hair apart (a slow beat, ~0.4 Hz), a soft octave
+   and a slightly flat twelfth, plus 霞 — a haze of dark noise folded
+   into the same body. 揺 decides how far and how restlessly the whole
+   thing is allowed to wander. */
+let droneGain, droneOscs = [], droneWalk = 0, droneF0 = 73.4,  // D2
+    droneNoiseGain, droneNoiseLPF, noiseBuf = null;
+function getNoiseBuffer(){
+  if(noiseBuf) return noiseBuf;
+  const sr = ctx.sampleRate, len = sr*4;
+  noiseBuf = ctx.createBuffer(1, len, sr);
+  const d = noiseBuf.getChannelData(0);
+  let b0=0,b1=0,b2=0;
+  for(let i=0;i<len;i++){ // pink-ish
+    const w = Math.random()*2-1;
+    b0 = 0.997*b0 + w*0.029591;
+    b1 = 0.985*b1 + w*0.032534;
+    b2 = 0.950*b2 + w*0.048056;
+    d[i] = (b0+b1+b2+w*0.05)*3.2;
+  }
+  return noiseBuf;
+}
+function buildDrone(){
+  const lpf = ctx.createBiquadFilter();
+  lpf.type = "lowpass"; lpf.frequency.value = 280; lpf.Q.value = 0.3;
+  droneGain = ctx.createGain(); droneGain.gain.value = 0;
+  lpf.connect(droneGain).connect(mixBus);
+  const wet = ctx.createGain(); wet.gain.value = 0.55;
+  droneGain.connect(wet).connect(revBus);
+
+  const parts = [
+    { mul: 1.0,   g: 1.0  },
+    { mul: 1.006, g: 0.9  },   // beating partner
+    { mul: 2.0,   g: 0.32 },
+    { mul: 2.993, g: 0.10 },   // slightly flat twelfth
+  ];
+  droneOscs = [];
+  for(const p of parts){
+    const o = ctx.createOscillator(); o.type = "sine";
+    o.frequency.value = droneF0 * p.mul;
+    const g = ctx.createGain(); g.gain.value = p.g;
+    o.connect(g).connect(lpf);
+    o.start();
+    droneOscs.push({ o, mul: p.mul });
+  }
+
+  // 霞 — noise folded into the drone's own body (rides 量 as well)
+  const nSrc = ctx.createBufferSource();
+  nSrc.buffer = getNoiseBuffer(); nSrc.loop = true;
+  droneNoiseLPF = ctx.createBiquadFilter();
+  droneNoiseLPF.type = "lowpass";
+  droneNoiseLPF.frequency.value = 520; droneNoiseLPF.Q.value = 0.4;
+  droneNoiseGain = ctx.createGain(); droneNoiseGain.gain.value = 0;
+  nSrc.connect(droneNoiseLPF).connect(droneNoiseGain).connect(lpf);
+  nSrc.start();
+}
+function updateDrone(now){
+  if(now < S.droneMoveAt) return;
+  const wob = S.droneWobble;
+  S.droneMoveAt = now + rand(6, 14) * lerp(1.15, 0.55, wob);
+  // breathing whose depth follows 揺 — never quite the same level twice
+  const depth = 0.2 + 0.55*wob;
+  const breath = (1-depth) + depth*Math.pow(Math.random(), 1.3);
+  droneGain.gain.setTargetAtTime(S.drone * 0.045 * breath, now, 5.0);
+  // pitch wander: 揺 opens the cage, from near-still to seasick
+  droneWalk = clamp(droneWalk*0.85 + gauss()*(0.0005 + 0.0034*wob),
+                    -(0.002 + 0.013*wob), 0.002 + 0.013*wob);
+  for(const d of droneOscs){
+    d.o.frequency.setTargetAtTime(droneF0 * d.mul * (1 + droneWalk),
+                                  now, lerp(4.5, 1.8, wob));
+  }
+  // 霞 — its own slower tide, its colour drifting with 揺
+  const nb = (1-depth*0.5) + depth*0.5*Math.random();
+  droneNoiseGain.gain.setTargetAtTime(S.droneNoise * 0.55 * nb, now, 4.0);
+  droneNoiseLPF.frequency.setTargetAtTime(rand(320, 800 + 700*wob), now, 3.0);
+}
+
+/* ---------------- individuals ---------------- */
+function buildIndividuals(sp){
+  sp.inds = [];
+  sp.gridIdx = 0;
+  for(let i=0;i<MAXPOP;i++){
+    const ind = {
+      det: rand(-0.028, 0.028),          // personal tuning
+      rateMul: rand(0.78, 1.3),          // personal pace
+      pers: rand(0.7, 1.0),              // personal loudness
+      pan: rand(-0.85, 0.85),
+      distOff: rand(-0.12, 0.12),
+      walk: 0,                            // OU pitch state
+      actPhase: rand(0, Math.PI*2),
+      next: 0, restUntil: 0,
+    };
+    ind.input = ctx.createGain();                 // per-call sum
+    ind.lpf = ctx.createBiquadFilter();
+    ind.lpf.type = "lowpass"; ind.lpf.Q.value = 0.4;
+    ind.panner = ctx.createStereoPanner();
+    ind.panner.pan.value = ind.pan;
+    ind.dry = ctx.createGain();
+    ind.wet = ctx.createGain();
+    ind.input.connect(ind.lpf).connect(ind.panner);
+    ind.panner.connect(ind.dry).connect(insectBus);
+    ind.panner.connect(ind.wet).connect(revBus);
+    sp.inds.push(ind);
+  }
+  applySpeciesMix(sp);
+}
+function indDist(sp, ind){ return clamp(sp.dist + ind.distOff, 0, 1); }
+function applySpeciesMix(sp){
+  if(!ctx) return;
+  const now = ctx.currentTime;
+  for(const ind of sp.inds){
+    const d = indDist(sp, ind);
+    ind.lpf.frequency.setTargetAtTime(lerp(13000, 2100, d*d), now, 0.1);
+    ind.dry.gain.setTargetAtTime(sp.vol * ind.pers * lerp(1.0, 0.3, d), now, 0.1);
+    ind.wet.gain.setTargetAtTime(sp.vol * ind.pers * lerp(0.15, 0.85, d) * 0.8, now, 0.1);
+  }
+}
+
+/* per-ring living pitch */
+function indFreq(sp, ind){
+  ind.walk = clamp(ind.walk*0.88 + gauss()*sp.drift, -0.045, 0.045);
+  return sp.baseFreq * sp.pitch * tempPitch() * (1 + ind.det) * (1 + ind.walk);
+}
+
+/* ---------------- voice building blocks ---------------- */
+function autokill(nodes, oscs, tEnd){
+  for(const o of oscs){ try{ o.stop(tEnd); }catch(_){} }
+  if(oscs.length){
+    oscs[0].onended = ()=>{ for(const n of nodes) try{ n.disconnect(); }catch(_){} };
+  }
+}
+
+/* one ring: sine carrier + faint 2nd partial, wing-stroke AM,
+   onset glide + sub-audio waver. The heart of the instrument. */
+function ring(ind, t, dur, f, vel, opt={}){
+  const amHz    = opt.amHz    ?? 46;
+  const amDepth = opt.amDepth ?? 0.9;
+  const glide   = opt.glide   ?? 0.010;   // starts sharp, settles
+  const waver   = opt.waver   ?? 0.004;
+  const atk     = opt.atk     ?? dur*0.32;
+  const rel     = opt.rel     ?? 0.10;
+  const p2      = opt.p2      ?? 0.10;
+
+  const o1 = ctx.createOscillator(); o1.type = "sine";
+  o1.frequency.setValueAtTime(f*(1+glide), t);
+  o1.frequency.exponentialRampToValueAtTime(f*(1-glide*0.3), t+Math.min(dur*0.6, 0.25));
+
+  const o2 = ctx.createOscillator(); o2.type = "sine";
+  o2.frequency.setValueAtTime(f*2.02*(1+glide), t);
+  o2.frequency.exponentialRampToValueAtTime(f*2.02, t+Math.min(dur*0.5, 0.2));
+  const g2 = ctx.createGain(); g2.gain.value = p2;
+
+  // slow waver on the carrier — the not-quite-steady bow arm
+  const wav = ctx.createOscillator(); wav.type = "sine";
+  wav.frequency.value = rand(4.5, 7.5);
+  const wavG = ctx.createGain(); wavG.gain.value = f*waver;
+  wav.connect(wavG).connect(o1.frequency);
+
+  // wing-stroke AM with its own slight rate drift
+  const am = ctx.createGain(); am.gain.value = 1 - amDepth*0.5;
+  const lfo = ctx.createOscillator(); lfo.type = "sine";
+  lfo.frequency.setValueAtTime(amHz*rand(0.94,1.06), t);
+  lfo.frequency.linearRampToValueAtTime(amHz*rand(0.94,1.06), t+dur);
+  const lfoG = ctx.createGain(); lfoG.gain.value = amDepth*0.5;
+  lfo.connect(lfoG).connect(am.gain);
+
+  const env = ctx.createGain(); env.gain.value = 0;
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(vel, t+atk);
+  env.gain.setValueAtTime(vel, Math.max(t+atk, t+dur-rel*0.6));
+  env.gain.linearRampToValueAtTime(0.0001, t+dur+rel);
+
+  o1.connect(am); o2.connect(g2).connect(am);
+  am.connect(env).connect(ind.input);
+
+  o1.start(t); o2.start(t); wav.start(t); lfo.start(t);
+  autokill([g2,wavG,am,lfoG,env,wav,lfo,o2,o1], [o1,o2,wav,lfo], t+dur+rel+0.05);
+}
+
+/* short pitched tick — kanetataki / matsumushi notes */
+function tick(ind, t, dur, f, vel, opt={}){
+  const o = ctx.createOscillator(); o.type = "sine";
+  o.frequency.setValueAtTime(f*1.012, t);
+  o.frequency.exponentialRampToValueAtTime(f, t+dur*0.7);
+  const o2 = ctx.createOscillator(); o2.type = "sine";
+  o2.frequency.value = f*(opt.pRatio ?? 2.4);
+  const g2 = ctx.createGain(); g2.gain.value = opt.p2 ?? 0.14;
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(vel, t+(opt.atk ?? 0.004));
+  env.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.connect(env); o2.connect(g2).connect(env);
+  env.connect(ind.input);
+  o.start(t); o2.start(t);
+  autokill([g2,env,o2,o], [o,o2], t+dur+0.03);
+}
+
+/* ---------------- species phrases ----------------
+   phrase(sp, ind, t, vel) → seconds of sound scheduled
+   unit(sp, ind, t, vel)   → one grid-triggerable element   */
+
+const VOICES = {
+  suzu: {
+    phrase(sp, ind, t, vel){
+      const n = 2 + (Math.random()*3|0);
+      let tt = t;
+      for(let i=0;i<n;i++){
+        const dur = rand(0.34, 0.6);
+        ring(ind, tt, dur, indFreq(sp, ind), 0.20*vel*rand(0.85,1),
+             { amHz: 46, amDepth: 0.92 });
+        tt += dur + rand(0.16, 0.4);
+      }
+      return tt - t;
+    },
+    unit(sp, ind, t, vel){
+      ring(ind, t, rand(0.3,0.42), indFreq(sp, ind), 0.20*vel, { amHz: 46 });
+    },
+  },
+
+  matsu: {
+    /* チン・チロリン — one clear note, then a quick roll */
+    phrase(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      tick(ind, t, 0.11, f, 0.16*vel, { p2: 0.1 });
+      const roll = [1.09, 0.97, 1.05, 0.93];
+      const cnt = 3 + (Math.random()<0.5?1:0);
+      let tt = t + rand(0.16, 0.22);
+      for(let i=0;i<cnt;i++){
+        tick(ind, tt, 0.09, f*roll[i]*(1+gauss()*0.004), 0.15*vel*rand(0.8,1));
+        tt += rand(0.055, 0.075);
+      }
+      return tt + 0.1 - t;
+    },
+    unit(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      tick(ind, t, 0.1, f, 0.16*vel);
+      tick(ind, t+0.06, 0.09, f*1.08, 0.13*vel);
+      tick(ind, t+0.12, 0.09, f*0.96, 0.13*vel);
+    },
+  },
+
+  korogi: {
+    /* コロコロリー — a slowing, breathing pulse train */
+    phrase(sp, ind, t, vel){
+      const f0 = indFreq(sp, ind);
+      const n = 7 + (Math.random()*7|0);
+      let iv = rand(0.042, 0.052), tt = t, f = f0;
+      for(let i=0;i<n;i++){
+        const bell = Math.sin(Math.PI * (i+0.5)/n);       // swell then fade
+        ring(ind, tt, 0.034, f, 0.17*vel*(0.35+0.65*bell),
+             { amHz: 0.0001, amDepth: 0, atk: 0.008, rel: 0.02, glide: 0.004, p2: 0.06 });
+        f *= 1 - 0.0022 - Math.random()*0.002;            // sags as it tires
+        iv *= 1.018 + Math.random()*0.012;
+        tt += iv;
+      }
+      return tt - t;
+    },
+    unit(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      for(let i=0;i<3;i++)
+        ring(ind, t+i*0.05, 0.034, f*(1-0.002*i), 0.16*vel*(1-0.15*i),
+             { amHz:0.0001, amDepth:0, atk:0.008, rel:0.02, p2:0.06 });
+    },
+  },
+
+  kane: {
+    /* チン、チン、チン — patient little bell strikes */
+    phrase(sp, ind, t, vel){
+      const n = 5 + (Math.random()*9|0);
+      const iv = rand(0.15, 0.21);
+      let tt = t;
+      for(let i=0;i<n;i++){
+        tick(ind, tt, 0.055, indFreq(sp, ind), 0.13*vel*rand(0.8,1),
+             { pRatio: 1.63, p2: 0.2, atk: 0.002 });
+        tt += iv * rand(0.92, 1.1);
+      }
+      return tt - t;
+    },
+    unit(sp, ind, t, vel){
+      tick(ind, t, 0.055, indFreq(sp, ind), 0.14*vel, { pRatio: 1.63, p2: 0.2, atk: 0.002 });
+    },
+  },
+
+  umaoi: {
+    /* スイーッ…チョン */
+    phrase(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      const dur = rand(0.4, 0.6);
+      // rising buzz — square-wave wing AM
+      const o = ctx.createOscillator(); o.type = "sine";
+      o.frequency.setValueAtTime(f*0.86, t);
+      o.frequency.exponentialRampToValueAtTime(f*1.04, t+dur);
+      const am = ctx.createGain(); am.gain.value = 0.5;
+      const lfo = ctx.createOscillator(); lfo.type = "square";
+      lfo.frequency.setValueAtTime(64, t);
+      lfo.frequency.linearRampToValueAtTime(96, t+dur);
+      const lfoG = ctx.createGain(); lfoG.gain.value = 0.5;
+      lfo.connect(lfoG).connect(am.gain);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.11*vel, t+dur*0.7);
+      env.gain.linearRampToValueAtTime(0.13*vel, t+dur);
+      env.gain.linearRampToValueAtTime(0.0001, t+dur+0.02);
+      o.connect(am).connect(env).connect(ind.input);
+      o.start(t);
+      lfo.start(t);
+      autokill([am,lfoG,env,lfo,o],[o,lfo], t+dur+0.05);
+      // チョン
+      tick(ind, t+dur+rand(0.02,0.06), 0.07, f*0.74, 0.19*vel, { p2: 0.18, atk: 0.003 });
+      return dur + 0.15;
+    },
+    unit(sp, ind, t, vel){
+      tick(ind, t, 0.07, indFreq(sp, ind)*0.74, 0.18*vel, { p2: 0.18, atk: 0.003 });
+    },
+  },
+
+  higu: {
+    /* カナカナカナ… — far away, mostly reverb */
+    phrase(sp, ind, t, vel){
+      const f = indFreq(sp, ind);
+      const dur = rand(2.0, 3.4);
+      const o = ctx.createOscillator(); o.type = "sine";
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.exponentialRampToValueAtTime(f*0.8, t+dur);
+      const o2 = ctx.createOscillator(); o2.type = "sine";
+      o2.frequency.setValueAtTime(f*1.98, t);
+      o2.frequency.exponentialRampToValueAtTime(f*1.98*0.8, t+dur);
+      const g2 = ctx.createGain(); g2.gain.value = 0.12;
+      const am = ctx.createGain(); am.gain.value = 0.5;
+      const lfo = ctx.createOscillator(); lfo.type = "sine";
+      lfo.frequency.setValueAtTime(rand(8,9.5), t);
+      lfo.frequency.linearRampToValueAtTime(rand(6.5,7.5), t+dur);
+      const lfoG = ctx.createGain(); lfoG.gain.value = 0.5;
+      lfo.connect(lfoG).connect(am.gain);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.12*vel, t+0.6);
+      env.gain.setValueAtTime(0.12*vel, t+dur-0.9);
+      env.gain.linearRampToValueAtTime(0.0001, t+dur);
+      o.connect(am); o2.connect(g2).connect(am);
+      am.connect(env).connect(ind.input);
+      o.start(t); o2.start(t); lfo.start(t);
+      autokill([g2,am,lfoG,env,o,o2,lfo],[o,o2,lfo], t+dur+0.05);
+      return dur;
+    },
+    unit(sp, ind, t, vel){
+      ring(ind, t, 0.35, indFreq(sp, ind), 0.11*vel, { amHz: 8, amDepth: 1 });
+    },
+  },
+};
+
+/* ---------------- firing & scheduling ---------------- */
+function firePhrase(sp, ind, t, vel, isUnit){
+  const v = VOICES[sp.id];
+  let dur = 0.3;
+  if(isUnit) v.unit(sp, ind, t, vel);
+  else dur = v.phrase(sp, ind, t, vel);
+  addGlow(sp, ind, t, vel, dur);
+  return dur;
+}
+
+function scheduleNext(sp, ind, tEnd){
+  ind.actPhase += rand(0.25, 0.6);
+  const act = 0.62 + 0.38*Math.sin(ind.actPhase);          // slow personal tide
+  let iv = sp.interval * ind.rateMul / tempRate() / act;
+  iv *= 0.45 + Math.pow(Math.random(), 1.6) * 1.7;          // skewed jitter
+  if(Math.random() < 0.06 * (0.4 + S.ma)){                  // a long rest
+    ind.restUntil = tEnd + rand(16, 50);
+  }
+  ind.next = tEnd + Math.max(0.5, iv);
+}
+
+/* call-and-response inside a species */
+function kakeai(sp, caller, t, dur){
+  if(sp.pop < 2) return;
+  for(let i=0;i<sp.pop;i++){
+    const other = sp.inds[i];
+    if(other === caller) continue;
+    if(Math.random() < 0.4 && other.restUntil < t){
+      const reply = t + dur + rand(0.3, 1.8);
+      if(other.next > reply) other.next = reply;
+    }
+  }
+}
+
+function anyGrid(){ return SPECIES.some(sp => sp.mode === "grid" && sp.pop > 0); }
+
+let schedTimer = null;
+function tickSched(){
+  if(!S.running) return;
+  const now = ctx.currentTime;
+  const horizon = now + 0.35;
+
+  for(const sp of SPECIES){
+    if(sp.mode === "grid") continue;
+    for(let i=0;i<sp.pop;i++){
+      const ind = sp.inds[i];
+      if(ind.next === 0) ind.next = now + rand(0.3, sp.interval*0.9);
+      while(ind.next < horizon){
+        if(ind.restUntil > ind.next){
+          ind.next = ind.restUntil + rand(0, 2);
+          continue;
+        }
+        const t = Math.max(ind.next, now + 0.02);
+        const dur = firePhrase(sp, ind, t, 1, false);
+        kakeai(sp, ind, t, dur);
+        scheduleNext(sp, ind, t + dur);
+      }
+    }
+  }
+
+  if(anyGrid()){
+    if(S.stepTime === null){ S.stepTime = now + 0.06; S.step = 0; }
+    const spb = 60 / S.bpm / 4;
+    while(S.stepTime < horizon){
+      const idx = S.step;
+      for(const sp of SPECIES){
+        if(sp.mode !== "grid" || sp.pop === 0) continue;
+        const v = sp.steps[idx];
+        if(v){
+          let t = S.stepTime;
+          if(idx % 2 === 1) t += S.swing * spb * 0.66;
+          t += gauss() * S.yuragi * 0.028;
+          t = Math.max(t, now + 0.01);
+          sp.gridIdx = (sp.gridIdx + 1) % Math.max(1, sp.pop);
+          firePhrase(sp, sp.inds[sp.gridIdx], t, v === 2 ? 0.45 : 1, true);
+        }
+      }
+      stepVisual(idx, S.stepTime);
+      S.step = (S.step + 1) % 16;
+      S.stepTime += spb;
+    }
+  } else {
+    S.stepTime = null;
+  }
+
+  updateDrone(now);
+  updateHush(now);
+  schedTimer = setTimeout(tickSched, 60);
+}
+
+/* ---------------- 間 — the field's silence ---------------- */
+function armHush(now){
+  S.nextHush = S.ma > 0.02
+    ? now + lerp(220, 55, S.ma) * rand(0.7, 1.5)
+    : Infinity;
+}
+function scheduleHush(t, hold){
+  fieldGain.gain.cancelScheduledValues(t);
+  fieldGain.gain.setTargetAtTime(0.04, t, 0.5);
+  const back = t + 1.5 + hold;
+  fieldGain.gain.setTargetAtTime(1.0, back, 1.8);
+  S.hushUntil = back + 4;
+  // individuals wake staggered, not all at once
+  for(const sp of SPECIES) for(let i=0;i<sp.pop;i++){
+    const ind = sp.inds[i];
+    if(ind.next < back) ind.next = back + rand(0.5, 6);
+  }
+  armHush(back);
+}
+function updateHush(now){
+  if(S.ma <= 0.02){ S.nextHush = Infinity; return; }
+  if(S.nextHush === Infinity) armHush(now);
+  if(now >= S.nextHush) scheduleHush(now, rand(3, 9));
+}
+
+/* ---------------- transport ---------------- */
+async function startNight(){
+  initAudio();
+  if(ctx.state === "suspended") await ctx.resume();
+  S.running = true;
+  const now = ctx.currentTime;
+  masterGain.gain.cancelScheduledValues(now);
+  masterGain.gain.setTargetAtTime(S.masterVol*0.7, now, 1.2);
+  fieldGain.gain.setValueAtTime(1, now);
+  for(const sp of SPECIES) for(const ind of sp.inds){
+    ind.next = 0; ind.restUntil = 0;
+  }
+  S.stepTime = null;
+  S.droneMoveAt = 0;
+  armHush(now + 20);
+  tickSched();
+  $("#scene").classList.add("running");
+  $("#hint").classList.add("gone");
+}
+function stopNight(){
+  S.running = false;
+  clearTimeout(schedTimer);
+  if(ctx){
+    const now = ctx.currentTime;
+    masterGain.gain.setTargetAtTime(0, now, 0.7);
+  }
+  $("#scene").classList.remove("running");
+}
+$("#seedBtn").addEventListener("click", ()=>{ S.running ? stopNight() : startNight(); });
+
+function toggleFullscreen(){
+  if(document.fullscreenElement){
+    document.exitFullscreen();
+  } else if($("#scene").requestFullscreen){
+    $("#scene").requestFullscreen();
+  }
+}
+$("#fsBtn").addEventListener("click", e=>{ e.stopPropagation(); toggleFullscreen(); });
+$("#scene").addEventListener("dblclick", e=>{
+  if(e.target.closest("#seedBtn") || e.target.closest("#fsBtn")) return;
+  toggleFullscreen();
+});
+document.addEventListener("fullscreenchange", ()=> setTimeout(resizeCanvas, 80));
+
+window.addEventListener("keydown", e=>{
+  if(e.code === "Space" && !e.repeat){
+    e.preventDefault();
+    S.running ? stopNight() : startNight();
+  }
+  if(e.key === "f" && !e.repeat) toggleFullscreen();
+});
+
+/* ---------------- knob widget ---------------- */
+function makeKnob({label, min, max, value, fmt, onInput, def}){
+  const el = document.createElement("div");
+  el.className = "knob";
+  el.innerHTML = `
+    <div class="pop-v"></div>
+    <svg viewBox="0 0 40 40">
+      <path class="track" d=""/>
+      <path class="fill" d=""/>
+      <line class="ptr" x1="20" y1="20" x2="20" y2="6"/>
+    </svg>
+    <div class="lbl">${label}</div>`;
+  const svg = el.querySelector("svg");
+  const track = el.querySelector(".track");
+  const fill = el.querySelector(".fill");
+  const ptr = el.querySelector(".ptr");
+  const popV = el.querySelector(".pop-v");
+  const A0 = -135, A1 = 135;
+  function arc(a0, a1){
+    const r = 16, cx = 20, cy = 20;
+    const p = a => [cx + r*Math.sin(a*Math.PI/180), cy - r*Math.cos(a*Math.PI/180)];
+    const [x0,y0] = p(a0), [x1,y1] = p(a1);
+    const large = (a1-a0) > 180 ? 1 : 0;
+    return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
+  }
+  track.setAttribute("d", arc(A0, A1));
+  let v = value;
+  function render(){
+    const t = (v - min)/(max - min);
+    const a = lerp(A0, A1, t);
+    fill.setAttribute("d", t > 0.004 ? arc(A0, a) : "");
+    const rad = a*Math.PI/180;
+    ptr.setAttribute("x2", 20 + 11*Math.sin(rad));
+    ptr.setAttribute("y2", 20 - 11*Math.cos(rad));
+    popV.textContent = fmt ? fmt(v) : v.toFixed(2);
+  }
+  render();
+  let dragY = null, dragV = 0;
+  svg.addEventListener("pointerdown", e=>{
+    e.preventDefault();
+    svg.setPointerCapture(e.pointerId);
+    dragY = e.clientY; dragV = v;
+    el.classList.add("active");
+  });
+  svg.addEventListener("pointermove", e=>{
+    if(dragY === null) return;
+    const dy = dragY - e.clientY;
+    v = clamp(dragV + dy/130*(max-min), min, max);
+    render(); onInput(v);
+  });
+  const end = e=>{ dragY = null; el.classList.remove("active"); };
+  svg.addEventListener("pointerup", end);
+  svg.addEventListener("pointercancel", end);
+  svg.addEventListener("dblclick", ()=>{
+    if(def !== undefined){ v = def; render(); onInput(v); }
+  });
+  svg.addEventListener("wheel", e=>{
+    e.preventDefault();
+    v = clamp(v - Math.sign(e.deltaY)*(max-min)/60, min, max);
+    render(); onInput(v);
+    el.classList.add("active");
+    clearTimeout(el._wt);
+    el._wt = setTimeout(()=> el.classList.remove("active"), 700);
+  }, {passive:false});
+  el._set = nv => { v = clamp(nv, min, max); render(); };
+  return el;
+}
+
+/* ---------------- species UI ---------------- */
+function buildSpeciesUI(){
+  const root = $("#speciesList");
+  root.innerHTML = "";
+  for(const sp of SPECIES){
+    sp.mode = sp.mode || "free";
+    sp.steps = sp.steps || defaultSteps(sp);
+    const row = document.createElement("div");
+    row.className = "sp-row" + (sp.pop === 0 ? " silent" : "") + (sp.mode === "grid" ? " grid" : "");
+    row.innerHTML = `
+      <div class="sp-main">
+        <div class="sp-name">
+          <div class="kanji">${sp.kanji}</div>
+          <div class="yomi">${sp.yomi}</div>
+        </div>
+        <div class="sp-call">${sp.call}</div>
+        <div class="pop" title="数 — how many are singing"></div>
+        <div class="sp-spacer"></div>
+        <div class="sp-knobs"></div>
+        <div class="mode">
+          <button data-m="free" class="${sp.mode==='free'?'on':''}">野</button>
+          <button data-m="grid" class="${sp.mode==='grid'?'on':''}">拍</button>
+        </div>
+      </div>
+      <div class="sp-steps"></div>`;
+
+    // population dots
+    const popEl = row.querySelector(".pop");
+    const dots = [];
+    for(let i=0;i<MAXPOP;i++){
+      const d = document.createElement("div");
+      d.className = "p" + (i < sp.pop ? " on" : "");
+      d.addEventListener("click", ()=>{
+        const target = (sp.pop === i+1) ? i : i+1;
+        setPop(sp, target, row, dots);
+      });
+      popEl.appendChild(d); dots.push(d);
+    }
+
+    // knobs 声 / 遠 / 音
+    const kn = row.querySelector(".sp-knobs");
+    kn.appendChild(makeKnob({
+      label:"声", min:0.88, max:1.14, value:sp.pitch, def:1,
+      fmt:v=> (sp.baseFreq*v).toFixed(0)+" Hz",
+      onInput:v=>{ sp.pitch = v; saveSoon(); },
+    }));
+    kn.appendChild(makeKnob({
+      label:"遠", min:0, max:1, value:sp.dist, def:sp.dist,
+      fmt:v=> v<0.33?"すぐそこ":v<0.66?"庭のさき":"野のむこう",
+      onInput:v=>{ sp.dist = v; applySpeciesMix(sp); saveSoon(); },
+    }));
+    kn.appendChild(makeKnob({
+      label:"音", min:0, max:1, value:sp.vol, def:0.6,
+      fmt:v=> Math.round(v*100)+"",
+      onInput:v=>{ sp.vol = v; applySpeciesMix(sp); saveSoon(); },
+    }));
+
+    // mode toggle
+    row.querySelectorAll(".mode button").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        sp.mode = b.dataset.m;
+        row.querySelectorAll(".mode button").forEach(x=> x.classList.toggle("on", x===b));
+        row.classList.toggle("grid", sp.mode === "grid");
+        if(sp.mode === "free" && ctx)
+          for(let i=0;i<sp.pop;i++) sp.inds[i].next = ctx.currentTime + rand(0.3, 3);
+        saveSoon();
+      });
+    });
+
+    // steps: off → on → soft → off
+    const stepsEl = row.querySelector(".sp-steps");
+    sp.stepEls = [];
+    for(let i=0;i<16;i++){
+      const b = document.createElement("button");
+      b.className = "step";
+      paintStep(b, sp.steps[i]);
+      b.addEventListener("click", ()=>{
+        sp.steps[i] = (sp.steps[i] + 1) % 3;
+        paintStep(b, sp.steps[i]);
+        saveSoon();
+      });
+      stepsEl.appendChild(b);
+      sp.stepEls.push(b);
+    }
+    root.appendChild(row);
+  }
+}
+function paintStep(el, v){
+  el.classList.toggle("on", v === 1);
+  el.classList.toggle("soft", v === 2);
+}
+function setPop(sp, n, row, dots){
+  const prev = sp.pop;
+  sp.pop = clamp(n, 0, MAXPOP);
+  dots.forEach((d,i)=> d.classList.toggle("on", i < sp.pop));
+  row.classList.toggle("silent", sp.pop === 0);
+  if(ctx && S.running){
+    for(let i=prev; i<sp.pop; i++){
+      sp.inds[i].next = ctx.currentTime + rand(0.4, 3.5);
+      sp.inds[i].restUntil = 0;
+    }
+  }
+  saveSoon();
+}
+function defaultSteps(sp){
+  const s = new Array(16).fill(0);
+  if(sp.id === "suzu"){ s[0]=1; s[8]=1; }
+  if(sp.id === "korogi"){ s[4]=1; s[12]=2; }
+  if(sp.id === "kane"){ s[2]=2; s[6]=2; s[10]=2; s[14]=2; }
+  return s;
+}
+function stepVisual(idx, when){
+  const ms = Math.max(0, (when - ctx.currentTime)*1000);
+  setTimeout(()=>{
+    for(const sp of SPECIES){
+      if(!sp.stepEls) continue;
+      sp.stepEls.forEach((el,i)=> el.classList.toggle("cur", sp.mode==="grid" && i===idx));
+    }
+  }, ms);
+}
+
+/* ---------------- global UI ---------------- */
+function buildGlobalUI(){
+  const gN = $("#gNight"), gB = $("#gBeat"), gO = $("#gOut");
+  gN.appendChild(makeKnob({
+    label:"気温", min:14, max:26, value:S.temp, def:19,
+    fmt:v=> v.toFixed(1)+" ℃",
+    onInput:v=>{ S.temp = v; saveSoon(); },
+  }));
+  gN.appendChild(makeKnob({
+    label:"風", min:0, max:1, value:S.wind, def:0.35,
+    fmt:v=> v<0.04?"無風":v<0.35?"そよ":v<0.7?"流れ":"吹く",
+    onInput:v=>{ S.wind = v; saveSoon(); },
+  }));
+  const gD = $("#gDrone");
+  gD.appendChild(makeKnob({
+    label:"量", min:0, max:1, value:S.drone, def:0.25,
+    fmt:v=> v<0.04?"無し":v<0.35?"ひそか":v<0.7?"かすか":"深い",
+    onInput:v=>{ S.drone = v; if(ctx) S.droneMoveAt = 0; saveSoon(); },
+  }));
+  gD.appendChild(makeKnob({
+    label:"霞", min:0, max:1, value:S.droneNoise, def:0.25,
+    fmt:v=> v<0.04?"澄む":v<0.4?"うすい":v<0.75?"かかる":"深い",
+    onInput:v=>{ S.droneNoise = v; if(ctx) S.droneMoveAt = 0; saveSoon(); },
+  }));
+  gD.appendChild(makeKnob({
+    label:"揺", min:0, max:1, value:S.droneWobble, def:0.35,
+    fmt:v=> v<0.1?"静止":v<0.45?"かすか":v<0.8?"たゆたう":"酔う",
+    onInput:v=>{ S.droneWobble = v; if(ctx) S.droneMoveAt = 0; saveSoon(); },
+  }));
+  gN.appendChild(makeKnob({
+    label:"露", min:0, max:1, value:S.dew, def:0.5,
+    fmt:v=> Math.round(v*100)+"",
+    onInput:v=>{ S.dew = v; applyGlobals(); saveSoon(); },
+  }));
+  gN.appendChild(makeKnob({
+    label:"間", min:0, max:1, value:S.ma, def:0.5,
+    fmt:v=> v<0.02?"なし":v<0.5?"まれに":"しばしば",
+    onInput:v=>{ S.ma = v; if(ctx) armHush(ctx.currentTime); saveSoon(); },
+  }));
+  gB.appendChild(makeKnob({
+    label:"速さ", min:40, max:140, value:S.bpm, def:72,
+    fmt:v=> v.toFixed(0)+" 拍",
+    onInput:v=>{ S.bpm = v; saveSoon(); },
+  }));
+  gB.appendChild(makeKnob({
+    label:"うねり", min:0, max:0.6, value:S.swing, def:0.12,
+    fmt:v=> Math.round(v*100)+"",
+    onInput:v=>{ S.swing = v; saveSoon(); },
+  }));
+  gB.appendChild(makeKnob({
+    label:"ゆらぎ", min:0, max:1, value:S.yuragi, def:0.5,
+    fmt:v=> Math.round(v*100)+"",
+    onInput:v=>{ S.yuragi = v; saveSoon(); },
+  }));
+  gO.appendChild(makeKnob({
+    label:"音量", min:0, max:1, value:S.masterVol, def:0.8,
+    fmt:v=> Math.round(v*100)+"",
+    onInput:v=>{
+      S.masterVol = v;
+      if(ctx && S.running)
+        masterGain.gain.setTargetAtTime(v*0.7, ctx.currentTime, 0.15);
+      saveSoon();
+    },
+  }));
+}
+function applyGlobals(){
+  if(!ctx) return;
+  const now = ctx.currentTime;
+  revReturn.gain.setTargetAtTime(S.dew * 1.1, now, 0.2);
+  dryGain.gain.setTargetAtTime(1 - S.dew*0.25, now, 0.2);
+}
+
+/* ---------------- persistence ---------------- */
+const LS_KEY = "mushishigure-v1";
+let saveTimer = null;
+function saveSoon(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{
+      const data = {
+        S: { temp:S.temp, wind:S.wind, drone:S.drone, droneNoise:S.droneNoise,
+             droneWobble:S.droneWobble, dew:S.dew, ma:S.ma,
+             bpm:S.bpm, swing:S.swing, yuragi:S.yuragi, masterVol:S.masterVol },
+        sp: SPECIES.map(sp=>({ pop:sp.pop, vol:sp.vol, pitch:sp.pitch,
+                               dist:sp.dist, mode:sp.mode, steps:sp.steps })),
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify(data));
+    }catch(_){}
+  }, 400);
+}
+function loadSaved(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    Object.assign(S, data.S || {});
+    (data.sp || []).forEach((d,i)=>{
+      if(!SPECIES[i]) return;
+      Object.assign(SPECIES[i], d);
+    });
+  }catch(_){}
+}
+
+/* ---------------- the night canvas ----------------
+   Sand falls out of the dark, endlessly, in time with the sound.
+   It lands on the plain, rolls until the slope can hold it, and
+   stays — so mountains rise where the voices sing, and never stop
+   growing. The night wind (風) leans the falling column, so the
+   dunes lean with it. Every grain is the same size wherever it is;
+   depth is the plain's own perspective. */
+const cv = $("#night");
+const cx2 = cv.getContext("2d");
+let anaNode = null, anaBuf = null;
+let W=0, H=0, DPR=1;
+
+/* camera — fixed, a little above the plain, facing the horizon */
+const CAM = 2.0, CAMY = 0.5;
+let FOC = 500, HY = 400;
+
+/* the plain, as a heightmap */
+const HX = 300, HZ = 150;
+const X0 = -2.6, X1 = 2.6, Z0 = -1.45, Z1 = 1.1;
+const DXC = (X1-X0)/HX, DZC = (Z1-Z0)/HZ;
+const REPOSE = 0.016;               // angle of repose, per cell
+const DH = 0.006;                   // what one grain adds
+let heights = new Float32Array(HX*HZ);
+
+let fall = [];                      // sand still in the air
+let wisps = [];                     // the ether
+let loci = [];                      // where voices sounded recently
+let burst = 0, ampEnv = 0, lastTs = 0, frameN = 0, settledCount = 0;
+let sed = null, sedCtx = null, blobSprite = null;
+
+/* every settled grain is kept, so the plain can be re-drawn sharp
+   when the window changes size */
+const SCAP = 400000;
+const sX = new Float32Array(SCAP), sZ = new Float32Array(SCAP),
+      sH = new Float32Array(SCAP), sC = new Uint8Array(SCAP);
+
+function cellOf(x, z){
+  const ix = clamp(((x - X0)/DXC)|0, 0, HX-1);
+  const iz = clamp(((z - Z0)/DZC)|0, 0, HZ-1);
+  return iz*HX + ix;
+}
+function project(x, y, z){
+  const d = z + CAM;
+  if(d < 0.25) return null;
+  const k = FOC/d;
+  return [ W*0.5 + x*k, HY + (CAMY - y)*k, k, d ];
+}
+
+let rebakeTimer = null;
+function resizeCanvas(){
+  DPR = Math.min(2, window.devicePixelRatio||1);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = W*DPR; cv.height = H*DPR;
+  cx2.setTransform(DPR,0,0,DPR,0,0);
+  FOC = 0.62*Math.min(W, H);
+  HY  = H*0.52;
+  const old = sed;
+  sed = document.createElement("canvas");
+  sed.width = W*DPR; sed.height = H*DPR;
+  sedCtx = sed.getContext("2d");
+  sedCtx.setTransform(DPR,0,0,DPR,0,0);
+  if(old && old.width) sedCtx.drawImage(old, 0, 0, W, H);
+  clearTimeout(rebakeTimer);
+  rebakeTimer = setTimeout(rebakeSand, 300);
+
+  if(!blobSprite){
+    blobSprite = document.createElement("canvas");
+    blobSprite.width = blobSprite.height = 256;
+    const bc = blobSprite.getContext("2d");
+    const rg = bc.createRadialGradient(128,128,0, 128,128,128);
+    rg.addColorStop(0,   "rgba(235,236,237,0.9)");
+    rg.addColorStop(0.45,"rgba(235,236,237,0.28)");
+    rg.addColorStop(1,   "rgba(235,236,237,0)");
+    bc.fillStyle = rg;
+    bc.fillRect(0,0,256,256);
+  }
+  if(wisps.length === 0){
+    for(let i=0;i<26;i++){
+      wisps.push({
+        x: rand(-1.6,1.6), y: rand(0.2,1.3), z: rand(-0.9,1.1),
+        r: rand(0.30, 0.80), ph: rand(0, Math.PI*2), sp: rand(0.4, 1.1),
+      });
+    }
+  }
+}
+window.addEventListener("resize", resizeCanvas);
+
+function bakeGrain(x, z, h, c){
+  const p = project(x, h, z);
+  if(!p) return;
+  const a = clamp(0.62*Math.pow(1.9/p[3], 1.3), 0.12, 0.62);
+  sedCtx.fillStyle = `rgba(${c},${c},${c+2},${a})`;
+  sedCtx.fillRect(p[0], p[1], 0.9, 0.9);
+}
+function rebakeSand(){
+  if(!sedCtx) return;
+  sedCtx.clearRect(0, 0, W, H);
+  const n = Math.min(settledCount, SCAP);
+  for(let i=0;i<n;i++) bakeGrain(sX[i], sZ[i], sH[i], sC[i]);
+}
+
+/* the night wind — one direction, turning very slowly */
+let WDx = 1, WDz = 0;
+function updateWindDir(t){
+  const th = t*0.014;
+  WDx = Math.cos(th); WDz = Math.sin(th)*0.5;
+}
+function flowX(x,y,z,t){ return Math.sin(1.7*y + t*0.21) + Math.cos(2.3*z - t*0.17); }
+function flowY(x,y,z,t){ return Math.sin(1.9*z + t*0.16) + Math.cos(2.1*x + t*0.19); }
+function flowZ(x,y,z,t){ return Math.sin(1.6*x - t*0.18) + Math.cos(2.4*y + t*0.15); }
+
+/* a call marks the place on the plain the sand will pour onto */
+function addGlow(sp, ind, when, vel, dur){
+  const delay = ctx ? Math.max(0, (when - ctx.currentTime)*1000) : 0;
+  setTimeout(()=>{
+    burst = Math.min(2.2, burst + 0.5*Math.min(1, vel));
+    const d = indDist(sp, ind);
+    loci.push({
+      x: clamp(ind.pan*1.25, -1.5, 1.5),
+      z: clamp(lerp(-1.15, 0.95, d), Z0+0.05, Z1-0.05),
+      until: performance.now() + Math.max(500, Math.min(dur, 3)*1000),
+    });
+    if(loci.length > 24) loci.shift();
+  }, delay);
+}
+
+function spawnSand(){
+  if(fall.length >= 3200) return;
+  let tx, tz;
+  if(loci.length && Math.random() < 0.92){
+    const l = loci[(Math.random()*loci.length)|0];
+    tx = l.x; tz = l.z;
+  } else {
+    tx = rand(-1.4, 1.4); tz = rand(-1.1, 0.95);
+  }
+  fall.push({
+    x: clamp(tx + gauss()*0.035, X0+0.02, X1-0.02),
+    z: clamp(tz + gauss()*0.035, Z0+0.02, Z1-0.02),
+    h: 1.45 + Math.random()*0.6,
+    vx: gauss()*0.012, vz: gauss()*0.012, vy: -rand(0, 0.05),
+    c: 196 + Math.random()*44 | 0,
+  });
+}
+
+/* land: roll downhill while the slope is steeper than sand can hold,
+   then rest there and raise the plain */
+function settleSand(s){
+  let ci = cellOf(s.x, s.z);
+  for(let step=0; step<26; step++){
+    const ix = ci % HX, iz = (ci / HX) | 0;
+    let best = ci, bh = heights[ci];
+    for(let n=0;n<4;n++){
+      const nx = ix + (n===0?1:n===1?-1:0);
+      const nz = iz + (n===2?1:n===3?-1:0);
+      if(nx<0||nx>=HX||nz<0||nz>=HZ) continue;
+      const ni = nz*HX + nx;
+      if(heights[ni] < bh - REPOSE){ bh = heights[ni]; best = ni; }
+    }
+    if(best === ci) break;
+    ci = best;
+  }
+  const ix = ci % HX, iz = (ci / HX) | 0;
+  const rx = X0 + (ix + 0.5)*DXC + rand(-0.4, 0.4)*DXC;
+  const rz = Z0 + (iz + 0.5)*DZC + rand(-0.4, 0.4)*DZC;
+  heights[ci] += DH;
+  const rh = heights[ci];
+  if(settledCount < SCAP){
+    sX[settledCount] = rx; sZ[settledCount] = rz;
+    sH[settledCount] = rh; sC[settledCount] = s.c;
+  }
+  settledCount++;
+  bakeGrain(rx, rz, rh, s.c);
+}
+
+function draw(ts){
+  requestAnimationFrame(draw);
+  const dt = clamp((ts - lastTs)/1000 || 0.016, 0.001, 0.05);
+  lastTs = ts;
+  const nowMs = performance.now();
+  const t = nowMs*0.001;
+
+  // how much the air is actually moving, with a slow-release envelope
+  let amp = 0;
+  if(anaNode){
+    anaNode.getFloatTimeDomainData(anaBuf);
+    for(let i=0;i<anaBuf.length;i+=2){
+      const v = anaBuf[i]; if(v>amp) amp=v; else if(-v>amp) amp=-v;
+    }
+  }
+  ampEnv = Math.max(amp, ampEnv*Math.pow(0.3, dt));
+  updateWindDir(t);
+  frameN++;
+
+  // sand is born of the waveform, and of nothing else
+  burst *= Math.pow(0.25, dt);
+  loci = loci.filter(l => l.until > nowMs);
+  if(amp > 0.0035){
+    let k = Math.min(26, Math.round((amp - 0.002) * 380 * (0.45 + burst)));
+    while(k-- > 0) spawnSand();
+  }
+
+  // ---- falling ----
+  const gust = S.wind * (0.22 + ampEnv*0.5);
+  for(let i=fall.length-1; i>=0; i--){
+    const s = fall[i];
+    s.vy -= 1.15*dt;
+    s.vx += (WDx*gust - s.vx)*0.7*dt;
+    s.vz += (WDz*gust - s.vz)*0.7*dt;
+    if(((i + frameN) & 1) === 0){
+      const sw = S.wind*0.14;
+      s.vx += flowX(s.x, s.h, s.z, t)*sw*dt;
+      s.vz += flowZ(s.x, s.h, s.z, t)*sw*dt;
+    }
+    s.x += s.vx*dt; s.z += s.vz*dt; s.h += s.vy*dt;
+    if(s.x < X0 || s.x > X1 || s.z < Z0 || s.z > Z1){
+      fall[i] = fall[fall.length-1]; fall.pop(); continue;
+    }
+    if(s.h <= heights[cellOf(s.x, s.z)]){
+      settleSand(s);
+      fall[i] = fall[fall.length-1]; fall.pop();
+    }
+  }
+
+  // ---- render ----
+  cx2.fillStyle = "#000";
+  cx2.fillRect(0,0,W,H);
+
+  // the ether — smoke above the plain, thick with 地
+  const etherA = 0.04*(0.35 + S.drone*0.65)*(0.6 + ampEnv*1.6);
+  cx2.globalCompositeOperation = "lighter";
+  for(const wp of wisps){
+    const sw = 0.05 + S.wind*0.10;
+    wp.x += (flowX(wp.x,wp.y,wp.z,t)*sw + WDx*S.wind*0.05)*wp.sp*dt;
+    wp.y += flowY(wp.x,wp.y,wp.z,t)*sw*0.4*wp.sp*dt;
+    wp.z += (flowZ(wp.x,wp.y,wp.z,t)*sw + WDz*S.wind*0.05)*wp.sp*dt;
+    if(wp.x < -2.2 || wp.x > 2.2 || wp.z < -1.2 || wp.z > 1.4 ||
+       wp.y < 0.05 || wp.y > 1.8){
+      wp.x = rand(-1.6,1.6); wp.y = rand(0.2,1.3); wp.z = rand(-0.9,1.1);
+    }
+    const p = project(wp.x, wp.y, wp.z);
+    if(!p) continue;
+    const R = wp.r*(1 + 0.18*Math.sin(t*0.5*wp.sp + wp.ph))*p[2];
+    if(R < 4) continue;
+    cx2.globalAlpha = etherA*clamp(2.2/p[3], 0.3, 1);
+    cx2.drawImage(blobSprite, p[0]-R, p[1]-R, R*2, R*2);
+  }
+  cx2.globalAlpha = 1;
+  cx2.globalCompositeOperation = "source-over";
+
+  // the horizon — breathes with 地
+  const hy = Math.round(HY) + 0.5;
+  const ha = 0.05 + 0.06*S.drone*(0.5 + 0.5*Math.sin(nowMs*0.00021));
+  cx2.strokeStyle = `rgba(224,225,226,${ha})`;
+  cx2.lineWidth = 1;
+  cx2.beginPath(); cx2.moveTo(0,hy); cx2.lineTo(W,hy); cx2.stroke();
+
+  // everything that has already fallen
+  if(sed) cx2.drawImage(sed, 0, 0, W, H);
+
+  // and what is still in the air
+  for(const s of fall){
+    const p = project(s.x, s.h, s.z);
+    if(!p) continue;
+    const a = clamp(0.85*Math.pow(1.8/p[3], 1.3), 0.14, 0.85);
+    cx2.fillStyle = `rgba(${s.c},${s.c},${s.c+2},${a})`;
+    cx2.fillRect(p[0], p[1], 0.9, 0.9);
+  }
+}
+
+/* ---------------- boot ---------------- */
+loadSaved();
+buildSpeciesUI();
+buildGlobalUI();
+resizeCanvas();
+draw();
+</script>
+</body>
+</html>

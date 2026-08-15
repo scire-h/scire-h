@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <cmath>
 
 /* Phase 2.3 -- zero-delay-feedback state-variable filter (Vadim

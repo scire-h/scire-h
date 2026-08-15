@@ -10,6 +10,7 @@
 
 #include "../Source/MoogLadder.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <complex>

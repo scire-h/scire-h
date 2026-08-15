@@ -1,13 +1,45 @@
 # scire-h — ULT-SOUND DS-4M clones
 
 Two implementations of the **ULT-SOUND DS-4M** (Toyo Gakki, 1978),
-a four-channel analog drum synthesiser in the Pollard Syndrum family.
+a four-channel analog drum synthesiser in the Pollard Syndrum family,
+plus a quiet companion instrument.
 
 ```
 scire-h/
-├── index.html        ← single-file HTML / Web Audio clone
-└── ds4-native/       ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
+├── index.html          ← single-file HTML / Web Audio clone
+├── mushishigure.html   ← 虫時雨 — autumn-night insect field, ambient sound gadget
+└── ds4-native/         ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
 ```
+
+## 0. 宇宙には朝も夜もある — mushishigure (`mushishigure.html`)
+
+A single self-contained HTML page — "the universe too has its mornings
+and its nights" — that simulates the insect chorus of a quiet Japanese
+autumn night as an instrument, and draws it as falling sand: every
+movement of the waveform pours grains out of the dark onto a plain,
+where they roll to their angle of repose and heap into mountains that
+never stop growing, one under each singing voice.
+
+* Every voice is a **sine carrier with wing-stroke amplitude
+  modulation** (real cricket stridulation is nearly pure-tone), so it
+  rings like 鈴虫, not like static.
+* Pitch is deliberately alive: per-individual Ornstein–Uhlenbeck
+  drift, an onset glide inside every ring, and a slow sub-Hz waver.
+* Individuals are persistent characters — own detune, own pace, own
+  spot in the garden, occasional long rests, call-and-response — so
+  the field never repeats itself.
+* 気温 (temperature) follows Dolbear's law: cold nights sing slower
+  and slightly flatter. 間 (ma) makes the whole field fall silent now
+  and then. 地 (ji) is a barely-there continuo drone — two low sines
+  beating slowly, breathing over tens of seconds, drifting a few cents,
+  with 霞 (noise haze) and 揺 (how far it wanders). 風 (wind) leans the
+  falling sand, so the dunes lean with it.
+* Per species, timing is either 野 (free, natural intervals) or 拍 —
+  a TR-808-style 16-step grid with swing (うねり) and per-hit timing
+  looseness (ゆらぎ).
+* Touch the grain at the centre to begin; f (or double-click) for
+  fullscreen. While it runs, no words remain on screen. Settings
+  persist in the browser.
 
 ## 1. HTML / Web Audio clone (`index.html`)
 
