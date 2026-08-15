@@ -1,0 +1,24 @@
+name: Web tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    name: POLYTEMPO unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run web test suite
+        working-directory: tests/web
+        run: |
+          chmod +x run_all.sh
+          ./run_all.sh

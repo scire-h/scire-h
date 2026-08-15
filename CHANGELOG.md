@@ -3,6 +3,39 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## POLYTEMPO — four-track polytempo loop machine
+
+* New single-file app `polytempo.html`: four loops, each with its own
+  continuously-variable BPM, and a catch-up operation that merges one
+  into another.
+* Lookahead scheduler on the Web Audio clock. Step length is found by
+  integrating the tempo curve with Simpson's rule under fixed-point
+  iteration, so steps stay exact while the tempo is moving — measured
+  drift is under a microsecond per bar.
+* **CATCH RATE** knob sets the merge time (0.25 s – 60 s) and is live:
+  turning it mid-catch re-plans the remaining travel from that instant,
+  so a merge can be hurried or stretched while it is audibly in flight.
+* **BPM SYNC** matches tempo only, leaving the bar heads to drift.
+  **PHASE SYNC** additionally walks the bar head into place with a
+  raised-cosine BPM swell whose integral equals the measured phase
+  error — it overshoots the target audibly and lands exactly on it.
+  Residual is re-measured and re-corrected until under 15 ms.
+* LINEAR / EXP merge curves; AHEAD / NEAREST / BEHIND phase direction.
+* 808 and 909 voice libraries (kick, snare, closed/open hat, chord
+  tone), switchable while running. Chord tracks play scale degrees
+  I / IV / V / vi over KEY + OCTAVE + FINE.
+* Sample tracks run tape-style: `playbackRate = BPM / BASE BPM`, so
+  tempo moves pitch. Their TUNE knob writes BPM directly — tuning is
+  tempo.
+* Master chain: 20 Hz high-pass → limiter → tanh soft clip, 12 dB of
+  per-track headroom, quiet default volume, peak meter with hold and
+  clip LED.
+* Phase scope, Web MIDI Learn (receive), JSON project save/load.
+* New `tests/web/` suite: 176 assertions run under plain Node with no
+  browser and no npm install. Both suites slice the code they test out
+  of `polytempo.html`, so there is no second copy to drift. Wired into
+  `make test` and a new `Web tests` GitHub Actions workflow.
+
 ## Phase 2.7 — Multi-output bus
 
 * Added four optional stereo aux output buses (`Ch1 Out`…`Ch4 Out`)
