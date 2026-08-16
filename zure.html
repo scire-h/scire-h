@@ -187,6 +187,7 @@
   .mini.pm{width:32px}
   .trow{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
   .wanderRow{border:1px dashed #999;padding:4px 6px;background:#fafafa}
+  .shiftGrp{margin-left:auto}
   .wanderRow:empty{display:none}
   .stat{font-size:9px;color:#444;letter-spacing:.02em}
   .stat b{color:#000}
@@ -382,6 +383,9 @@
       ノイズ量（0でタムのようなトーンだけの音）。KIT の ACCENT は全体の音量に
       メリハリを付けつつ、アナログ回路よろしくキックの歪み（サチュレーション）と
       アタック感も連動して変わる。<br>
+      <b>SHIFT（ずらし）</b>: 各トラック上部の ◀BAR ◀拍 拍▶ BAR▶ で、
+      ループ位置を1拍/1小節ぶん一瞬でずらす。タイミンググリッドは触らず
+      パターンの読み出し位置だけが跳ぶので、音は途切れず、ズレたまま維持される。<br>
       <b>WANDER</b>: 各トラック上部の往復機。ONにした時点のBPMをホームとして、
       DEST との間を行ったり来たりする。到達すると DWELL 秒だけ停滞し、
       TRAVEL 秒かけて元のBPMへ向かう（グライドと同じ機構なのでステップは正確）。
@@ -2030,6 +2034,17 @@ function buildTrackBody (tr) {
   Midi.paintMapped();
 }
 
+/* ---- SHIFT: jump the loop position by whole beats/bars, instantly.
+        The timing grid is untouched -- the next scheduled step simply
+        plays a different slot of the pattern, so the downbeat lands
+        somewhere new and STAYS there. ---- */
+function shiftTrack (tr, steps) {
+  tr.stepIndex += steps;
+  while (tr.stepIndex < 0) tr.stepIndex += tr.loopSteps;
+  tr.fillAt = null;                     // a pending fill loses its anchor
+  toast(tr.name + ': ' + (steps > 0 ? '+' : '') + steps / 4 + ' 拍ずらし');
+}
+
 /* ---- WANDER row: bounce between home BPM and DEST ---- */
 function paintWander (tr) {
   const el = trackEl(tr);
@@ -2089,6 +2104,21 @@ function buildWander (tr) {
   st.className = 'stat';
   st.setAttribute('data-wstat', '');
   host.appendChild(st);
+
+  // phase shift: one bar / one beat, backward or forward
+  const sh = document.createElement('div');
+  sh.className = 'opts sm shiftGrp';
+  sh.title = 'ループ位置を一瞬でずらす（そのまま維持）';
+  [[-16, '\u25c0BAR'], [-4, '\u25c0\u62cd'], [4, '\u62cd\u25b6'], [16, 'BAR\u25b6']].forEach(([n, nm]) => {
+    const b2 = document.createElement('button');
+    b2.textContent = nm;
+    b2.onclick = () => {
+      if (Midi.armFromClick({ el: b2, isBtn: true, id: 'shift' + tr.idx + '_' + n })) return;
+      shiftTrack(tr, n);
+    };
+    sh.appendChild(b2);
+  });
+  host.appendChild(sh);
   paintWander(tr);
 }
 
@@ -2666,6 +2696,11 @@ const Midi = {
       if (val < 0.5) return;
       if (m.id === 'rec') { Recorder.toggle(); return; }
       if (m.id === 'fill') { fillNow(); return; }
+      if (m.id.startsWith('shift')) {
+        const mm = m.id.match(/^shift(\d)_(-?\d+)$/);
+        if (mm && tracks[+mm[1]]) shiftTrack(tracks[+mm[1]], +mm[2]);
+        return;
+      }
       if (m.id.startsWith('wander')) {
         const wtr = tracks[+m.id.replace('wander', '')];
         if (wtr) {
