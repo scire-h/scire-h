@@ -386,8 +386,10 @@
       ループ位置を1拍/1小節ぶん一瞬でずらす。タイミンググリッドは触らず
       パターンの読み出し位置だけが跳ぶので、音は途切れず、ズレたまま維持される。<br>
       <b>WANDER</b>: 各トラック上部の往復機。ONにした時点のBPMをホームとして、
-      DEST との間を行ったり来たりする。到達すると DWELL 秒だけ停滞し、
-      TRAVEL 秒かけて元のBPMへ向かう（グライドと同じ機構なのでステップは正確）。
+      <b>ONの間ずっと</b>ホーム⇔DEST を自動で行ったり来たりし続ける。
+      <b>DWELL は折り返し地点での滞在時間</b>（両端それぞれで、戻り始めるまで
+      その BPM に留まる秒数）。片道は TRAVEL 秒かけて移動する
+      （グライドと同じ機構なのでステップは正確）。表示の ⟲ は通過した片道の数。
       つまみや CATCH で手動介入すると WANDER は自動で外れる。
       <b>優先順位は CATCH ＞ WANDER</b>: CATCH をかけると追う側・追われる
       マスター双方の WANDER が止まり、CATCH 中のトラック（および CATCH の
@@ -1403,9 +1405,10 @@ function wanderTick (tr, now) {
     if (tr.catchState.isGlide) w._phase = 'going';
     return;                                   // still traveling
   }
-  if (w._phase === 'going') {                 // just arrived
+  if (w._phase === 'going') {                 // just arrived at a turn
     w._phase = 'dwell';
     w._until = now + Math.max(0, w.dwell);
+    w._laps = (w._laps || 0) + 1;             // one leg completed
     return;
   }
   if (w._until === undefined) { w._phase = 'dwell'; w._until = now; }
@@ -2102,7 +2105,8 @@ function buildWander (tr) {
   btn.className = 'mini';
   btn.setAttribute('data-wgo', '');
   btn.textContent = 'WANDER';
-  btn.title = 'ホームBPMとDESTの間を往復（到達するとDWELLだけ停滞し、TRAVELの速さで戻る）';
+  btn.title = 'ONの間ずっとホームBPM⇔DESTを往復する。' +
+    '折り返し地点でDWELL秒だけ滞在し、片道をTRAVEL秒かけて移動。⟲は往復した脚の数';
   btn.onclick = () => {
     if (Midi.armFromClick({ el: btn, isBtn: true, id: 'wander' + tr.idx })) return;
     if (!w.on) {
@@ -2119,6 +2123,7 @@ function buildWander (tr) {
       w._home = targetBpm(tr);               // where to come back to
       w._end = 'dest';
       w._phase = 'dwell';
+      w._laps = 0;
       w._until = 0;                          // depart on the next tick
       if (!S.playing) toast('WANDER は再生中に動きます');
     } else if (tr.catchState && tr.catchState.isGlide) {
@@ -2143,7 +2148,7 @@ function buildWander (tr) {
   addK({ label: 'DWELL', min: 0, max: 30, def: w.dwell,
          id: 'wd' + tr.idx + 'W',
          get: () => w.dwell, set: v => w.dwell = v,
-         fmt: v => v.toFixed(1) + ' s' });
+         fmt: v => v.toFixed(1) + ' s' });   // stay at each turn-around
   addK({ label: 'TRAVEL', min: 0.25, max: 120, def: w.travel, log: true,
          id: 'wd' + tr.idx + 'T',
          get: () => w.travel, set: v => w.travel = v,
@@ -2632,12 +2637,16 @@ function frame () {
     if (!st) return;
     const w = tr.wander;
     if (!w || !w.on) { if (st.textContent) st.textContent = ''; return; }
+    const home = w._home != null ? w._home : tr.bpm;
+    const next = (w._end === 'home' ? home : w.dest).toFixed(2);
+    const lap = '\u21ba' + (w._laps || 0) + ' ';
     if (tr.catchState && tr.catchState.isGlide) {
-      st.textContent = '→ ' + tr.catchState.fixedBpm.toFixed(2);
+      st.textContent = lap + '\u2192 ' + tr.catchState.fixedBpm.toFixed(2);
     } else if (w._phase === 'dwell' && ctx) {
       const left = Math.max(0, (w._until || 0) - now);
-      st.textContent = '滞在 ' + left.toFixed(1) + 's → ' +
-        (w._end === 'home' ? (w._home != null ? w._home : tr.bpm) : w.dest).toFixed(2);
+      st.textContent = lap + '\u6ede\u5728 ' + left.toFixed(1) + 's \u2192 ' + next;
+    } else {
+      st.textContent = lap + '\u2192 ' + next;
     }
   });
 
