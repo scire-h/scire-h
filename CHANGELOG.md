@@ -3,6 +3,29 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## ZURE — attack, gated sustain, drum TONE/SNAPPY/ACCENT, WANDER, CRT scope
+
+* ATTACK knob on every voice row (defaults equal the old fixed values).
+* SUSTAIN is now gated by the painted run: consecutive ON cells form
+  one note, released right after the last cell — "the length you
+  clicked in". sus=0 keeps per-cell one-shots. A fully painted row
+  re-opens its gate if the voice is silent.
+* Drum params: TONE (attack hardness + brightness, neutral at 0.5,
+  ±12 dB shelf @3 kHz and 2x..0.5x attack), SNAPPY on the snare
+  (0 = tom), per-kit ACCENT (level lift + kick tanh saturation +
+  harder kick attack; the gate release falls from the lifted level).
+* WANDER per track: bounce between home BPM and DEST with per-end
+  DWELL and per-leg TRAVEL, through the glide machinery. Manual BPM
+  moves or CATCH disengage it. MIDI-learnable, saved in the project.
+* PHASE SCOPE is a green-phosphor CRT now: persistence trails
+  (previous frame decays instead of clearing), pixelated bloom —
+  Fairlight, not a plotter.
+* Credits in the design: SCIRE, hayato YAMADA (header + footer).
+* Loop lengths 3 and 4 BARS (64-step patterns; legacy files padded).
+* Tests: 312 unit assertions; new E2E covers the gate (run start /
+  release / full-row edge), WANDER round trips + manual override,
+  green-only scope pixels, and save/load of all new params.
+
 ## ZURE — the name, and 1992
 
 * The machine is now called **ZURE** (`zure.html`; the ずれ is the

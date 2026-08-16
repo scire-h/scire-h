@@ -102,6 +102,11 @@ const ctx = {
   createOscillator () { return track(mkNode('osc', ['frequency', 'detune'], true)); },
   createGain () { return track(mkNode('gain', ['gain'])); },
   createBiquadFilter () { return track(mkNode('biquad', ['frequency', 'Q', 'gain'])); },
+  createWaveShaper () {
+    const n = track(mkNode('shaper', []));
+    n.curve = null; n.oversample = 'none';
+    return n;
+  },
   createBufferSource () {
     const n = track(mkNode('bufsrc', ['playbackRate', 'detune'], true));
     const st = n.start;
@@ -127,7 +132,8 @@ const { Voices, SUS_CAP } = loadVoices();
 
 /* default edit params — mirror defaultVp() in the app */
 function P (over) {
-  return Object.assign({ wave: 'auto', pitch: 50, cutoff: 2600, decay: 0.3, sus: 0 }, over);
+  return Object.assign({ wave: 'auto', pitch: 50, cutoff: 2600, atk: 0.003,
+                         decay: 0.3, sus: 0, tone: 0.5, snappy: 0.5, acc: 0 }, over);
 }
 
 /* Does `node` reach `out` by following connections? */
@@ -306,6 +312,68 @@ suite('library voicing differences survive the edit layer', () => {
   ok(hp('909') > hp('808'), '909 hats still sit brighter than 808 hats');
   const k9 = render(out => Voices.kick(T0, out, '909', 1, P({})), T0);
   ok(k9.nodes.some(n => n.kind === 'bufsrc'), '909 kick keeps its attack click');
+});
+
+suite('attack edit', () => {
+  for (const lib of LIBS) {
+    const r = render(out => Voices.kick(T0, out, lib, 1, P({ atk: 0.2, decay: 0.5 })), T0);
+    const peakRamp = r.log.find(e => e.name === 'gain' && e.op === 'ramp' && e.v > 0.5);
+    ok(peakRamp && Math.abs(peakRamp.t - (T0 + 0.2)) < 1e-9,
+       lib + ' ATK knob sets the ramp-to-peak time (' + ((peakRamp.t - T0) * 1000).toFixed(0) + ' ms)');
+  }
+  const rc = render(out => Voices.chord(T0, out, '808', [220], P({ atk: 0.8, decay: 1 })), T0);
+  const cRamp = rc.log.find(e => e.name === 'gain' && e.op === 'ramp' && e.v > 0.2);
+  ok(cRamp && Math.abs(cRamp.t - (T0 + 0.8)) < 1e-9, 'chord attack reaches 800 ms');
+});
+
+suite('TONE edit', () => {
+  const flat = render(out => Voices.kick(T0, out, '808', 1, P({ tone: 0.5 })), T0);
+  ok(!flat.nodes.some(n => n.kind === 'biquad' && n.type === 'highshelf'),
+     'tone 0.5 is bit-transparent: no shelf inserted');
+  const bright = render(out => Voices.kick(T0, out, '808', 1, P({ tone: 0.9 })), T0);
+  const sh = bright.nodes.find(n => n.kind === 'biquad' && n.type === 'highshelf');
+  ok(!!sh && Math.abs(sh.gain.value - 9.6) < 0.01, 'tone 0.9 = +9.6 dB high shelf');
+  ok(bright.nodes.filter(n => n.started !== null).every(n => reaches(n, bright.out)),
+     'audio still routes through the shelf');
+  // tone also hardens/softens the attack around the ATK value
+  const hard = render(out => Voices.kick(T0, out, '808', 1, P({ atk: 0.1, tone: 1 })), T0);
+  const soft = render(out => Voices.kick(T0, out, '808', 1, P({ atk: 0.1, tone: 0 })), T0);
+  const rampT = r => r.log.find(e => e.name === 'gain' && e.op === 'ramp' && e.v > 0.5).t - T0;
+  ok(Math.abs(rampT(hard) - 0.05) < 1e-9 && Math.abs(rampT(soft) - 0.2) < 1e-9,
+     'tone 1 halves the attack, tone 0 doubles it');
+});
+
+suite('SNAPPY edit', () => {
+  const noisePeak = snappy => {
+    const r = render(out => Voices.snare(T0, out, '808', 1, P({ pitch: 180, decay: 0.2, snappy })), T0);
+    // the noise chain is the gain fed by the bandpass after the bufsrc
+    const nz = r.nodes.find(n => n.kind === 'bufsrc');
+    const bq = nz.outs[0];
+    const g = bq.outs[0];
+    const evs = r.log.filter(e => e.n === g && e.name === 'gain' && e.op === 'ramp');
+    return evs.length ? Math.max(...evs.map(e => e.v)) : 0;
+  };
+  ok(Math.abs(noisePeak(0.5) - 0.40) < 1e-9, 'snappy 0.5 = stock wire level');
+  ok(Math.abs(noisePeak(1) - 0.80) < 1e-9, 'snappy 1 doubles the wires');
+  ok(noisePeak(0) <= 0.0002 + 1e-9, 'snappy 0 mutes the wires -- a tom');
+});
+
+suite('ACCENT edit', () => {
+  const r = render(out => Voices.kick(T0, out, '808', 1, P({ acc: 0.8, atk: 0.01 })), T0);
+  ok(Math.abs(r.handle.in.gain.value - 1.4) < 1e-9, 'accent 0.8 lifts the level to 1.4x');
+  ok(r.nodes.some(n => n.kind === 'shaper' && n.curve && n.curve.length),
+     'accent inserts a saturation curve on the kick');
+  ok(r.nodes.filter(n => n.started !== null).every(n => reaches(n, r.out)),
+     'audio routes through the saturator');
+  const rampT = rr => rr.log.find(e => e.name === 'gain' && e.op === 'ramp' && e.v > 0.5).t - T0;
+  const plain = render(out => Voices.kick(T0, out, '808', 1, P({ acc: 0, atk: 0.01 })), T0);
+  ok(rampT(r) < rampT(plain), 'accent hardens the kick attack');
+  const q = render(out => Voices.snare(T0, out, '808', 1, P({ acc: 0.8 })), T0);
+  ok(!q.nodes.some(n => n.kind === 'shaper'), 'only the kick saturates');
+  // release falls from the lifted level, not from 1
+  r.handle.release(T0 + 1);
+  const rel = log.filter(e => e.n === r.handle.in && e.op === 'set' && e.t === T0 + 1);
+  ok(rel.length && Math.abs(rel[0].v - 1.4) < 1e-9, 'gate release starts from the accent level');
 });
 
 suite('extreme edits stay finite', () => {

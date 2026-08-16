@@ -93,14 +93,24 @@ KEY + OCTAVE + FINE, or a loaded sample. Libraries can be swapped while
 running — the pattern stays, only the voicing changes.
 
 **Voice editing.** Every synth voice is editable in the track's VOICE
-EDIT panel: waveform (AUTO / sine / triangle / square / saw — AUTO is
-the library's stock shape), pitch (cutoff for the chord voice), decay,
-and sustain. Rows are mono voices: a sustained sound rings until the
-same row hits again (closed and open hat choke each other, as on the
-originals), which is what makes SUSTAIN meaningful in a step
-sequencer — the new hit chokes the old voice through a dedicated gain,
-so no envelope automation is ever cancelled. Edits survive 808↔909
-switches and are saved in the project file.
+EDIT panel: waveform (AUTO = the library's stock shape), ATTACK, pitch
+(cutoff for the chord voice), decay and sustain — plus, on drums,
+TONE (attack hardness and brightness: ±12 dB shelf around a neutral
+0.5), SNAPPY on the snare (wire/noise level; 0 turns it into a tom)
+and a per-kit ACCENT that lifts the level while also driving the kick
+into tanh saturation and hardening its attack, the way the analog
+circuit would. SUSTAIN is gated by the painted run: consecutive ON
+cells are one note — it opens at the first cell and releases right
+after the last, so a note lasts exactly as long as you clicked in.
+Rows are mono with choke (CH/OH mutual); releases go through a
+dedicated gain so no envelope automation is ever cancelled. Edits
+survive 808↔909 switches and are saved in the project file.
+
+**WANDER.** Each track's header row holds an oscillating tempo drive:
+engage it and the BPM bounces between its home value and DEST,
+dwelling DWELL seconds at each end and travelling each leg over
+TRAVEL seconds through the same step-exact glide machinery. Manual
+BPM moves or a CATCH take the wheel back automatically.
 
 **Pitch.** Synth tracks are clock-driven, so tempo changes do not move
 their pitch; KEY / OCTAVE / FINE tune them independently. Sample tracks
@@ -135,9 +145,11 @@ live readout of the selected track's target BPM.
 and ink black, checkerboard dither where a gradient would have been,
 a bitmap-font stack (MS Gothic / Osaka-Mono / monospace), zero border
 radius, hard offset shadows, buttons that press into their own
-shadow, and a phase scope rasterised at 92x92 and upscaled with
-`image-rendering: pixelated` — honest dots. Tracks are told apart by
-letter and grey value, not hue.
+shadow. The one glowing thing in the room is the phase scope: a green
+phosphor CRT in the Fairlight spirit — 92x92 raster upscaled with
+`image-rendering: pixelated`, with persistence trails from decaying
+the previous frame instead of clearing it. Credit line: SCIRE,
+hayato YAMADA.
 
 **Level safety.** Every track starts with 12 dB of headroom; the master
 bus is 20 Hz high-pass → limiter → tanh soft clip, and boots quiet. A

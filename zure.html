@@ -147,8 +147,9 @@
 
   /* ---------- phase scope: honest pixels ---------- */
   .scopeWrap{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
-  canvas#scope{width:172px;height:172px;flex:none;background:#fff;border:1px solid #000;
-    image-rendering:pixelated;box-shadow:2px 2px 0 rgba(0,0,0,.55)}
+  canvas#scope{width:172px;height:172px;flex:none;background:#051007;border:1px solid #000;
+    image-rendering:pixelated;box-shadow:2px 2px 0 rgba(0,0,0,.55),
+      inset 0 0 30px rgba(0,0,0,.6);border-radius:4px !important}
   .legend{display:flex;flex-direction:column;gap:5px;font-size:10px}
   .legend .row{display:flex;align-items:center;gap:6px}
   .legend .sw{width:9px;height:9px;border:1px solid #000}
@@ -177,6 +178,8 @@
   .mini:disabled{opacity:.3;cursor:default;box-shadow:none}
   .mini.pm{width:32px}
   .trow{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
+  .wanderRow{border:1px dashed #999;padding:4px 6px;background:#fafafa}
+  .wanderRow:empty{display:none}
   .stat{font-size:9px;color:#444;letter-spacing:.02em}
   .stat b{color:#000}
   .stat.lock b{color:#000}
@@ -224,6 +227,8 @@
   details.doc b{color:#000}
   details.doc code{background:#fff;border:1px solid #000;padding:0 4px;font-size:10px}
 
+  .credit{margin:14px 12px 0;font-size:9px;letter-spacing:.22em;color:#555;text-align:center}
+
   /* alert toast */
   .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:200;
     background:#fff;border:1px solid #000;padding:7px 14px;font-size:11px;color:#000;
@@ -235,7 +240,7 @@
 <div class="app">
 
   <div class="top">
-    <div class="logo">ZURE<small>POLYTEMPO LOOP MACHINE</small></div>
+    <div class="logo">ZURE<small>POLYTEMPO LOOP MACHINE — SCIRE, hayato YAMADA</small></div>
     <button class="tbtn play" id="btnPlay">PLAY</button>
     <button class="tbtn" id="btnAlign" title="全トラックの位相を今すぐ揃える">ALIGN</button>
     <div class="trkTgl" id="trkTgl" title="トラック ON/OFF">
@@ -338,6 +343,8 @@
 
   <div class="tracks" id="tracks"></div>
 
+  <div class="credit">ZURE — SCIRE, hayato YAMADA</div>
+
   <details class="doc">
     <summary>ABOUT / 仕様メモ</summary>
     <div>
@@ -356,11 +363,21 @@
       音声ファイルにはBPM情報が無いため、読み込み時の BASE BPM は 120 とし、
       FIT LOOP（サンプル全体＝ループ長とみなして算出）か手入力で合わせる。<br>
       <b>音色エディット</b>: 各トラックの VOICE EDIT で、シンセボイスごとに
-      波形（AUTO/SIN/TRI/SQR/SAW）・ピッチ（コードはカットオフ）・ディケイ・
-      サスティンを編集できる。AUTO はライブラリ本来の波形。各行はモノボイスで、
-      サスティンを上げた音は同じ行の次のヒット（CH と OH は相互）まで持続し、
-      新しいヒットが前の音をチョークする。停止時と8秒の安全上限でも解放される。
-      エディット値は 808/909 を切り替えても保持され、プロジェクトに保存される。<br>
+      波形（AUTO/SIN/TRI/SQR/SAW）・ATK（アタック）・ピッチ（コードはカットオフ）・
+      ディケイ・サスティン、ドラムはさらに TONE を編集できる。AUTO はライブラリ
+      本来の波形。<b>SUS を上げた行はゲート式</b>: 連続して塗った（クリックした）
+      セルの並びがひとつのノートになり、並びの最初で発音、最後のセルの直後で
+      リリースされる。SUS=0 なら従来どおりセルごとのワンショット。各行はモノで、
+      新しいノートは前の音をチョーク（CH/OH は相互）。停止時と8秒の上限でも解放。<br>
+      <b>ドラム専用パラメータ</b>: TONE はアタックの硬さと明るさ（0.5=原音、
+      ±12dB のハイシェルフ+アタック時間の伸縮）。スネアの SNAPPY は響き線の
+      ノイズ量（0でタムのようなトーンだけの音）。KIT の ACCENT は全体の音量に
+      メリハリを付けつつ、アナログ回路よろしくキックの歪み（サチュレーション）と
+      アタック感も連動して変わる。<br>
+      <b>WANDER</b>: 各トラック上部の往復機。ONにした時点のBPMをホームとして、
+      DEST との間を行ったり来たりする。到達すると DWELL 秒だけ停滞し、
+      TRAVEL 秒かけて元のBPMへ向かう（グライドと同じ機構なのでステップは正確）。
+      つまみや CATCH で手動介入すると WANDER は自動で外れる。<br>
       <b>操作の要点</b>: <code>CATCH RATE</code> は合流にかける時間（左=速い/右=遅い、
       追従の途中で回すと再計画）。BPM SYNC はテンポのみ一致で小節頭はズレたまま並走、
       PHASE SYNC は目標BPMを一瞬追い越して小節頭を合わせロックする。
@@ -371,6 +388,9 @@
       <code>*</code>/<code>/</code> で ±10（すべてグライド経由）。
       ヘッダーの ◀▶ ステッパーでも選択トラックのBPMを 0.01 / 0.1 / 1 / 10 の
       桁ごとに増減できる（長押しで連続、文字ボタンで選択切替）。<br>
+      <b>PHASE SCOPE</b> は緑蛍光体のブラウン管: 低解像度ラスタを
+      ピクセル拡大し、前フレームを消さずに減衰させることで残光（トレイル）を
+      作っている。<br>
       <b>FX</b>: 各トラックに共有リバーブへのセンドと、トラック専用のピンポン
       （L·R）エコー。エコーのタイムは 1/16〜1/2 の音価指定で
       <b>そのトラック自身のテンポ</b>に追従する — 追いつかせの最中はエコーも一緒に
@@ -855,17 +875,20 @@ function updateDelayTime (tr, hard) {
 /* --- voice construction: only touches `ctx` and `noiseBuf`, so
        tests/web/test_voices.js can run it against a stub AudioContext.
 
-   Every voice takes a params object p:
-     wave  'auto' | 'sine' | 'triangle' | 'square' | 'sawtooth'
-           ('auto' = the library's stock waveform)
-     pitch base frequency in Hz (chord voices take `cutoff` instead)
-     decay seconds
-     sus   0..1 sustain level. 0 = one-shot. >0 = the envelope decays
-           to sus×peak and holds until the voice is choked by the next
-           hit on its row (rows are mono; CH/OH choke each other), or
-           the SUS_CAP safety limit.
-   Every voice returns a handle; release(t) chokes it via a dedicated
-   output gain, so no envelope automation ever needs cancelling. --- */
+   Edit params p:
+     wave   'auto' | 'sine' | 'triangle' | 'square' | 'sawtooth'
+     pitch  base frequency in Hz (chord voices take `cutoff` instead)
+     atk    attack seconds
+     decay  seconds
+     sus    0..1 sustain level. 0 = one-shot; >0 holds until released
+            (gated by the row's painted run) or the SUS_CAP limit.
+     tone   0..1, 0.5 = stock. Brightness (±12 dB high shelf @3 kHz)
+            plus attack hardness (0.5 -> stock attack, 1 -> half, 0 -> double).
+     snappy snare only, 0..1, 0.5 = stock. Wire/noise level; 0 = tom.
+     acc    0..1 track ACCENT: level up, and on the kick also drive
+            (tanh saturation) and a harder attack -- the analog way.
+   Every voice returns a handle; release(t) closes the gate through a
+   dedicated output gain, so no envelope automation is ever cancelled. --- */
 const SUS_CAP = 8;
 
 function noiseSrc (t, dur) {
@@ -892,69 +915,107 @@ function ampEnvADS (p, t, atk, peak, decay, sus) {
   return t + atk + decay + 0.05;
 }
 
-function mkVoice (out) {
+/* level = ACCENT lift; the same gain is the choke/gate, so release
+   must fall from the lifted level, not from 1 */
+function mkVoice (out, level) {
+  const lvl = level || 1;
   const choke = ctx.createGain();
-  choke.gain.value = 1;
+  choke.gain.value = lvl;
   choke.connect(out);
   return {
     in: choke,
     release (t) {
-      /* separate gain, so internal envelopes stay untouched — no
-         cancelScheduledValues, no Firefox cancelAndHold gap */
-      choke.gain.setValueAtTime(1, t);
+      choke.gain.setValueAtTime(lvl, t);
       choke.gain.exponentialRampToValueAtTime(0.0008, t + 0.014);
     }
   };
 }
 function wv (p, def) { return !p.wave || p.wave === 'auto' ? def : p.wave; }
+function toneOf (p) { return p.tone != null ? p.tone : 0.5; }
+/* TONE: 0.5 keeps the stock attack; brighter = harder, darker = softer */
+function atkOf (p, def) {
+  const a = p.atk != null ? p.atk : def;
+  return a * Math.pow(4, 0.5 - toneOf(p));
+}
+function accOf (p) { return p.acc || 0; }
+function lvlOf (p) { return 1 + 0.5 * accOf(p); }
+/* TONE brightness: ±12 dB high shelf at 3 kHz; exactly bypassed at 0.5 */
+function toneShelf (p, dest) {
+  const t = toneOf(p);
+  if (Math.abs(t - 0.5) < 0.01) return dest;
+  const sh = ctx.createBiquadFilter();
+  sh.type = 'highshelf';
+  sh.frequency.value = 3000;
+  sh.gain.value = (t - 0.5) * 24;
+  sh.connect(dest);
+  return sh;
+}
 
 const Voices = {
   kick (t, out, lib, tune, p) {
-    const v = mkVoice(out);
+    const acc = accOf(p);
+    const v = mkVoice(out, lvlOf(p));
+    let dest = toneShelf(p, v.in);
+    // ACCENT drives the kick into tanh saturation, analog-style
+    if (acc > 0.01) {
+      const sh = ctx.createWaveShaper();
+      const n = 512, curve = new Float32Array(n);
+      const drive = 1 + 3 * acc, norm = Math.tanh(drive);
+      for (let i = 0; i < n; i++) curve[i] = Math.tanh(drive * (i / (n - 1) * 2 - 1)) / norm;
+      sh.curve = curve; sh.oversample = '2x';
+      sh.connect(dest);
+      dest = sh;
+    }
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = wv(p, 'sine');
     const f0 = p.pitch * tune;
+    const atk = atkOf(p, lib === '909' ? 0.001 : 0.003) * (1 - 0.4 * acc);
     let end;
     if (lib === '909') {
       o.frequency.setValueAtTime(f0 * 4.6, t);
       o.frequency.exponentialRampToValueAtTime(f0, t + 0.032);
-      end = ampEnvADS(g.gain, t, 0.001, 1.0, p.decay, p.sus);
+      end = ampEnvADS(g.gain, t, atk, 1.0, p.decay, p.sus);
       const cn = noiseSrc(t, 0.02), cf = ctx.createBiquadFilter(), cg = ctx.createGain();
       cf.type = 'highpass'; cf.frequency.value = 1200;
       ampEnvADS(cg.gain, t, 0.0005, 0.35, 0.012, 0);
-      cn.connect(cf).connect(cg).connect(v.in);
+      cn.connect(cf).connect(cg).connect(dest);
     } else {
       o.frequency.setValueAtTime(f0 * 3.1, t);
       o.frequency.exponentialRampToValueAtTime(f0, t + 0.065);
-      end = ampEnvADS(g.gain, t, 0.003, 0.95, p.decay, p.sus);
+      end = ampEnvADS(g.gain, t, atk, 0.95, p.decay, p.sus);
     }
-    o.connect(g).connect(v.in);
+    o.connect(g).connect(dest);
     o.start(t); o.stop(end);
     return v;
   },
 
   snare (t, out, lib, tune, p) {
-    const v = mkVoice(out);
+    const v = mkVoice(out, lvlOf(p));
+    const dest = toneShelf(p, v.in);
     const bright = lib === '909';
     const w = wv(p, 'triangle');
+    const atk = atkOf(p, 0.001);
     [p.pitch * tune, p.pitch * 1.83 * tune].forEach((f, i) => {
       const o = ctx.createOscillator(); o.type = w;
       o.frequency.setValueAtTime(f, t);
       const g = ctx.createGain();
-      const end = ampEnvADS(g.gain, t, 0.001, (i ? 0.22 : 0.30), p.decay * 0.7, p.sus);
-      o.connect(g).connect(v.in); o.start(t); o.stop(end);
+      const end = ampEnvADS(g.gain, t, atk, (i ? 0.22 : 0.30), p.decay * 0.7, p.sus);
+      o.connect(g).connect(dest); o.start(t); o.stop(end);
     });
+    // SNAPPY: the wires. 0.5 = stock level, 0 = pure tone (a tom)
+    const snap = (p.snappy != null ? p.snappy : 0.5) * 2;
     const nzLife = p.sus > 0.001 ? SUS_CAP : p.decay + 0.1;
     const nz = noiseSrc(t, nzLife), f = ctx.createBiquadFilter(), g = ctx.createGain();
     if (bright) { f.type = 'highpass'; f.frequency.value = 500; }
     else        { f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.9; }
-    ampEnvADS(g.gain, t, 0.001, bright ? 0.55 : 0.40, p.decay, p.sus);
-    nz.connect(f).connect(g).connect(v.in);
+    ampEnvADS(g.gain, t, atk, (bright ? 0.55 : 0.40) * snap, p.decay, p.sus);
+    nz.connect(f).connect(g).connect(dest);
     return v;
   },
 
   hat (t, out, lib, tune, p) {
-    const v = mkVoice(out);
+    const v = mkVoice(out, lvlOf(p));
+    const dest = toneShelf(p, v.in);
     const ratios = [1, 1.4471, 1.6170, 1.9265, 2.5028, 2.6637];
     const w = wv(p, 'square');
     const base = p.pitch * tune;
@@ -963,13 +1024,13 @@ const Voices = {
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass'; bp.frequency.value = lib === '909' ? 11000 : 9500; bp.Q.value = 0.7;
     const g = ctx.createGain();
-    const end = ampEnvADS(g.gain, t, 0.0006, 0.28, p.decay, p.sus);
+    const end = ampEnvADS(g.gain, t, atkOf(p, 0.0006), 0.28, p.decay, p.sus);
     ratios.forEach(r => {
       const o = ctx.createOscillator(); o.type = w;
       o.frequency.setValueAtTime(base * r, t);
       o.connect(hp); o.start(t); o.stop(end + 0.05);
     });
-    hp.connect(bp).connect(g).connect(v.in);
+    hp.connect(bp).connect(g).connect(dest);
     return v;
   },
 
@@ -983,7 +1044,7 @@ const Voices = {
       lp.frequency.exponentialRampToValueAtTime(
         Math.max(100, freq * 2.2 * cf), t + Math.min(p.decay, 3) * 0.8);
       const g = ctx.createGain();
-      const end = ampEnvADS(g.gain, t, 0.008, 0.20, p.decay, p.sus);
+      const end = ampEnvADS(g.gain, t, atkOf(p, 0.008), 0.20, p.decay, p.sus);
       const w = wv(p, 'sawtooth');
       [-6, 6].forEach(cents => {
         const o = ctx.createOscillator(); o.type = w;
@@ -995,7 +1056,7 @@ const Voices = {
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass'; lp.frequency.value = p.cutoff; lp.Q.value = 0.6;
       const g = ctx.createGain();
-      const end = ampEnvADS(g.gain, t, 0.014, 0.24, p.decay, p.sus);
+      const end = ampEnvADS(g.gain, t, atkOf(p, 0.014), 0.24, p.decay, p.sus);
       const o1 = ctx.createOscillator();
       const o2 = ctx.createOscillator();
       if (!p.wave || p.wave === 'auto') { o1.type = 'sine'; o2.type = 'triangle'; }
@@ -1009,10 +1070,9 @@ const Voices = {
     }
   },
 
-  /* one chord hit = all its notes under one choke, so the next hit on
-     the track replaces the previous one cleanly */
+  /* one chord hit = all its notes under one gate/choke */
   chord (t, out, lib, freqs, p) {
-    const v = mkVoice(out);
+    const v = mkVoice(out, lvlOf(p));
     freqs.forEach(f => Voices.tone(t, v.in, lib, f, p));
     return v;
   }
@@ -1034,11 +1094,12 @@ function blankPat () { return [0, 1, 2, 3].map(() => new Array(64).fill(false));
 function defaultVp (lib) {
   const x = lib === '909';
   return {
-    kick:  { wave: 'auto', pitch: x ? 48 : 50,   decay: x ? 0.40 : 0.62,   sus: 0 },
-    snr:   { wave: 'auto', pitch: x ? 190 : 180, decay: x ? 0.26 : 0.19,   sus: 0 },
-    ch:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.030 : 0.042, sus: 0 },
-    oh:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.30 : 0.36,   sus: 0 },
-    chord: { wave: 'auto', cutoff: 2600,         decay: 1.2,               sus: 0 }
+    accent: 0,
+    kick:  { wave: 'auto', pitch: x ? 48 : 50,   decay: x ? 0.40 : 0.62,   sus: 0, atk: x ? 0.001 : 0.003, tone: 0.5 },
+    snr:   { wave: 'auto', pitch: x ? 190 : 180, decay: x ? 0.26 : 0.19,   sus: 0, atk: 0.001, tone: 0.5, snappy: 0.5 },
+    ch:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.030 : 0.042, sus: 0, atk: 0.0006, tone: 0.5 },
+    oh:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.30 : 0.36,   sus: 0, atk: 0.0006, tone: 0.5 },
+    chord: { wave: 'auto', cutoff: 2600,         decay: 1.2,               sus: 0, atk: x ? 0.008 : 0.014 }
   };
 }
 
@@ -1055,6 +1116,7 @@ function mkTrack (i, cfg) {
     pats: [blankPat(), blankPat(), blankPat(), blankPat()],
     patIdx: 0,
     vp: defaultVp(cfg.lib),                      // voice-edit params
+    wander: { on: false, dest: cfg.bpm, dwell: 2, travel: 8 },
     fx: { rev: 0, dly: 0, div: 0.75, fb: 0.45, time: 0.35 }, // div in beats, or 'free' + time(s)
     live: {},                                    // per-row sounding voice (mono rows)
     sample: null,                                // {buf,name,baseBpm}
@@ -1112,6 +1174,11 @@ function targetBpm (tr) {
    glides at the console's CATCH RATE / CURVE instead of jumping. */
 function setTrackBpm (tr, v) {
   v = Math.min(300, Math.max(20, v));
+  if (tr.wander && tr.wander.on) {
+    tr.wander.on = false;
+    paintWander(tr);
+    toast(tr.name + ': WANDER OFF（手動変更）');
+  }
   if (S.playing && ctx) {
     TempoCore.beginGlide(tr, ctx.currentTime, v, { curve: S.curve, dur: S.catchTime });
   } else {
@@ -1198,16 +1265,21 @@ function playStep (tr, step, time, abs) {
   }
 
   if (tr.kind === 'drums') {
-    const vp = tr.vp;
-    if (patAt(tr, 0, step, abs)) trig(tr, 'kick', time, () => Voices.kick(time, out, lib, tune, vp.kick));
-    if (patAt(tr, 1, step, abs)) trig(tr, 'snr',  time, () => Voices.snare(time, out, lib, tune, vp.snr));
+    const vpp = k => ({ ...tr.vp[k], acc: tr.vp.accent });
+    gateRow(tr, 0, 'kick', step, abs, time, () => Voices.kick(time, out, lib, tune, vpp('kick')));
+    gateRow(tr, 1, 'snr',  step, abs, time, () => Voices.snare(time, out, lib, tune, vpp('snr')));
     // CH and OH share one slot: they choke each other, like real hats
-    if (patAt(tr, 2, step, abs)) trig(tr, 'hat',  time, () => Voices.hat(time, out, lib, tune, vp.ch));
-    if (patAt(tr, 3, step, abs)) trig(tr, 'hat',  time, () => Voices.hat(time, out, lib, tune, vp.oh));
+    gateRow(tr, 2, 'hat',  step, abs, time, () => Voices.hat(time, out, lib, tune, vpp('ch')));
+    gateRow(tr, 3, 'hat',  step, abs, time, () => Voices.hat(time, out, lib, tune, vpp('oh')));
     return;
   }
 
   // chord: rows are scale degrees over KEY + OCTAVE + FINE
+  const chordSet = s2 => {
+    let m = 0;
+    for (let r = 0; r < 4; r++) if (tr.pat[r][s2]) m |= 1 << r;
+    return m;
+  };
   const rootMidi = 48 + tr.key + 12 * tr.oct;
   const freqs = [];
   CHORD_ROWS.forEach((deg, r) => {
@@ -1216,16 +1288,52 @@ function playStep (tr, step, time, abs) {
       freqs.push(440 * Math.pow(2, (rootMidi + iv - 69) / 12) * Math.pow(2, tr.fine / 1200));
     });
   });
-  if (freqs.length) trig(tr, 'chord', time, () => Voices.chord(time, out, lib, freqs, tr.vp.chord));
+  if (tr.vp.chord.sus > 0.001) {
+    /* gated: a chord holds while its painted cells continue; the run
+       ending (or the chord changing) closes / re-opens the gate */
+    const prevSet = chordSet((step - 1 + tr.loopSteps) % tr.loopSteps);
+    const curSet = chordSet(step);
+    if (curSet && (curSet !== prevSet || !tr.live.chord)) {
+      trig(tr, 'chord', time, () => Voices.chord(time, out, lib, freqs, tr.vp.chord), 99);
+    } else if (!curSet && prevSet) {
+      releaseSlot(tr, 'chord', time, 99);
+    }
+  } else if (freqs.length) {
+    trig(tr, 'chord', time, () => Voices.chord(time, out, lib, freqs, tr.vp.chord), 99);
+  }
 }
 
-/* Rows are mono: a new hit chokes whatever the row is still playing.
-   This is also what makes SUSTAIN workable in a step sequencer --
-   a sustained voice rings until the row speaks again. */
-function trig (tr, slot, time, mk) {
+/* Rows are mono: a new hit chokes whatever the row is still playing. */
+function trig (tr, slot, time, mk, row) {
   const prev = tr.live[slot];
   if (prev) prev.release(time);
-  tr.live[slot] = mk();
+  const h = mk();
+  h._row = row;
+  tr.live[slot] = h;
+}
+function releaseSlot (tr, slot, time, row) {
+  const h = tr.live[slot];
+  if (h && h._row === row) { h.release(time); delete tr.live[slot]; }
+}
+
+/* SUSTAIN is gated by the painted run: with sus > 0, a stretch of
+   consecutive ON cells is ONE note -- it opens at the first cell and
+   releases right after the last one ("the length you clicked in").
+   With sus = 0 every ON cell is its own one-shot hit, as before. */
+function gateRow (tr, row, slot, step, abs, time, mk) {
+  const key = ['kick', 'snr', 'ch', 'oh'][row];
+  const on = patAt(tr, row, step, abs);
+  if (tr.vp[key].sus > 0.001) {
+    const prevOn = patAt(tr, row, (step - 1 + tr.loopSteps) % tr.loopSteps,
+                         abs !== undefined ? abs - 1 : undefined);
+    const owned = tr.live[slot] && tr.live[slot]._row === row;
+    // trigger at a run's first cell -- or when the row is on but silent
+    // (a fully painted row has no OFF->ON edge to catch)
+    if (on && (!prevOn || !owned)) trig(tr, slot, time, mk, row);
+    else if (!on && prevOn) releaseSlot(tr, slot, time, row);
+  } else if (on) {
+    trig(tr, slot, time, mk, row);
+  }
 }
 
 /* ===================================================================
@@ -1240,10 +1348,42 @@ const CATCH_OPT = () => ({
   maxTries: 6
 });
 
+/* WANDER: bounce the track's BPM between its home value and DEST.
+   Arrive -> dwell for w.dwell seconds -> glide back over w.travel
+   seconds -> dwell -> ... The travel legs ride the same glide
+   machinery as every other tempo move, so they stay step-exact. */
+function wanderTick (tr, now) {
+  const w = tr.wander;
+  if (!w || !w.on) return;
+  if (tr.catchState) {
+    if (tr.catchState.isGlide) w._phase = 'going';
+    return;                                   // still traveling
+  }
+  if (w._phase === 'going') {                 // just arrived
+    w._phase = 'dwell';
+    w._until = now + Math.max(0, w.dwell);
+    return;
+  }
+  if (w._until === undefined) { w._phase = 'dwell'; w._until = now; }
+  if (now >= w._until) {
+    const target = w._end === 'home' ? (w._home != null ? w._home : tr.bpm) : w.dest;
+    w._end = w._end === 'home' ? 'dest' : 'home';
+    if (Math.abs(target - tr.bpm) > 0.005) {
+      TempoCore.beginGlide(tr, now, Math.min(300, Math.max(20, target)),
+        { curve: S.curve, dur: Math.max(0.25, w.travel) });
+      w._phase = 'going';
+    } else {
+      w._phase = 'dwell';
+      w._until = now + Math.max(0.25, w.dwell);
+    }
+  }
+}
+
 function tick () {
   if (!S.playing) return;
   const now = ctx.currentTime, horizon = now + LOOKAHEAD;
   const m = masterTrack();
+  for (const tr of tracks) wanderTick(tr, now);
 
   for (const tr of tracks) {
     if (!tr.catchState) continue;
@@ -1310,6 +1450,7 @@ function alignAll () {
 function startCatch (tr) {
   if (!S.playing) { toast('先に PLAY を押してください'); return; }
   if (tr === masterTrack()) return;
+  if (tr.wander && tr.wander.on) { tr.wander.on = false; paintWander(tr); }
   TempoCore.beginCatch(tr, ctx.currentTime,
     { mode: S.mode, curve: S.curve, dir: S.dir, dur: S.catchTime });
   renderTrackHead(tr);
@@ -1688,6 +1829,7 @@ function buildTracks () {
         '<button class="mini" data-mute>MUTE</button>' +
         '<button class="mini catch" data-catch>CATCH</button>' +
       '</div>' +
+      '<div class="trow wanderRow" data-wander></div>' +
       '<div class="trow" data-knobs></div>' +
       '<div class="trow">' +
         '<select class="sel" data-kind>' +
@@ -1869,6 +2011,7 @@ function buildTrackBody (tr) {
           fmt: v => (v >= 0 ? '+' : '') + v.toFixed(0) + ' ¢' });
   }
 
+  buildWander(tr);
   buildVoiceEdit(tr);
   buildFx(tr);
   buildPatMem(tr);
@@ -1877,6 +2020,68 @@ function buildTrackBody (tr) {
   paintOpts(el, 'data-loop', tr.loopBars);
   tr._shownBpm = undefined;                      // force the readout to repaint
   Midi.paintMapped();
+}
+
+/* ---- WANDER row: bounce between home BPM and DEST ---- */
+function paintWander (tr) {
+  const el = trackEl(tr);
+  if (!el) return;
+  const b = el.querySelector('[data-wgo]');
+  if (b) b.classList.toggle('on', !!(tr.wander && tr.wander.on));
+}
+
+function buildWander (tr) {
+  const host = trackEl(tr).querySelector('[data-wander]');
+  host.innerHTML = '';
+  const w = tr.wander;
+
+  const btn = document.createElement('button');
+  btn.className = 'mini';
+  btn.setAttribute('data-wgo', '');
+  btn.textContent = 'WANDER';
+  btn.title = 'ホームBPMとDESTの間を往復（到達するとDWELLだけ停滞し、TRAVELの速さで戻る）';
+  btn.onclick = () => {
+    if (Midi.armFromClick({ el: btn, isBtn: true, id: 'wander' + tr.idx })) return;
+    w.on = !w.on;
+    if (w.on) {
+      w._home = targetBpm(tr);               // where to come back to
+      w._end = 'dest';
+      w._phase = 'dwell';
+      w._until = 0;                          // depart on the next tick
+      if (!S.playing) toast('WANDER は再生中に動きます');
+    } else if (tr.catchState && tr.catchState.isGlide) {
+      cancelCatch(tr);                       // freeze wherever it is
+    }
+    paintWander(tr);
+  };
+  host.appendChild(btn);
+
+  const addK = o => {
+    const dEl = document.createElement('div');
+    dEl.className = 'knob sm';
+    host.appendChild(dEl);
+    const k = new Knob(dEl, o);
+    trackKnobs[tr.idx].push(k);
+    return k;
+  };
+  addK({ label: 'DEST', min: 30, max: 240, def: w.dest, log: true,
+         id: 'wd' + tr.idx + 'D',
+         get: () => w.dest, set: v => w.dest = v,
+         fmt: v => v.toFixed(2) });
+  addK({ label: 'DWELL', min: 0, max: 30, def: w.dwell,
+         id: 'wd' + tr.idx + 'W',
+         get: () => w.dwell, set: v => w.dwell = v,
+         fmt: v => v.toFixed(1) + ' s' });
+  addK({ label: 'TRAVEL', min: 0.25, max: 120, def: w.travel, log: true,
+         id: 'wd' + tr.idx + 'T',
+         get: () => w.travel, set: v => w.travel = v,
+         fmt: v => (v < 10 ? v.toFixed(2) : v.toFixed(1)) + ' s' });
+
+  const st = document.createElement('span');
+  st.className = 'stat';
+  st.setAttribute('data-wstat', '');
+  host.appendChild(st);
+  paintWander(tr);
 }
 
 /* ---- per-track FX: reverb send + tempo-synced L/R echo ---- */
@@ -1999,8 +2204,33 @@ function buildVoiceEdit (tr) {
   det.open = !!tr._veditOpen;
   det.ontoggle = () => { tr._veditOpen = det.open; };
   const sum = document.createElement('summary');
-  sum.textContent = 'VOICE EDIT — 波形 / ピッチ / ディケイ / サスティン';
+  sum.textContent = 'VOICE EDIT — 波形 / ATK / ピッチ / ディケイ / SUS / TONE';
   det.appendChild(sum);
+
+  if (tr.kind === 'drums') {
+    // ACCENT: level lift for the whole kit; on the kick it also adds
+    // saturation and a harder attack, like the analog circuit would
+    const kitRow = document.createElement('div');
+    kitRow.className = 'vrow';
+    const kl = document.createElement('span');
+    kl.className = 'vlbl'; kl.textContent = 'KIT';
+    kitRow.appendChild(kl);
+    const dEl = document.createElement('div');
+    dEl.className = 'knob sm';
+    kitRow.appendChild(dEl);
+    trackKnobs[tr.idx].push(new Knob(dEl, {
+      label: 'ACCENT', min: 0, max: 1, def: 0,
+      id: 'vp' + tr.idx + 'accent',
+      get: () => tr.vp.accent,
+      set: v => tr.vp.accent = v,
+      fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%'
+    }));
+    const note = document.createElement('span');
+    note.className = 'stat';
+    note.textContent = '音量+キックの歪みとアタックが連動';
+    kitRow.appendChild(note);
+    det.appendChild(kitRow);
+  }
 
   defs.forEach(d => {
     const p = tr.vp[d.slot];
@@ -2033,6 +2263,12 @@ function buildVoiceEdit (tr) {
            get: () => tr.vp[d.slot][d.pk],
            set: v => tr.vp[d.slot][d.pk] = v,
            fmt: v => v >= 1000 ? (v / 1000).toFixed(2) + 'k' : v.toFixed(0) + ' Hz' });
+    addK({ label: 'ATK', min: 0.0002, max: d.slot === 'chord' ? 1 : 0.25, def: p.atk, log: true,
+           id: 'vp' + tr.idx + d.slot + 'A',
+           get: () => tr.vp[d.slot].atk,
+           set: v => tr.vp[d.slot].atk = v,
+           fmt: v => v < 0.001 ? (v * 1000).toFixed(1) + ' ms'
+                   : v < 0.1 ? (v * 1000).toFixed(0) + ' ms' : v.toFixed(2) + ' s' });
     addK({ label: 'DECAY', min: d.dmin, max: d.dmax, def: p.decay, log: true,
            id: 'vp' + tr.idx + d.slot + 'D',
            get: () => tr.vp[d.slot].decay,
@@ -2043,6 +2279,20 @@ function buildVoiceEdit (tr) {
            get: () => tr.vp[d.slot].sus,
            set: v => tr.vp[d.slot].sus = v,
            fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+    if (d.slot !== 'chord') {
+      addK({ label: 'TONE', min: 0, max: 1, def: 0.5,
+             id: 'vp' + tr.idx + d.slot + 'T',
+             get: () => tr.vp[d.slot].tone,
+             set: v => tr.vp[d.slot].tone = v,
+             fmt: v => Math.abs(v - 0.5) < 0.01 ? 'FLAT' : ((v - 0.5) * 24).toFixed(1) + ' dB' });
+    }
+    if (d.slot === 'snr') {
+      addK({ label: 'SNAPPY', min: 0, max: 1, def: 0.5,
+             id: 'vp' + tr.idx + 'snrN',
+             get: () => tr.vp.snr.snappy,
+             set: v => tr.vp.snr.snappy = v,
+             fmt: v => v <= 0.005 ? 'TOM' : (v * 200).toFixed(0) + '%' });
+    }
 
     det.appendChild(row);
   });
@@ -2239,6 +2489,23 @@ function frame () {
       ' — R キーでも開始/停止';
   }
 
+  // wander status per track
+  tracks.forEach(tr => {
+    const el2 = trackEl(tr);
+    if (!el2) return;
+    const st = el2.querySelector('[data-wstat]');
+    if (!st) return;
+    const w = tr.wander;
+    if (!w || !w.on) { if (st.textContent) st.textContent = ''; return; }
+    if (tr.catchState && tr.catchState.isGlide) {
+      st.textContent = '→ ' + tr.catchState.fixedBpm.toFixed(2);
+    } else if (w._phase === 'dwell' && ctx) {
+      const left = Math.max(0, (w._until || 0) - now);
+      st.textContent = '滞在 ' + left.toFixed(1) + 's → ' +
+        (w._end === 'home' ? (w._home != null ? w._home : tr.bpm) : w.dest).toFixed(2);
+    }
+  });
+
   // legend + live BPM readouts (they move continuously during a catch)
   tracks.forEach(tr => {
     const e = document.getElementById('lg' + tr.idx);
@@ -2252,20 +2519,23 @@ function frame () {
   });
 
   // scope
-  // low-res raster, upscaled by CSS image-rendering:pixelated -- real dots
+  // CRT: low-res raster + pixelated upscale, with phosphor persistence --
+  // instead of clearing, the previous frame decays under translucent black,
+  // so the heads drag glowing trails. Fairlight monitor, not a plotter.
   sctx.setTransform(1, 0, 0, 1, 0, 0);
-  sctx.clearRect(0, 0, scope.width, scope.height);
+  sctx.fillStyle = 'rgba(2, 9, 4, 0.22)';
+  sctx.fillRect(0, 0, scope.width, scope.height);
   sctx.setTransform(scope.width / 460, 0, 0, scope.height / 460, 0, 0);
   const W = 460, H = 460, cx = W / 2, cy = H / 2;
-  sctx.strokeStyle = '#c9c9cb';
+  sctx.strokeStyle = 'rgba(90,255,160,0.10)';
   sctx.lineWidth = 2;
   sctx.beginPath(); sctx.moveTo(cx, 12); sctx.lineTo(cx, H - 12); sctx.stroke();
-  sctx.strokeStyle = '#e2e2e4';
   sctx.beginPath(); sctx.moveTo(12, cy); sctx.lineTo(W - 12, cy); sctx.stroke();
 
+  const SCOPE_HEX = ['#c8ffdc', '#7fe8a8', '#4fbf7f', '#2f8f5c'];
   tracks.forEach((tr, i) => {
     const R = 210 - i * 34;
-    sctx.strokeStyle = 'rgba(0,0,0,.08)';        // recessed ring track
+    sctx.strokeStyle = 'rgba(90,255,160,0.05)';  // faint ring track
     sctx.lineWidth = 12;
     sctx.beginPath(); sctx.arc(cx, cy, R, 0, Math.PI * 2); sctx.stroke();
 
@@ -2276,7 +2546,7 @@ function frame () {
     const ang = -Math.PI / 2 + frac * Math.PI * 2;
 
     // bar ticks
-    sctx.strokeStyle = '#a8a8aa'; sctx.lineWidth = 2;
+    sctx.strokeStyle = 'rgba(120,255,175,0.28)'; sctx.lineWidth = 2;
     for (let b = 0; b < tr.loopBars; b++) {
       const a = -Math.PI / 2 + (b / tr.loopBars) * Math.PI * 2;
       sctx.beginPath();
@@ -2285,16 +2555,19 @@ function frame () {
       sctx.stroke();
     }
     // travelled arc
-    sctx.strokeStyle = ACC_HEX[i]; sctx.lineWidth = 12;
-    sctx.globalAlpha = 0.35;
+    sctx.strokeStyle = SCOPE_HEX[i]; sctx.lineWidth = 12;
+    sctx.globalAlpha = 0.16;
     sctx.beginPath(); sctx.arc(cx, cy, R, -Math.PI / 2, ang); sctx.stroke();
     sctx.globalAlpha = 1;
     // head
     const fl = tr.flash && now - tr.flash < 0.5 ? 1 - (now - tr.flash) / 0.5 : 0;
-    sctx.fillStyle = ACC_HEX[i];
+    sctx.fillStyle = SCOPE_HEX[i];
+    sctx.shadowBlur = 6 + fl * 10;               // phosphor bloom (pixelates on upscale)
+    sctx.shadowColor = SCOPE_HEX[i];
     sctx.beginPath();
     sctx.arc(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R, 9 + fl * 7, 0, Math.PI * 2);
     sctx.fill();
+    sctx.shadowBlur = 0;
   });
 
   // step highlight in the grids
@@ -2385,6 +2658,14 @@ const Midi = {
       if (val < 0.5) return;
       if (m.id === 'rec') { Recorder.toggle(); return; }
       if (m.id === 'fill') { fillNow(); return; }
+      if (m.id.startsWith('wander')) {
+        const wtr = tracks[+m.id.replace('wander', '')];
+        if (wtr) {
+          const wb = trackEl(wtr).querySelector('[data-wgo]');
+          if (wb) wb.click();
+        }
+        return;
+      }
       const i = +m.id.replace('catch', '');
       const tr = tracks[i];
       if (tr) tr.catchState ? cancelCatch(tr) : startCatch(tr);
@@ -2422,6 +2703,8 @@ function saveProject () {
       patIdx: tr.patIdx,
       vp: JSON.parse(JSON.stringify(tr.vp)),
       fx: { ...tr.fx },
+      wander: { on: tr.wander.on, dest: tr.wander.dest,
+                dwell: tr.wander.dwell, travel: tr.wander.travel },
       sample: tr.sample ? { name: tr.sample.name, baseBpm: tr.sample.baseBpm } : null
     }))
   };
@@ -2456,10 +2739,13 @@ function loadProject (obj) {
     tr.pat = tr.pats[tr.patIdx];
     // older project files predate the voice editor / FX: fall back to defaults
     const base = defaultVp(d.lib);
-    tr.vp = d.vp
-      ? Object.fromEntries(Object.keys(base).map(k => [k, { ...base[k], ...d.vp[k] }]))
-      : base;
+    tr.vp = base;
+    if (d.vp) Object.keys(base).forEach(k => {
+      if (typeof base[k] === 'object') Object.assign(tr.vp[k], d.vp[k] || {});
+      else if (d.vp[k] != null) tr.vp[k] = d.vp[k];
+    });
     tr.fx = { rev: 0, dly: 0, div: 0.75, fb: 0.45, time: 0.35, ...(d.fx || {}) };
+    tr.wander = { on: false, dest: tr.bpm, dwell: 2, travel: 8, ...(d.wander || {}) };
     if (tr.node) tr.node.gain.value = tr.gain;
     if (tr.revSend) tr.revSend.gain.value = tr.fx.rev;
     if (tr.dlySend) tr.dlySend.gain.value = tr.fx.dly;
