@@ -1028,7 +1028,7 @@ const CHORD_INTS = { I: [0, 4, 7, 11], IV: [5, 9, 12, 16], V: [7, 11, 14, 17], v
 const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const SPB = TempoCore.STEPS_PER_BEAT, SPBar = TempoCore.STEPS_PER_BAR;
 
-function blankPat () { return [0, 1, 2, 3].map(() => new Array(32).fill(false)); }
+function blankPat () { return [0, 1, 2, 3].map(() => new Array(64).fill(false)); }
 
 /* per-voice edit params; defaults reproduce the library's stock sound */
 function defaultVp (lib) {
@@ -1694,7 +1694,7 @@ function buildTracks () {
           '<option value="drums">DRUMS</option><option value="chord">CHORD</option>' +
           '<option value="sample">SAMPLE</option></select>' +
         '<div class="opts" data-lib><button data-v="808">808</button><button data-v="909">909</button></div>' +
-        '<div class="opts" data-loop><button data-v="1">1 BAR</button><button data-v="2">2 BARS</button></div>' +
+        '<div class="opts" data-loop><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4 BARS</button></div>' +
         '<div class="stat" data-stat></div>' +
       '</div>' +
       '<div class="fileRow" data-file></div>' +
@@ -2076,6 +2076,7 @@ function buildGrid (tr) {
     const cells = document.createElement('div');
     cells.className = 'cells';
     cells.style.gridTemplateColumns = 'repeat(' + n + ',1fr)';
+    if (n > 32) cells.style.gap = '1px';        // 3-4 bars: keep cells usable
     for (let s = 0; s < n; s++) {
       const c = document.createElement('div');
       c.className = 'cell' + (s % SPB === 0 ? ' beat' : '') + (tr.pat[r][s] ? ' on' : '');
@@ -2416,8 +2417,8 @@ function saveProject () {
     tracks: tracks.map(tr => ({
       kind: tr.kind, lib: tr.lib, bpm: tr.bpm, loopBars: tr.loopBars,
       gain: tr.gain, muted: tr.muted, key: tr.key, oct: tr.oct, fine: tr.fine,
-      pat: tr.pat.map(r => r.slice(0, 32)),          // kept for older loaders
-      pats: tr.pats.map(p => p.map(r => r.slice(0, 32))),
+      pat: tr.pat.map(r => r.slice(0, 64)),          // kept for older loaders
+      pats: tr.pats.map(p => p.map(r => r.slice(0, 64))),
       patIdx: tr.patIdx,
       vp: JSON.parse(JSON.stringify(tr.vp)),
       fx: { ...tr.fx },
@@ -2443,12 +2444,13 @@ function loadProject (obj) {
       gain: d.gain, muted: d.muted, key: d.key, oct: d.oct, fine: d.fine,
       catchState: null
     });
+    const pad64 = r => { const a = r.slice(0, 64); while (a.length < 64) a.push(false); return a; };
     if (d.pats) {
-      tr.pats = d.pats.map(p => p.map(r => r.slice()));
+      tr.pats = d.pats.map(p => p.map(pad64));
       while (tr.pats.length < 4) tr.pats.push(blankPat());
       tr.patIdx = Math.min(3, d.patIdx || 0);
     } else {
-      tr.pats = [d.pat.map(r => r.slice()), blankPat(), blankPat(), blankPat()];
+      tr.pats = [d.pat.map(pad64), blankPat(), blankPat(), blankPat()];
       tr.patIdx = 0;
     }
     tr.pat = tr.pats[tr.patIdx];
