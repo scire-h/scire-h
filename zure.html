@@ -334,7 +334,7 @@
   <div class="panel">
     <div class="ptitle">PHASE SCOPE</div>
     <div class="scopeWrap">
-      <canvas id="scope" width="92" height="92"></canvas>
+      <canvas id="scope" width="172" height="172"></canvas>
       <div class="legend" id="legend"></div>
     </div>
   </div>
@@ -2523,20 +2523,20 @@ function frame () {
   // instead of clearing, the previous frame decays under translucent black,
   // so the heads drag glowing trails. Fairlight monitor, not a plotter.
   sctx.setTransform(1, 0, 0, 1, 0, 0);
-  sctx.fillStyle = 'rgba(2, 9, 4, 0.22)';
+  sctx.fillStyle = 'rgba(2, 9, 4, 0.13)';
   sctx.fillRect(0, 0, scope.width, scope.height);
   sctx.setTransform(scope.width / 460, 0, 0, scope.height / 460, 0, 0);
   const W = 460, H = 460, cx = W / 2, cy = H / 2;
-  sctx.strokeStyle = 'rgba(90,255,160,0.10)';
-  sctx.lineWidth = 2;
+  sctx.strokeStyle = 'rgba(90,255,160,0.08)';
+  sctx.lineWidth = 1.4;
   sctx.beginPath(); sctx.moveTo(cx, 12); sctx.lineTo(cx, H - 12); sctx.stroke();
   sctx.beginPath(); sctx.moveTo(12, cy); sctx.lineTo(W - 12, cy); sctx.stroke();
 
   const SCOPE_HEX = ['#c8ffdc', '#7fe8a8', '#4fbf7f', '#2f8f5c'];
   tracks.forEach((tr, i) => {
     const R = 210 - i * 34;
-    sctx.strokeStyle = 'rgba(90,255,160,0.05)';  // faint ring track
-    sctx.lineWidth = 12;
+    sctx.strokeStyle = 'rgba(90,255,160,0.045)'; // faint ring track
+    sctx.lineWidth = 6;
     sctx.beginPath(); sctx.arc(cx, cy, R, 0, Math.PI * 2); sctx.stroke();
 
     if (!S.playing || !ctx) return;
@@ -2546,7 +2546,7 @@ function frame () {
     const ang = -Math.PI / 2 + frac * Math.PI * 2;
 
     // bar ticks
-    sctx.strokeStyle = 'rgba(120,255,175,0.28)'; sctx.lineWidth = 2;
+    sctx.strokeStyle = 'rgba(120,255,175,0.22)'; sctx.lineWidth = 1.2;
     for (let b = 0; b < tr.loopBars; b++) {
       const a = -Math.PI / 2 + (b / tr.loopBars) * Math.PI * 2;
       sctx.beginPath();
@@ -2555,17 +2555,17 @@ function frame () {
       sctx.stroke();
     }
     // travelled arc
-    sctx.strokeStyle = SCOPE_HEX[i]; sctx.lineWidth = 12;
-    sctx.globalAlpha = 0.16;
+    sctx.strokeStyle = SCOPE_HEX[i]; sctx.lineWidth = 5;
+    sctx.globalAlpha = 0.11;
     sctx.beginPath(); sctx.arc(cx, cy, R, -Math.PI / 2, ang); sctx.stroke();
     sctx.globalAlpha = 1;
     // head
     const fl = tr.flash && now - tr.flash < 0.5 ? 1 - (now - tr.flash) / 0.5 : 0;
     sctx.fillStyle = SCOPE_HEX[i];
-    sctx.shadowBlur = 6 + fl * 10;               // phosphor bloom (pixelates on upscale)
+    sctx.shadowBlur = 4 + fl * 8;                // delicate phosphor bloom
     sctx.shadowColor = SCOPE_HEX[i];
     sctx.beginPath();
-    sctx.arc(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R, 9 + fl * 7, 0, Math.PI * 2);
+    sctx.arc(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R, 4.5 + fl * 4, 0, Math.PI * 2);
     sctx.fill();
     sctx.shadowBlur = 0;
   });
