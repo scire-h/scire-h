@@ -332,6 +332,29 @@ suite('BPM glide (fixed-target)', () => {
   near(s5.bpm, 130, 0.01, 'shortened glide still lands on target');
 });
 
+suite('a gliding reference reports its own trajectory', () => {
+  // regression: a wandering/gliding MASTER used to report its stale bpm
+  // to whoever was catching it (bpmAt with null targetAt ignored the
+  // glide destination), so catch + wander together drifted apart
+  const m = mkTrack(120);
+  T.beginGlide(m, 0, 150, { curve: 'linear', dur: 2 });
+  near(T.bpmAt(m, null, 1), 135, 1e-9, 'mid-flight the reference reads its true midpoint');
+  near(T.bpmAt(m, null, 2), 150, 1e-9, 'at the end it reads the glide destination');
+  near(T.bpmAt(m, null, 5), 150, 1e-9, 'and stays there after');
+
+  // a slave catching that gliding master must land on the destination
+  const m2 = mkTrack(120), s2 = mkTrack(90);
+  T.beginGlide(m2, 0, 150, { curve: 'linear', dur: 2 });
+  T.beginCatch(s2, 0, { mode: 'bpm', curve: 'exp', dir: 'nearest', dur: 3 });
+  for (let now = 0; now < 8; now += 0.025) {
+    T.updateCatch(m2, m2, now, OPT(2));
+    T.updateCatch(s2, m2, now, OPT(3));
+    if (m2.catchState) m2.bpm = T.bpmAt(m2, () => m2.catchState.fixedBpm, now);
+    if (s2.catchState) s2.bpm = T.bpmAt(s2, t => T.bpmAt(m2, null, t), now);
+  }
+  near(s2.bpm, 150, 0.01, 'catching a gliding master lands on where the master went');
+});
+
 suite('advance', () => {
   const tr = mkTrack(120);
   const times = [];

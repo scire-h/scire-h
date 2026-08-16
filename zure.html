@@ -389,7 +389,10 @@
       <b>WANDER</b>: 各トラック上部の往復機。ONにした時点のBPMをホームとして、
       DEST との間を行ったり来たりする。到達すると DWELL 秒だけ停滞し、
       TRAVEL 秒かけて元のBPMへ向かう（グライドと同じ機構なのでステップは正確）。
-      つまみや CATCH で手動介入すると WANDER は自動で外れる。<br>
+      つまみや CATCH で手動介入すると WANDER は自動で外れる。
+      <b>優先順位は CATCH ＞ WANDER</b>: CATCH をかけると追う側・追われる
+      マスター双方の WANDER が止まり、CATCH 中のトラック（および CATCH の
+      対象になっているマスター）には WANDER を新たに掛けられない。<br>
       <b>操作の要点</b>: <code>CATCH RATE</code> は合流にかける時間（左=速い/右=遅い、
       追従の途中で回すと再計画）。BPM SYNC はテンポのみ一致で小節頭はズレたまま並走、
       PHASE SYNC は目標BPMを一瞬追い越して小節頭を合わせロックする。
@@ -516,7 +519,11 @@ const TempoCore = (function () {
   function bpmAt (tr, targetAt, t) {
     const c = tr.catchState;
     if (!c) return tr.bpm;
-    const target = targetAt ? targetAt(t) : tr.bpm;
+    /* a glide knows its own destination; without that, a track being
+       used as a reference (e.g. a wandering master) reported its stale
+       bpm to whoever was catching it */
+    const target = targetAt ? targetAt(t)
+                 : c.fixedBpm != null ? c.fixedBpm : tr.bpm;
     if (c.stage === 'converge') return rampBpm(c.ramp, target, t);
     if (c.stage === 'lock')     return target + lockDev(c.lock, t);
     return tr.bpm;
@@ -1367,6 +1374,13 @@ const CATCH_OPT = () => ({
 function wanderTick (tr, now) {
   const w = tr.wander;
   if (!w || !w.on) return;
+  // CATCH outranks WANDER: while anyone is catching this master, hold
+  if (tr === masterTrack() &&
+      tracks.some(o => o !== tr && o.catchState && o.catchState.fixedBpm == null)) {
+    w._phase = 'dwell';
+    w._until = now + 0.5;
+    return;
+  }
   if (tr.catchState) {
     if (tr.catchState.isGlide) w._phase = 'going';
     return;                                   // still traveling
@@ -1462,7 +1476,15 @@ function alignAll () {
 function startCatch (tr) {
   if (!S.playing) { toast('先に PLAY を押してください'); return; }
   if (tr === masterTrack()) return;
+  // CATCH outranks WANDER: both the catcher and the target hold still
   if (tr.wander && tr.wander.on) { tr.wander.on = false; paintWander(tr); }
+  const m = masterTrack();
+  if (m.wander && m.wander.on) {
+    m.wander.on = false;
+    if (m.catchState && m.catchState.isGlide) cancelCatch(m);
+    paintWander(m);
+    toast(m.name + ' の WANDER を停止（CATCH 優先）');
+  }
   TempoCore.beginCatch(tr, ctx.currentTime,
     { mode: S.mode, curve: S.curve, dir: S.dir, dur: S.catchTime });
   renderTrackHead(tr);
@@ -2065,6 +2087,15 @@ function buildWander (tr) {
   btn.title = 'ホームBPMとDESTの間を往復（到達するとDWELLだけ停滞し、TRAVELの速さで戻る）';
   btn.onclick = () => {
     if (Midi.armFromClick({ el: btn, isBtn: true, id: 'wander' + tr.idx })) return;
+    if (!w.on) {
+      if (tr.catchState && tr.catchState.fixedBpm == null) {
+        toast('CATCH 中は WANDER にできません（CATCH 優先）'); return;
+      }
+      if (tr === masterTrack() &&
+          tracks.some(o => o !== tr && o.catchState && o.catchState.fixedBpm == null)) {
+        toast('このトラックへ CATCH 中のため WANDER にできません'); return;
+      }
+    }
     w.on = !w.on;
     if (w.on) {
       w._home = targetBpm(tr);               // where to come back to
