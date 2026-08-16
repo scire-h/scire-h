@@ -133,7 +133,8 @@ const { Voices, SUS_CAP } = loadVoices();
 /* default edit params — mirror defaultVp() in the app */
 function P (over) {
   return Object.assign({ wave: 'auto', pitch: 50, cutoff: 2600, atk: 0.003,
-                         decay: 0.3, sus: 0, tone: 0.5, snappy: 0.5, acc: 0 }, over);
+                         decay: 0.3, sus: 0, tone: 0.5, snappy: 0.5, acc: 0,
+                         bwave: 'auto', harm: 2, mix: 0.22, pmod: 0, noise: 0 }, over);
 }
 
 /* Does `node` reach `out` by following connections? */
@@ -312,6 +313,46 @@ suite('library voicing differences survive the edit layer', () => {
   ok(hp('909') > hp('808'), '909 hats still sit brighter than 808 hats');
   const k9 = render(out => Voices.kick(T0, out, '909', 1, P({})), T0);
   ok(k9.nodes.some(n => n.kind === 'bufsrc'), '909 kick keeps its attack click');
+});
+
+suite('P5 chord section: OSC B / MIX / POLY-MOD / NOISE', () => {
+  // two oscillators per note, B at the HARM ratio
+  const r = render(out => Voices.chord(T0, out, '808', [200], P({ harm: 3 })), T0);
+  const oscs = r.nodes.filter(n => n.kind === 'osc');
+  ok(oscs.length === 2, 'one note = OSC A + OSC B');
+  const fs2 = r.log.filter(e => e.name === 'frequency' && e.op === 'set').map(e => e.v).sort((a, b) => a - b);
+  ok(Math.abs(fs2[0] - 200) < 1e-9 && Math.abs(fs2[1] / fs2[0] - 3 * 1.004) < 1e-9,
+     'OSC B sits at HARM x the note (x' + (fs2[1] / fs2[0]).toFixed(3) + ')');
+
+  // MIX balances the two branch gains
+  const m0 = render(out => Voices.chord(T0, out, '808', [200], P({ mix: 0 })), T0);
+  const m1 = render(out => Voices.chord(T0, out, '808', [200], P({ mix: 1 })), T0);
+  const gainVals = rr => rr.nodes.filter(n => n.kind === 'gain').map(n => n.gain.value);
+  ok(gainVals(m0).includes(1) && gainVals(m0).includes(0), 'MIX 0 = all A');
+  ok(gainVals(m1).includes(0) && gainVals(m1).includes(1), 'MIX 1 = all B');
+
+  // POLY-MOD: OSC B feeds OSC A's frequency param through a gain
+  const pm = render(out => Voices.chord(T0, out, '808', [200], P({ pmod: 0.5 })), T0);
+  const oA = pm.nodes.filter(n => n.kind === 'osc')
+    .find(o => pm.log.some(e => e.n === o && e.name === 'frequency' && Math.abs(e.v - 200) < 1e-9));
+  const modPath = pm.nodes.some(n => n.kind === 'gain' && n.outs.includes(oA.frequency));
+  ok(modPath, 'POLY-MOD routes B through a gain into A.frequency');
+  ok(!render(out => Voices.chord(T0, out, '808', [200], P({ pmod: 0 })), T0)
+      .nodes.some(n => n.kind === 'gain' && n.outs.includes(oA.frequency)),
+     'POLY-MOD off inserts nothing');
+
+  // NOISE joins the mixer only when raised
+  const nz1 = render(out => Voices.chord(T0, out, '808', [200], P({ noise: 0.6 })), T0);
+  ok(nz1.nodes.some(n => n.kind === 'bufsrc'), 'NOISE adds the noise source');
+  ok(nz1.nodes.filter(n => n.started !== null).every(n => reaches(n, nz1.out)),
+     'noise routes to the output');
+  const nz0 = render(out => Voices.chord(T0, out, '808', [200], P({ noise: 0 })), T0);
+  ok(!nz0.nodes.some(n => n.kind === 'bufsrc'), 'NOISE 0 stays clean');
+
+  // OSC B wave override; auto keeps stock character
+  const bw = render(out => Voices.chord(T0, out, '808', [200], P({ bwave: 'square' })), T0);
+  ok(bw.nodes.filter(n => n.kind === 'osc').some(o => o.type === 'square'),
+     'OSC B takes its own waveform');
 });
 
 suite('attack edit', () => {

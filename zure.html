@@ -378,6 +378,12 @@
       セルの並びがひとつのノートになり、並びの最初で発音、最後のセルの直後で
       リリースされる。SUS=0 なら従来どおりセルごとのワンショット。各行はモノで、
       新しいノートは前の音をチョーク（CH/OH は相互）。停止時と8秒の上限でも解放。<br>
+      <b>CHORD の音作り（簡易 Prophet-5）</b>: TONE 行の下の OSC B 行で
+      2つ目のオシレータを混ぜられる。波形（AUTOはライブラリ既定）、
+      HARM（倍音比 ×0.5〜×4、Bの音程）、MIX（A:B バランス）、
+      P.MOD（ポリモジュレーション — B の波形で A の周波数を揺らす。上げると
+      金属的・ベル的な倍音が出る）、NOISE（ミキサーにホワイトノイズを足す）。
+      デフォルトは従来の音色相当（808: sine+tri×2 / 909: 2xSAW デチューン）。<br>
       <b>ドラム専用パラメータ</b>: TONE はアタックの硬さと明るさ（0.5=原音、
       ±12dB のハイシェルフ+アタック時間の伸縮）。スネアの SNAPPY は響き線の
       ノイズ量（0でタムのようなトーンだけの音）。KIT の ACCENT は全体の音量に
@@ -1053,46 +1059,64 @@ const Voices = {
     return v;
   },
 
-  /* one tone into a shared destination (used by chord()) */
+  /* one tone into a shared destination (used by chord()).
+     A simplified Prophet-5 voice: OSC A + OSC B in a MIX, B tuned by a
+     HARM(onic) ratio, POLY-MOD sends B's audio into A's frequency. */
   tone (t, dest, lib, freq, p) {
-    if (lib === '909') {
-      const cf = p.cutoff / 2600;                  // stock sweep, scaled
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass'; lp.Q.value = 6;
+    const is9 = lib === '909';
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    if (is9) {                                     // stock sweep, scaled
+      lp.Q.value = 6;
+      const cf = p.cutoff / 2600;
       lp.frequency.setValueAtTime(Math.max(120, Math.min(9000, freq * 12 * cf)), t);
       lp.frequency.exponentialRampToValueAtTime(
         Math.max(100, freq * 2.2 * cf), t + Math.min(p.decay, 3) * 0.8);
-      const g = ctx.createGain();
-      const end = ampEnvADS(g.gain, t, atkOf(p, 0.008), 0.20, p.decay, p.sus);
-      const w = wv(p, 'sawtooth');
-      [-6, 6].forEach(cents => {
-        const o = ctx.createOscillator(); o.type = w;
-        o.frequency.setValueAtTime(freq * Math.pow(2, cents / 1200), t);
-        o.connect(lp); o.start(t); o.stop(end + 0.1);
-      });
-      lp.connect(g).connect(dest);
     } else {
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass'; lp.frequency.value = p.cutoff; lp.Q.value = 0.6;
-      const g = ctx.createGain();
-      const end = ampEnvADS(g.gain, t, atkOf(p, 0.014), 0.24, p.decay, p.sus);
-      const o1 = ctx.createOscillator();
-      const o2 = ctx.createOscillator();
-      if (!p.wave || p.wave === 'auto') { o1.type = 'sine'; o2.type = 'triangle'; }
-      else { o1.type = p.wave; o2.type = p.wave; }
-      o1.frequency.setValueAtTime(freq, t);
-      o2.frequency.setValueAtTime(freq * 2.005, t);
-      const g2 = ctx.createGain(); g2.gain.value = 0.28;
-      o1.connect(lp); o2.connect(g2).connect(lp);
-      o1.start(t); o2.start(t); o1.stop(end + 0.1); o2.stop(end + 0.1);
-      lp.connect(g).connect(dest);
+      lp.frequency.value = p.cutoff; lp.Q.value = 0.6;
     }
+    const g = ctx.createGain();
+    const end = ampEnvADS(g.gain, t, atkOf(p, is9 ? 0.008 : 0.014),
+                          is9 ? 0.20 : 0.24, p.decay, p.sus);
+
+    const wA = wv(p, is9 ? 'sawtooth' : 'sine');
+    const wB = p.bwave && p.bwave !== 'auto' ? p.bwave
+             : (p.wave && p.wave !== 'auto' ? p.wave : (is9 ? 'sawtooth' : 'triangle'));
+    const mix  = p.mix  != null ? p.mix  : (is9 ? 0.5 : 0.22);
+    const harm = p.harm != null ? p.harm : (is9 ? 1 : 2);
+
+    const oA = ctx.createOscillator(); oA.type = wA;
+    oA.frequency.setValueAtTime(freq, t);
+    const oB = ctx.createOscillator(); oB.type = wB;
+    oB.frequency.setValueAtTime(freq * harm * 1.004, t);   // +7c analog drift
+    const gA = ctx.createGain(); gA.gain.value = 1 - mix;
+    const gB = ctx.createGain(); gB.gain.value = mix;
+    oA.connect(gA).connect(lp);
+    oB.connect(gB).connect(lp);
+    if ((p.pmod || 0) > 0.001) {                   // POLY-MOD: B -> A frequency
+      const mg = ctx.createGain();
+      mg.gain.value = p.pmod * freq * 6;
+      oB.connect(mg).connect(oA.frequency);
+    }
+    oA.start(t); oB.start(t);
+    oA.stop(end + 0.1); oB.stop(end + 0.1);
+    lp.connect(g).connect(dest);
   },
 
-  /* one chord hit = all its notes under one gate/choke */
+  /* one chord hit = all its notes under one gate/choke, plus the
+     P5 mixer's noise source shared across the hit */
   chord (t, out, lib, freqs, p) {
     const v = mkVoice(out, lvlOf(p));
     freqs.forEach(f => Voices.tone(t, v.in, lib, f, p));
+    if ((p.noise || 0) > 0.001) {
+      const life = p.sus > 0.001 ? SUS_CAP : p.decay + 0.1;
+      const nz = noiseSrc(t, life);
+      const nlp = ctx.createBiquadFilter();
+      nlp.type = 'lowpass'; nlp.frequency.value = p.cutoff; nlp.Q.value = 0.5;
+      const ng = ctx.createGain();
+      ampEnvADS(ng.gain, t, atkOf(p, 0.01), 0.3 * p.noise, p.decay, p.sus);
+      nz.connect(nlp).connect(ng).connect(v.in);
+    }
     return v;
   }
 };
@@ -1118,7 +1142,8 @@ function defaultVp (lib) {
     snr:   { wave: 'auto', pitch: x ? 190 : 180, decay: x ? 0.26 : 0.19,   sus: 0, atk: 0.001, tone: 0.5, snappy: 0.5 },
     ch:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.030 : 0.042, sus: 0, atk: 0.0006, tone: 0.5 },
     oh:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.30 : 0.36,   sus: 0, atk: 0.0006, tone: 0.5 },
-    chord: { wave: 'auto', cutoff: 2600,         decay: 1.2,               sus: 0, atk: x ? 0.008 : 0.014 }
+    chord: { wave: 'auto', cutoff: 2600,         decay: 1.2,               sus: 0, atk: x ? 0.008 : 0.014,
+             bwave: 'auto', harm: x ? 1 : 2, mix: x ? 0.5 : 0.22, pmod: 0, noise: 0 }
   };
 }
 
@@ -2365,12 +2390,60 @@ function buildVoiceEdit (tr) {
 
     det.appendChild(row);
   });
+
+  if (tr.kind === 'chord') {
+    // simplified Prophet-5 section: OSC B + MIX + POLY-MOD + NOISE
+    const row = document.createElement('div');
+    row.className = 'vrow';
+    const lb = document.createElement('span');
+    lb.className = 'vlbl'; lb.textContent = 'OSC B';
+    row.appendChild(lb);
+
+    const seg = document.createElement('div');
+    seg.className = 'opts sm';
+    seg.id = 'vwB' + tr.idx;
+    WAVES.forEach(([v, nm]) => {
+      const b2 = document.createElement('button');
+      b2.dataset.v = v; b2.textContent = nm;
+      seg.appendChild(b2);
+    });
+    row.appendChild(seg);
+
+    const addK = o => {
+      const dEl = document.createElement('div');
+      dEl.className = 'knob sm';
+      row.appendChild(dEl);
+      trackKnobs[tr.idx].push(new Knob(dEl, o));
+    };
+    addK({ label: 'HARM', min: 0.5, max: 4, def: tr.vp.chord.harm, log: true,
+           id: 'vp' + tr.idx + 'chordH',
+           get: () => tr.vp.chord.harm, set: v => tr.vp.chord.harm = v,
+           fmt: v => '×' + v.toFixed(2) });
+    addK({ label: 'MIX', min: 0, max: 1, def: tr.vp.chord.mix,
+           id: 'vp' + tr.idx + 'chordM',
+           get: () => tr.vp.chord.mix, set: v => tr.vp.chord.mix = v,
+           fmt: v => 'A' + Math.round((1 - v) * 100) + ':' + Math.round(v * 100) + 'B' });
+    addK({ label: 'P.MOD', min: 0, max: 1, def: 0,
+           id: 'vp' + tr.idx + 'chordPM',
+           get: () => tr.vp.chord.pmod, set: v => tr.vp.chord.pmod = v,
+           fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+    addK({ label: 'NOISE', min: 0, max: 1, def: 0,
+           id: 'vp' + tr.idx + 'chordNZ',
+           get: () => tr.vp.chord.noise, set: v => tr.vp.chord.noise = v,
+           fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+    det.appendChild(row);
+  }
+
   host.appendChild(det);
   // segInit resolves by id, so wire the wave selectors once attached
   defs.forEach(d => {
     segInit('vw' + tr.idx + d.slot,
       () => tr.vp[d.slot].wave, v => tr.vp[d.slot].wave = v);
   });
+  if (tr.kind === 'chord') {
+    segInit('vwB' + tr.idx,
+      () => tr.vp.chord.bwave, v => tr.vp.chord.bwave = v);
+  }
 }
 
 /* A loop-length sample fills the loop exactly: derive its native BPM. */
