@@ -4,15 +4,20 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#000000" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>GRAIN — mic-reactive particles</title>
 <style>
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body {
-    margin:0; padding:0; height:100%; overflow:hidden;
+    margin:0; padding:0; overflow:hidden; overscroll-behavior:none;
+    position:fixed; inset:0;                 /* kills iOS rubber-banding */
     background:#000; color:#fff;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
     font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Hiragino Sans",sans-serif;
   }
-  canvas { display:block; width:100%; height:100%; }
+  canvas { display:block; width:100%; height:100%; touch-action:none; }
 
   /* ---------- start veil ---------- */
   #veil {
@@ -64,9 +69,25 @@
   .hbtn.on { border-color:#fff; color:#000; background:#fff; }
   #meter { flex:1; min-width:80px; height:1px; background:rgba(255,255,255,.16); position:relative; }
   #meterBass { position:absolute; left:0; top:-2px; height:5px; width:0; background:#fff; }
-  #note { position:fixed; top:16px; left:16px; z-index:20; font-size:10px;
+  #note { position:fixed; z-index:20; font-size:10px;
+          top:calc(16px + env(safe-area-inset-top)); left:calc(16px + env(safe-area-inset-left));
           letter-spacing:.22em; color:#5a5a5a; opacity:0; transition:opacity 400ms; }
   #note.show { opacity:1; }
+  #veil { padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
+
+  /* ---------- touch devices: bigger targets, two tidy rows ---------- */
+  @media (pointer:coarse), (max-width:640px) {
+    #hud { gap:4px 12px; padding:10px 14px calc(12px + env(safe-area-inset-bottom)); }
+    .ctl { flex:1 1 100%; gap:12px; }
+    .ctl label { min-width:32px; }
+    .ctl input[type=range] { flex:1; width:auto; min-width:70px; height:3px; padding:12px 0;
+                             background-clip:content-box; }
+    .ctl input[type=range]::-webkit-slider-thumb { width:20px; height:20px; }
+    .ctl input[type=range]::-moz-range-thumb { width:20px; height:20px; }
+    .hbtn { flex:1 1 28%; margin-top:6px; padding:12px 10px; font-size:11px; }
+    #meter { flex:1 1 100%; order:-1; }
+    #hint { display:none; }
+  }
 </style>
 </head>
 <body>
@@ -96,7 +117,13 @@
   </p>
   <button id="startBtn">マイクを許可して開始</button>
   <p id="veilNote" style="font-size:10px;color:#4c4c4c;letter-spacing:.14em">
-    R 再生成 ／ P 配置切替 ／ D デモ音源 ／ H UI 表示 ／ F 全画面
+    <span id="hint">R 再生成 ／ P 配置切替 ／ D デモ音源 ／ H UI 表示 ／ F 全画面<br /></span>
+    画面をタップすると一撃になります
+  </p>
+  <p id="insecure" style="display:none;font-size:11px;color:#d08a5a;line-height:1.8">
+    このページは <b>http / file</b> で開かれています。<br />
+    ブラウザの仕様でマイクは <b>https</b>（または localhost）でしか使えません。<br />
+    このまま開始するとデモ音源で動きます。
   </p>
 </div>
 
@@ -111,8 +138,10 @@ const cv  = document.getElementById('cv');
 const ctx = cv.getContext('2d', { alpha:false });
 let W = 0, H = 0, DPR = 1, CX = 0, CY = 0, RMAX = 1;
 
+const COARSE = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+
 function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  DPR = Math.min(window.devicePixelRatio || 1, COARSE ? 1.75 : 2);
   W = window.innerWidth; H = window.innerHeight;
   cv.width  = Math.round(W * DPR);
   cv.height = Math.round(H * DPR);
@@ -122,7 +151,17 @@ function resize() {
   RMAX = Math.hypot(CX, CY);
   layoutHomes();
 }
-window.addEventListener('resize', resize);
+let resizeTimer = 0;
+function onResize() {
+  // iOS emits a resize for every address-bar nudge; ignore the ones that
+  // do not actually change the drawing surface
+  const w = window.innerWidth, h = window.innerHeight;
+  if (w === W && h === H) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resize, 140);
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 260));
 
 // white glow sprite — drawn additively so overlaps bloom
 const SPR = document.createElement('canvas');
@@ -216,6 +255,16 @@ function placeHome(name, i, n, rnd, out) {
 // ══════════════════════════════════════════════════════════════
 let COUNT = 1600;
 let P = null;                                    // struct-of-arrays
+
+/** A count this screen can actually carry at 60 fps. */
+function autoCount() {
+  const px = window.innerWidth * window.innerHeight;
+  let n = Math.round(px / 330);                  // ~1700 on a 900x640 desktop
+  const cores = navigator.hardwareConcurrency || 4;
+  if (cores <= 4) n *= 0.85;
+  if (COARSE) n = Math.max(n, 700);              // a phone screen still wants a field
+  return Math.max(300, Math.min(4000, Math.round(n / 100) * 100));
+}
 
 function allocParticles(n) {
   P = {
@@ -443,8 +492,10 @@ function bindRange(sid, vid, fmt, set) {
 }
 bindRange('sSens',  'vSens',  n => (n / 100).toFixed(1), n => SENS    = n / 100);
 bindRange('sBass',  'vBass',  n => (n / 100).toFixed(1), n => BASSAMT = n / 100);
+const sCount = $('sCount'), vCount = $('vCount');
 bindRange('sCount', 'vCount', n => String(n), n => {
   if (!P || n === COUNT) return;
+  autoQuality = false;                     // the user has an opinion; respect it
   allocParticles(n); layoutHomes();
 });
 
@@ -476,8 +527,33 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'd') { toggleDemo(); pokeHud(); }
   else if (k === 'h') { hud.classList.toggle('hidden'); }
   else if (k === 'f') {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else document.documentElement.requestFullscreen?.();
+    const el = document.documentElement;
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    } else if (el.requestFullscreen || el.webkitRequestFullscreen) {
+      (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+    } else {
+      note('全画面はこのブラウザでは使えません');   // iPhone Safari
+    }
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  mobile housekeeping
+// ══════════════════════════════════════════════════════════════
+let wakeLock = null;
+async function keepAwake() {
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { /* fine */ }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    actx?.suspend?.();
+  } else {
+    prev = performance.now();          // do not integrate the time we were away
+    fpsSince = 0;
+    if (running) actx?.resume?.();     // iOS suspends the context in the background
+    keepAwake();
   }
 });
 
@@ -486,12 +562,28 @@ window.addEventListener('keydown', (e) => {
 // ══════════════════════════════════════════════════════════════
 let prev = performance.now();
 let lastMeter = 0;
+let autoQuality = true;          // switched off as soon as the user sets 粒
+let fpsAcc = 0, fpsFrames = 0, fpsSince = 0;
 const meterBass = document.getElementById('meterBass');
 
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(2.2, (now - prev) / 16.667) || 1;   // frames, clamped
   prev = now;
+
+  // ---- adaptive quality ----------------------------------------
+  if (autoQuality) {
+    fpsAcc += dt; fpsFrames++;
+    if (now - fpsSince > 1600) {
+      const fps = fpsFrames / ((now - fpsSince) / 1000);
+      if (fpsSince && fps < 42 && COUNT > 400) {
+        const n = Math.max(400, Math.round(COUNT * 0.78 / 100) * 100);
+        allocParticles(n); layoutHomes();
+        sCount.value = String(n); vCount.textContent = String(n);
+      }
+      fpsSince = now; fpsAcc = 0; fpsFrames = 0;
+    }
+  }
 
   if (running) readAudio();
   flash *= Math.pow(0.87, dt);
@@ -573,15 +665,31 @@ function frame(now) {
 //  boot
 // ══════════════════════════════════════════════════════════════
 resize();
+COUNT = autoCount();
+sCount.value = String(COUNT); vCount.textContent = String(COUNT);
 allocParticles(COUNT);
 layoutHomes();
 requestAnimationFrame(frame);
 pokeHud();
 
+// mic needs a secure context — the usual phone trap is opening the file
+// straight off the filesystem, or over plain http on the LAN
+const micPossible = window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
+if (!micPossible) {
+  $('insecure').style.display = '';
+  $('startBtn').textContent = 'デモ音源で開始';
+}
+if (COARSE) {                       // key hints mean nothing without a keyboard
+  $('bRegen').textContent = '再生成';
+  $('bPat').textContent   = '配置';
+  $('bDemo').textContent  = 'デモ';
+}
+
 $('startBtn').addEventListener('click', async () => {
   $('startBtn').disabled = true;
   $('startBtn').textContent = '起動中…';
   const ok = await start();
+  keepAwake();
   $('veil').classList.add('gone');
   setTimeout(() => $('veil').remove(), 800);
   regenerate(1.4);

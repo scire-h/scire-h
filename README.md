@@ -125,6 +125,21 @@ counts as a hit.
 open mic-particles.html      # then allow microphone access
 ```
 
+### On a phone
+
+The page is built for it: grain count sized to the screen, an adaptive
+quality pass that sheds grains if the frame rate drops, touch-sized
+controls, Screen Wake Lock, safe-area padding, no rubber-band scrolling
+and an audio context that resumes when the tab comes back.
+
+One hard browser rule though — **`getUserMedia` only works in a secure
+context**, i.e. over `https://` (or `localhost`). Opening the file from
+the phone's Files app (`file://`), or over plain `http://` on the LAN,
+gives you no microphone at all; the page detects that, says so on the
+start screen and falls back to the built-in demo source. To use the mic
+on a phone, serve it over HTTPS — GitHub Pages for this repo is the
+least-effort route.
+
 ## License
 
 MIT. ULT-SOUND, Toyo Gakki and DS-4M are trademarks of their
