@@ -5,8 +5,9 @@ a four-channel analog drum synthesiser in the Pollard Syndrum family.
 
 ```
 scire-h/
-├── index.html        ← single-file HTML / Web Audio clone
-└── ds4-native/       ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
+├── index.html          ← single-file HTML / Web Audio clone
+├── mic-particles.html  ← mic-reactive particle visualiser
+└── ds4-native/         ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
 ```
 
 ## 1. HTML / Web Audio clone (`index.html`)
@@ -93,6 +94,35 @@ audio behaviour.
 ```bash
 cd ds4-native/tests
 ./run_all.sh
+```
+
+## 3. Mic-reactive particles (`mic-particles.html`)
+
+A second self-contained page: white grains on black that move to
+whatever the microphone hears, weighted heavily towards the low end —
+point it at the DS-4M and every tom hit reshuffles the field.
+
+* Live input through `getUserMedia` with echo cancellation, noise
+  suppression and AGC all **off**, so the bass survives.
+* 4096-point FFT split into bass / low-mid / mid / high bands, plus a
+  separate twice-lowpassed (150 Hz) analyser tap for a clean sub
+  waveform.
+* Adaptive onset detection on the bass band: each hit flashes the
+  field, throws the grains outward and re-seeds their arrangement;
+  the hardest hits switch to a different layout altogether
+  (scatter / phyllotaxis / grid / rings / waves / spokes).
+* Waveform taps are bound to geometry — radius indexes the sub
+  waveform (concentric ripple), angle indexes the full-band waveform
+  (tangential shiver) — so the layout stays readable while it moves.
+* Typed-array particle store, one additive glow sprite, 300–4000
+  grains, 60 fps on a laptop.
+
+Keys: `R` re-seed · `P` next layout · `D` built-in demo kick (works
+without a mic) · `H` hide the HUD · `F` fullscreen. Tapping the canvas
+counts as a hit.
+
+```
+open mic-particles.html      # then allow microphone access
 ```
 
 ## License

@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#000000" />
+<title>GRAIN — mic-reactive particles</title>
+<style>
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body {
+    margin:0; padding:0; height:100%; overflow:hidden;
+    background:#000; color:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Hiragino Sans",sans-serif;
+  }
+  canvas { display:block; width:100%; height:100%; }
+
+  /* ---------- start veil ---------- */
+  #veil {
+    position:fixed; inset:0; z-index:30;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+    background:#000; text-align:center; padding:24px;
+  }
+  #veil h1 { margin:0; font-size:13px; font-weight:600; letter-spacing:.42em; color:#fff; }
+  #veil p  { margin:0; font-size:12px; line-height:1.9; color:#7a7a7a; letter-spacing:.05em; }
+  #startBtn {
+    margin-top:6px; padding:14px 34px; border-radius:999px;
+    border:1px solid rgba(255,255,255,.55); background:transparent; color:#fff;
+    font-size:12px; font-weight:600; letter-spacing:.3em; cursor:pointer;
+    transition:background 160ms, color 160ms;
+  }
+  #startBtn:hover { background:#fff; color:#000; }
+  #veil.gone { opacity:0; pointer-events:none; transition:opacity 700ms; }
+
+  /* ---------- hud ---------- */
+  #hud {
+    position:fixed; left:0; right:0; bottom:0; z-index:20;
+    padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+    display:flex; flex-wrap:wrap; align-items:center; gap:14px 20px;
+    background:linear-gradient(to top, rgba(0,0,0,.82), rgba(0,0,0,0));
+    font-size:10px; letter-spacing:.18em; color:#8d8d8d;
+    opacity:0; transition:opacity 400ms; pointer-events:none;
+  }
+  #hud.show { opacity:1; pointer-events:auto; }
+  #hud.hidden { display:none; }
+  .ctl { display:flex; align-items:center; gap:9px; }
+  .ctl label { min-width:52px; }
+  .ctl input[type=range] {
+    -webkit-appearance:none; appearance:none; width:104px; height:1px;
+    background:rgba(255,255,255,.34); outline:none;
+  }
+  .ctl input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:11px; height:11px; border-radius:50%;
+    background:#fff; cursor:pointer;
+  }
+  .ctl input[type=range]::-moz-range-thumb {
+    width:11px; height:11px; border:none; border-radius:50%; background:#fff; cursor:pointer;
+  }
+  .ctl .val { min-width:30px; color:#e4e4e4; font-variant-numeric:tabular-nums; }
+  .hbtn {
+    padding:7px 13px; border:1px solid rgba(255,255,255,.28); border-radius:3px;
+    background:transparent; color:#c9c9c9; font-size:10px; letter-spacing:.18em; cursor:pointer;
+  }
+  .hbtn:hover { border-color:#fff; color:#fff; }
+  .hbtn.on { border-color:#fff; color:#000; background:#fff; }
+  #meter { flex:1; min-width:80px; height:1px; background:rgba(255,255,255,.16); position:relative; }
+  #meterBass { position:absolute; left:0; top:-2px; height:5px; width:0; background:#fff; }
+  #note { position:fixed; top:16px; left:16px; z-index:20; font-size:10px;
+          letter-spacing:.22em; color:#5a5a5a; opacity:0; transition:opacity 400ms; }
+  #note.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<canvas id="cv"></canvas>
+
+<div id="note">GRAIN</div>
+
+<div id="hud">
+  <div class="ctl"><label>感度</label>
+    <input id="sSens" type="range" min="20" max="400" value="130" /><span class="val" id="vSens">1.3</span></div>
+  <div class="ctl"><label>低音</label>
+    <input id="sBass" type="range" min="0" max="400" value="260" /><span class="val" id="vBass">2.6</span></div>
+  <div class="ctl"><label>粒</label>
+    <input id="sCount" type="range" min="300" max="4000" step="100" value="1600" /><span class="val" id="vCount">1600</span></div>
+  <div id="meter"><div id="meterBass"></div></div>
+  <button class="hbtn" id="bRegen">再生成 R</button>
+  <button class="hbtn" id="bPat">配置 P</button>
+  <button class="hbtn" id="bDemo">デモ D</button>
+</div>
+
+<div id="veil">
+  <h1>G R A I N</h1>
+  <p>
+    マイクの音に反応して粒が動きます。<br />
+    低音の一撃ごとに、粒の配置が再生成されます。
+  </p>
+  <button id="startBtn">マイクを許可して開始</button>
+  <p id="veilNote" style="font-size:10px;color:#4c4c4c;letter-spacing:.14em">
+    R 再生成 ／ P 配置切替 ／ D デモ音源 ／ H UI 表示 ／ F 全画面
+  </p>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ══════════════════════════════════════════════════════════════
+//  canvas
+// ══════════════════════════════════════════════════════════════
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d', { alpha:false });
+let W = 0, H = 0, DPR = 1, CX = 0, CY = 0, RMAX = 1;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width  = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  CX = W / 2; CY = H / 2;
+  RMAX = Math.hypot(CX, CY);
+  layoutHomes();
+}
+window.addEventListener('resize', resize);
+
+// white glow sprite — drawn additively so overlaps bloom
+const SPR = document.createElement('canvas');
+SPR.width = SPR.height = 64;
+{
+  const g = SPR.getContext('2d');
+  const rg = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  rg.addColorStop(0.00, 'rgba(255,255,255,1)');
+  rg.addColorStop(0.16, 'rgba(255,255,255,.96)');
+  rg.addColorStop(0.34, 'rgba(255,255,255,.34)');
+  rg.addColorStop(0.62, 'rgba(255,255,255,.07)');
+  rg.addColorStop(1.00, 'rgba(255,255,255,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, 64, 64);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  seeded RNG — a new seed == a new grain arrangement
+// ══════════════════════════════════════════════════════════════
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+//  layouts
+// ══════════════════════════════════════════════════════════════
+const PATTERNS = ['scatter', 'phyllotaxis', 'grid', 'rings', 'waves', 'spokes'];
+let patIdx = 1;
+let seed = 1234;
+
+function placeHome(name, i, n, rnd, out) {
+  const R = Math.min(W, H) * 0.44;
+  switch (name) {
+    case 'scatter': {
+      out.x = rnd() * W;
+      out.y = rnd() * H;
+      break;
+    }
+    case 'phyllotaxis': {
+      const a = i * 2.399963229728653 + rnd() * 0.05;
+      const r = Math.sqrt((i + 0.5) / n) * R * 1.28;
+      out.x = CX + Math.cos(a) * r;
+      out.y = CY + Math.sin(a) * r;
+      break;
+    }
+    case 'grid': {
+      const cols = Math.max(2, Math.round(Math.sqrt(n * (W / H))));
+      const rows = Math.max(2, Math.ceil(n / cols));
+      const gx = i % cols, gy = (i / cols) | 0;
+      const mx = W * 0.06, my = H * 0.06;
+      out.x = mx + (W - 2 * mx) * (gx + 0.5) / cols + (rnd() - 0.5) * (W / cols) * 0.45;
+      out.y = my + (H - 2 * my) * (gy + 0.5) / rows + (rnd() - 0.5) * (H / rows) * 0.45;
+      break;
+    }
+    case 'rings': {
+      const RINGS = 7 + ((seed >> 3) % 5);
+      const k = Math.floor(Math.sqrt(rnd()) * RINGS);          // outer rings denser
+      const r = R * 1.25 * ((k + 1) / RINGS);
+      const a = i * 2.399963229728653 + k;                      // golden angle, even spacing
+      out.x = CX + Math.cos(a) * r;
+      out.y = CY + Math.sin(a) * r * 0.96;
+      break;
+    }
+    case 'waves': {
+      const LINES = 7 + ((seed >> 5) % 5);
+      const FREQ  = 1 + ((seed >> 9) % 3);
+      const li = i % LINES;
+      const t  = (Math.floor(i / LINES) + rnd() * 0.7) / Math.ceil(n / LINES);
+      const amp = H / LINES * 0.33;
+      out.x = t * W;
+      out.y = H * (li + 0.5) / LINES + Math.sin(t * Math.PI * 2 * FREQ + li * 0.8) * amp;
+      break;
+    }
+    case 'spokes': {
+      const ARMS = 16 + ((seed >> 2) % 17);
+      const a = (i % ARMS) / ARMS * Math.PI * 2 + (seed % 100) * 0.01;
+      const r = Math.pow(rnd(), 0.62) * RMAX * 0.94;
+      out.x = CX + Math.cos(a) * r + (rnd() - 0.5) * 9;
+      out.y = CY + Math.sin(a) * r + (rnd() - 0.5) * 9;
+      break;
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  particles
+// ══════════════════════════════════════════════════════════════
+let COUNT = 1600;
+let P = null;                                    // struct-of-arrays
+
+function allocParticles(n) {
+  P = {
+    x: new Float32Array(n), y: new Float32Array(n),
+    hx: new Float32Array(n), hy: new Float32Array(n),
+    vx: new Float32Array(n), vy: new Float32Array(n),
+    wr: new Uint16Array(n),                      // low-band tap, by radius
+    wa: new Uint16Array(n),                      // full-band tap, by angle
+    sz: new Float32Array(n),                     // base radius
+    ph: new Float32Array(n),                     // idle drift phase
+    sp: new Float32Array(n)                      // spring stiffness
+  };
+  const rnd = mulberry32(seed ^ 0x9e37);
+  for (let i = 0; i < n; i++) {
+    P.sz[i] = 0.80 + Math.pow(rnd(), 2.4) * 2.7;
+    P.ph[i] = rnd() * Math.PI * 2;
+    P.sp[i] = 0.020 + rnd() * 0.052;
+    P.x[i] = CX + (rnd() - 0.5) * W;
+    P.y[i] = CY + (rnd() - 0.5) * H;
+  }
+  COUNT = n;
+}
+
+const tmp = { x:0, y:0 };
+function layoutHomes() {
+  if (!P) return;
+  const name = PATTERNS[patIdx];
+  const rnd = mulberry32(seed);
+  for (let i = 0; i < COUNT; i++) {
+    placeHome(name, i, COUNT, rnd, tmp);
+    P.hx[i] = tmp.x; P.hy[i] = tmp.y;
+    // tap the buffers by geometry, not at random: grains at the same radius
+    // ride the same low-frequency crest, so the low end reads as a ripple
+    const dx = tmp.x - CX, dy = tmp.y - CY;
+    const d  = Math.hypot(dx, dy);
+    P.wr[i] = ((d / RMAX) * 460) & 0xffff;
+    P.wa[i] = (((Math.atan2(dy, dx) + Math.PI) / (Math.PI * 2)) * 900) & 0xffff;
+  }
+}
+
+/** Re-seed the arrangement. `kick` also throws every grain outward. */
+function regenerate(kick) {
+  seed = (Math.random() * 0x7fffffff) | 0;
+  layoutHomes();
+  if (kick > 0) kickField(kick);
+}
+
+/** Outward impulse from the centre — the visible punch of a low-end hit. */
+function kickField(kick) {
+  for (let i = 0; i < COUNT; i++) {
+    const dx = P.x[i] - CX, dy = P.y[i] - CY;
+    const d = Math.hypot(dx, dy) || 1;
+    const f = kick * (1.5 + Math.random() * 2.2);
+    P.vx[i] += (dx / d) * f + (Math.random() - 0.5) * kick * 2.4;
+    P.vy[i] += (dy / d) * f + (Math.random() - 0.5) * kick * 2.4;
+  }
+}
+function nextPattern() {
+  patIdx = (patIdx + 1) % PATTERNS.length;
+  regenerate(0.7);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  audio
+// ══════════════════════════════════════════════════════════════
+const FFT = 4096;
+let actx = null, analyser = null, bassAn = null, stream = null;
+let freq = null, wave = null, bwave = null, binHz = 1;
+let demoOsc = null, demoGain = null, demoNoise = null, demoOn = false;
+let running = false;
+
+// band ranges in Hz
+const BANDS = { bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,9000] };
+let bass = 0, lowMid = 0, mid = 0, high = 0, loud = 0;
+let bassAvg = 0.02, bassEnv = 0, flash = 0;
+let lastOnset = -1e9;
+
+async function start() {
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  await actx.resume();
+
+  analyser = actx.createAnalyser();
+  analyser.fftSize = FFT;
+  analyser.smoothingTimeConstant = 0.62;   // low → snappy on transients
+  analyser.minDecibels = -92;
+  analyser.maxDecibels = -12;
+
+  // dedicated low-passed tap: a clean sub waveform for the radial breathing
+  const lp1 = actx.createBiquadFilter();
+  lp1.type = 'lowpass'; lp1.frequency.value = 150; lp1.Q.value = 0.7;
+  const lp2 = actx.createBiquadFilter();
+  lp2.type = 'lowpass'; lp2.frequency.value = 150; lp2.Q.value = 0.7;
+  bassAn = actx.createAnalyser();
+  bassAn.fftSize = 2048;
+  bassAn.smoothingTimeConstant = 0;
+  lp1.connect(lp2).connect(bassAn);
+
+  const hub = actx.createGain();
+  hub.gain.value = 1;
+  hub.connect(analyser);
+  hub.connect(lp1);
+
+  // ---- demo source (silent until D) ----
+  demoGain = actx.createGain(); demoGain.gain.value = 0;
+  demoOsc = actx.createOscillator(); demoOsc.type = 'sine'; demoOsc.frequency.value = 52;
+  const nb = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
+  const nd = nb.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = (Math.random() * 2 - 1) * 0.35;
+  demoNoise = actx.createBufferSource(); demoNoise.buffer = nb; demoNoise.loop = true;
+  demoOsc.connect(demoGain); demoNoise.connect(demoGain);
+  demoGain.connect(hub);
+  demoOsc.start(); demoNoise.start();
+
+  // ---- microphone ----
+  let micOk = false;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,   // all three OFF: they gut the low end
+        noiseSuppression: false,
+        autoGainControl:  false,
+        channelCount: 1
+      }
+    });
+    actx.createMediaStreamSource(stream).connect(hub);
+    micOk = true;
+  } catch (e) {
+    note('マイク不可 — D でデモ音源');
+  }
+
+  freq  = new Uint8Array(analyser.frequencyBinCount);
+  wave  = new Float32Array(analyser.fftSize);
+  bwave = new Float32Array(bassAn.fftSize);
+  binHz = actx.sampleRate / analyser.fftSize;
+
+  running = true;
+  if (!micOk) toggleDemo(true);
+  return micOk;
+}
+
+function bandLevel(lo, hi) {
+  const a = Math.max(1, Math.floor(lo / binHz));
+  const b = Math.min(freq.length - 1, Math.ceil(hi / binHz));
+  let s = 0;
+  for (let i = a; i <= b; i++) s += freq[i];
+  return s / ((b - a + 1) * 255);
+}
+
+function readAudio() {
+  analyser.getByteFrequencyData(freq);
+  analyser.getFloatTimeDomainData(wave);
+  bassAn.getFloatTimeDomainData(bwave);
+
+  bass   = bandLevel(BANDS.bass[0],   BANDS.bass[1]);
+  lowMid = bandLevel(BANDS.lowMid[0], BANDS.lowMid[1]);
+  mid    = bandLevel(BANDS.mid[0],    BANDS.mid[1]);
+  high   = bandLevel(BANDS.high[0],   BANDS.high[1]);
+  loud   = bass * 0.5 + lowMid * 0.22 + mid * 0.18 + high * 0.1;
+
+  // fast-attack / slow-release envelope
+  bassEnv = bass > bassEnv ? bass : bassEnv * 0.88 + bass * 0.12;
+
+  // adaptive onset: bass jumping clear of its own running mean
+  const now = performance.now();
+  const hot = bass > bassAvg * 1.45 + 0.055 && bass > 0.10;
+  bassAvg = bassAvg * 0.965 + bass * 0.035;
+  if (hot && now - lastOnset > 110) {
+    lastOnset = now;
+    const strength = Math.min(1, (bass - bassAvg) * 3.2);
+    onOnset(strength);
+  }
+}
+
+let lastRegen = -1e9;
+function onOnset(strength) {
+  const now = performance.now();
+  flash = Math.min(1, flash + 0.40 + strength * 0.6);
+
+  if (now - lastRegen < 260) {          // too soon to re-read a new layout —
+    kickField(0.5 + strength * 1.1);    // just shove the field so the hit lands
+    return;
+  }
+  lastRegen = now;
+  // every low-end hit re-seeds the arrangement; the big ones change the pattern
+  if (strength > 0.70 && Math.random() < 0.34) nextPattern();
+  else regenerate(0.4 + strength * 1.6);
+}
+
+function toggleDemo(force) {
+  if (!actx) return;
+  demoOn = (force === undefined) ? !demoOn : force;
+  const t = actx.currentTime;
+  demoGain.gain.cancelScheduledValues(t);
+  demoGain.gain.setValueAtTime(demoGain.gain.value, t);
+  demoGain.gain.linearRampToValueAtTime(demoOn ? 0.5 : 0, t + 0.05);
+  document.getElementById('bDemo').classList.toggle('on', demoOn);
+  if (demoOn) scheduleDemo();
+}
+
+// a slow four-on-the-floor of sub-kicks so the reaction is visible without a mic
+let demoTimer = 0;
+function scheduleDemo() {
+  clearTimeout(demoTimer);
+  if (!demoOn || !actx) return;
+  const t = actx.currentTime;
+  demoOsc.frequency.cancelScheduledValues(t);
+  demoOsc.frequency.setValueAtTime(120, t);
+  demoOsc.frequency.exponentialRampToValueAtTime(38, t + 0.16);
+  demoGain.gain.cancelScheduledValues(t);
+  demoGain.gain.setValueAtTime(0.9, t);
+  demoGain.gain.exponentialRampToValueAtTime(0.02, t + 0.34);
+  demoTimer = setTimeout(scheduleDemo, 620 + Math.random() * 220);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  controls
+// ══════════════════════════════════════════════════════════════
+let SENS = 1.3, BASSAMT = 2.6;
+
+const $ = (id) => document.getElementById(id);
+function bindRange(sid, vid, fmt, set) {
+  const s = $(sid), v = $(vid);
+  const upd = () => { const n = +s.value; v.textContent = fmt(n); set(n); };
+  s.addEventListener('input', upd); upd();
+}
+bindRange('sSens',  'vSens',  n => (n / 100).toFixed(1), n => SENS    = n / 100);
+bindRange('sBass',  'vBass',  n => (n / 100).toFixed(1), n => BASSAMT = n / 100);
+bindRange('sCount', 'vCount', n => String(n), n => {
+  if (!P || n === COUNT) return;
+  allocParticles(n); layoutHomes();
+});
+
+$('bRegen').addEventListener('click', () => regenerate(2.2));
+$('bPat').addEventListener('click', nextPattern);
+$('bDemo').addEventListener('click', () => toggleDemo());
+
+const hud = $('hud');
+let hudTimer = 0;
+function pokeHud() {
+  hud.classList.add('show'); $('note').classList.add('show');
+  clearTimeout(hudTimer);
+  hudTimer = setTimeout(() => {
+    hud.classList.remove('show'); $('note').classList.remove('show');
+  }, 3200);
+}
+window.addEventListener('pointermove', pokeHud);
+window.addEventListener('pointerdown', (e) => {
+  pokeHud();
+  if (e.target === cv) { flash = Math.min(1, flash + 0.5); kickField(1.4); }   // tap = a hit
+});
+
+function note(msg) { $('note').textContent = msg; pokeHud(); }
+
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'r') { regenerate(2.2); pokeHud(); }
+  else if (k === 'p') { nextPattern(); note('配置 ' + PATTERNS[patIdx].toUpperCase()); }
+  else if (k === 'd') { toggleDemo(); pokeHud(); }
+  else if (k === 'h') { hud.classList.toggle('hidden'); }
+  else if (k === 'f') {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen?.();
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  render
+// ══════════════════════════════════════════════════════════════
+let prev = performance.now();
+let lastMeter = 0;
+const meterBass = document.getElementById('meterBass');
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(2.2, (now - prev) / 16.667) || 1;   // frames, clamped
+  prev = now;
+
+  if (running) readAudio();
+  flash *= Math.pow(0.87, dt);
+
+  const bassPush = bassEnv * BASSAMT;
+  const drive    = loud * SENS;
+  const t        = now * 0.001;
+
+  // trails: brighter passages clear faster, so the field stays crisp
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(0,0,0,' + (0.26 + loud * 0.16 + flash * 0.10).toFixed(3) + ')';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'lighter';
+
+  const wLen = wave ? wave.length : 0;
+  const bLen = bwave ? bwave.length : 0;
+  const damp = Math.pow(0.86, dt);
+  const rip  = 10 + drive * 74;            // lateral waveform ripple, px
+  const waveScroll = (now * 0.12) | 0;     // taps drift so the field never freezes
+  const bassScroll = (now * 0.05) | 0;
+  const sizeBoost = 1 + Math.min(1.25, bassEnv * 1.35 * SENS) + Math.min(0.55, flash * 0.55);
+
+  for (let i = 0; i < COUNT; i++) {
+    const hx = P.hx[i], hy = P.hy[i];
+    let dx = hx - CX, dy = hy - CY;
+    const d = Math.hypot(dx, dy) || 1;
+    const nx = dx / d, ny = dy / d;
+
+    // --- waveform taps ---------------------------------------
+    let w = 0, bw = 0;
+    if (wLen) w  = wave[(P.wa[i] + waveScroll) % wLen];
+    if (bLen) bw = bwave[(P.wr[i] + bassScroll) % bLen];
+
+    // low end breathes the whole field radially; the full-band waveform
+    // shivers each grain along its own tangent
+    const radial = bw * 105 * BASSAMT + bassPush * 30 * (0.4 + d / RMAX);
+    const tang   = w * rip;
+
+    // idle drift keeps the field alive in silence
+    const idle = 5 + drive * 6;
+    const ix = Math.cos(t * 0.42 + P.ph[i]) * idle;
+    const iy = Math.sin(t * 0.37 + P.ph[i] * 1.7) * idle;
+
+    const tx = hx + nx * radial - ny * tang + ix;
+    const ty = hy + ny * radial + nx * tang + iy;
+
+    // --- spring ----------------------------------------------
+    const k = P.sp[i] * (1 + bassEnv * 1.6);
+    P.vx[i] = (P.vx[i] + (tx - P.x[i]) * k * dt) * damp;
+    P.vy[i] = (P.vy[i] + (ty - P.y[i]) * k * dt) * damp;
+    let px = P.x[i] + P.vx[i] * dt;
+    let py = P.y[i] + P.vy[i] * dt;
+
+    // wrap softly so escapees come back instead of piling on the edge
+    const m = 40;
+    if (px < -m) px = W + m; else if (px > W + m) px = -m;
+    if (py < -m) py = H + m; else if (py > H + m) py = -m;
+    P.x[i] = px; P.y[i] = py;
+
+    // --- draw ------------------------------------------------
+    const sp = Math.hypot(P.vx[i], P.vy[i]);
+    const s  = P.sz[i] * sizeBoost + Math.min(1.1, sp * 0.06);
+    let a = 0.28 + P.sz[i] * 0.085 + drive * 0.26 + Math.min(0.20, sp * 0.018) + flash * 0.14;
+    if (a > 0.95) a = 0.95;
+
+    ctx.globalAlpha = a;
+    ctx.drawImage(SPR, px - s, py - s, s * 2, s * 2);
+  }
+
+  ctx.globalAlpha = 1;
+  if (running && (now - lastMeter) > 60) {
+    lastMeter = now;
+    meterBass.style.width = Math.min(100, bass * 165).toFixed(1) + '%';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  boot
+// ══════════════════════════════════════════════════════════════
+resize();
+allocParticles(COUNT);
+layoutHomes();
+requestAnimationFrame(frame);
+pokeHud();
+
+$('startBtn').addEventListener('click', async () => {
+  $('startBtn').disabled = true;
+  $('startBtn').textContent = '起動中…';
+  const ok = await start();
+  $('veil').classList.add('gone');
+  setTimeout(() => $('veil').remove(), 800);
+  regenerate(1.4);
+  note(ok ? 'MIC LIVE' : 'DEMO');
+}, { once:true });
+
+})();
+</script>
+</body>
+</html>
