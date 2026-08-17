@@ -125,6 +125,10 @@
     ブラウザの仕様でマイクは <b>https</b>（または localhost）でしか使えません。<br />
     このまま開始するとデモ音源で動きます。
   </p>
+  <p id="framed" style="display:none;font-size:11px;color:#d08a5a;line-height:1.8">
+    埋め込み表示のため、マイクは外側のページの許可設定次第です。<br />
+    拒否された場合はデモ音源で動きます。
+  </p>
 </div>
 
 <script>
@@ -678,6 +682,9 @@ const micPossible = window.isSecureContext && !!navigator.mediaDevices?.getUserM
 if (!micPossible) {
   $('insecure').style.display = '';
   $('startBtn').textContent = 'デモ音源で開始';
+} else if (window.self !== window.top) {
+  // embedded: the parent frame decides whether the mic is reachable at all
+  $('framed').style.display = '';
 }
 if (COARSE) {                       // key hints mean nothing without a keyboard
   $('bRegen').textContent = '再生成';
