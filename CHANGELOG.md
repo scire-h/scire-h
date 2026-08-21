@@ -3,6 +3,23 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## ZURE — the dry path is sacred (FX graph hardening)
+
+* Report of the WET-stem build going silent on one machine (not
+  reproducible in Chromium — every path measured sound). Three
+  defences shipped regardless:
+* The dry connection (`track → wetSum → master bus`) is wired first
+  and each FX section (reverb, echo) builds inside its own try/catch —
+  a browser that refuses any FX node now costs that track its effect,
+  never its sound, and never aborts the transport.
+* Reverb convolvers are created lazily on the first non-zero REV
+  send. With all REV knobs at zero (the default) no convolver exists
+  at all — idle CPU is now lower than the old shared-bus version, and
+  four convolvers run only if four reverbs are actually in use.
+* Uncaught errors and promise rejections now surface as an ERROR
+  toast on the machine itself, so a failure on hardware we cannot
+  reach reports its own cause instead of dying silently.
+
 ## ZURE — WET para stems, 10-minute CATCH RATE
 
 * Para recording can now print each track's FX: a STEM DRY/WET switch

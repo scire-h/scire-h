@@ -450,6 +450,17 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* Anything that dies must die loudly: a silent machine with no clue
+   is the one bug that cannot be reported. toast() is hoisted, so this
+   works even for errors thrown while the rest of this script boots. */
+window.addEventListener('error', e => {
+  try { toast('ERROR: ' + e.message); } catch (_) {}
+});
+window.addEventListener('unhandledrejection', e => {
+  const m = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+  try { toast('ERROR: ' + m); } catch (_) {}
+});
+
 /*<<<TEMPO_CORE>>>*/
 /* ===================================================================
    TEMPO CORE — pure timing math + per-track catch-up state machine.
@@ -870,29 +881,44 @@ function ensureTrackNode (tr) {
   tr.wetSum = ctx.createGain();
   tr.wetSum.gain.value = 1;
   tr.wetSum.connect(busGain);
-  tr.node.connect(tr.wetSum);                      // dry
+  tr.node.connect(tr.wetSum);                      // dry — wired first, so the
+                                                   // track keeps sounding even if
+                                                   // an FX below fails to build
+  try {
+    tr.revSend = ctx.createGain();
+    tr.revSend.gain.value = tr.fx.rev;
+    tr.node.connect(tr.revSend);
+    tr.conv = null;
+    if (tr.fx.rev > 0) ensureReverb(tr);
+  } catch (e) { tr.revSend = null; console.error('reverb path failed:', e); }
 
-  tr.revSend = ctx.createGain();
-  tr.revSend.gain.value = tr.fx.rev;
-  const conv = ctx.createConvolver();
-  conv.buffer = revIR;
-  tr.node.connect(tr.revSend).connect(conv).connect(tr.wetSum);
+  try {
+    const send = ctx.createGain();
+    send.gain.value = tr.fx.dly;
+    const dL = ctx.createDelay(8), dR = ctx.createDelay(8);
+    const fbL = ctx.createGain(), fbR = ctx.createGain();
+    fbL.gain.value = fbR.gain.value = tr.fx.fb;
+    const pL = ctx.createStereoPanner(), pR = ctx.createStereoPanner();
+    pL.pan.value = -0.8; pR.pan.value = 0.8;
+    tr.node.connect(send).connect(dL);
+    dL.connect(pL).connect(tr.wetSum);
+    dR.connect(pR).connect(tr.wetSum);
+    dL.connect(fbL).connect(dR);                   // ping ...
+    dR.connect(fbR).connect(dL);                   // ... pong
+    tr.dlySend = send;
+    tr.dl = { dL, dR, fbL, fbR };
+    updateDelayTime(tr, true);
+  } catch (e) { tr.dlySend = null; tr.dl = null; console.error('echo path failed:', e); }
+}
 
-  const send = ctx.createGain();
-  send.gain.value = tr.fx.dly;
-  const dL = ctx.createDelay(8), dR = ctx.createDelay(8);
-  const fbL = ctx.createGain(), fbR = ctx.createGain();
-  fbL.gain.value = fbR.gain.value = tr.fx.fb;
-  const pL = ctx.createStereoPanner(), pR = ctx.createStereoPanner();
-  pL.pan.value = -0.8; pR.pan.value = 0.8;
-  tr.node.connect(send).connect(dL);
-  dL.connect(pL).connect(tr.wetSum);
-  dR.connect(pR).connect(tr.wetSum);
-  dL.connect(fbL).connect(dR);                     // ping ...
-  dR.connect(fbR).connect(dL);                     // ... pong
-  tr.dlySend = send;
-  tr.dl = { dL, dR, fbL, fbR };
-  updateDelayTime(tr, true);
+/* The convolver is created on the first non-zero REV send, not at
+   build time: an idle reverb must cost nothing. Four tracks only ever
+   pay for the convolvers whose knobs are actually up. */
+function ensureReverb (tr) {
+  if (tr.conv || !tr.revSend || !revIR) return;
+  tr.conv = ctx.createConvolver();
+  tr.conv.buffer = revIR;
+  tr.revSend.connect(tr.conv).connect(tr.wetSum);
 }
 
 /* delay time = the track's live tempo x note division (or the manual
@@ -1715,7 +1741,7 @@ function setAudioRate (v) {
     noiseBuf = null; recTap = null; revIR = null;
     tracks.forEach(tr => {
       tr.node = null; tr.srcNode = null; tr.wetSum = null;
-      tr.revSend = null; tr.dlySend = null; tr.dl = null; tr.live = {};
+      tr.revSend = null; tr.conv = null; tr.dlySend = null; tr.dl = null; tr.live = {};
     });
   }
   toast(v ? v + ' Hz で再初期化します' : 'デバイスレートで再初期化します');
@@ -2227,7 +2253,7 @@ function buildFx (tr) {
   };
   addK({ label: 'REV', min: 0, max: 1, def: 0, id: 'fx' + tr.idx + 'R',
          get: () => tr.fx.rev,
-         set: v => { tr.fx.rev = v; if (tr.revSend) tr.revSend.gain.value = v; },
+         set: v => { tr.fx.rev = v; if (tr.revSend) { tr.revSend.gain.value = v; if (v > 0) ensureReverb(tr); } },
          fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
   addK({ label: 'ECHO', min: 0, max: 1, def: 0, id: 'fx' + tr.idx + 'D',
          get: () => tr.fx.dly,
@@ -2918,7 +2944,7 @@ function loadProject (obj) {
     tr.fx = { rev: 0, dly: 0, div: 0.75, fb: 0.45, time: 0.35, ...(d.fx || {}) };
     tr.wander = { on: false, dest: tr.bpm, dwell: 2, travel: 8, ...(d.wander || {}) };
     if (tr.node) tr.node.gain.value = tr.gain;
-    if (tr.revSend) tr.revSend.gain.value = tr.fx.rev;
+    if (tr.revSend) { tr.revSend.gain.value = tr.fx.rev; if (tr.fx.rev > 0) ensureReverb(tr); }
     if (tr.dlySend) tr.dlySend.gain.value = tr.fx.dly;
     if (tr.dl) { tr.dl.fbL.gain.value = tr.dl.fbR.gain.value = tr.fx.fb; updateDelayTime(tr, true); }
     if (d.sample && tr.sample) tr.sample.baseBpm = d.sample.baseBpm;
