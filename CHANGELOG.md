@@ -3,6 +3,30 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## ZURE — WET para stems, 10-minute CATCH RATE
+
+* Para recording can now print each track's FX: a STEM DRY/WET switch
+  in the RECORDER panel. DRY taps post-gain pre-FX (the old
+  behaviour, still the default); WET taps the new per-track sum of
+  dry + reverb return + ping-pong echo — the full produced track,
+  isolated. Saved in the project file.
+* To make a WET stem possible at all, the reverb moved off the shared
+  bus: each track owns a ConvolverNode (all four share one impulse-
+  response buffer), and everything a track makes now meets at a
+  per-track `wetSum` node that alone feeds the master bus. E2E:
+  a soloed WET stem reconstructs the master through the soft clip
+  (envelope r = 0.993) and an empty track's WET stem is digital
+  silence even when a neighbour drowns in echo — no cross-track leak.
+* CATCH RATE now reaches 10 minutes (0.25 s – 600 s, log taper; the
+  readout switches to M:SS above a minute). At the top the tempo
+  creeps at hundredths of a BPM per second, so a catch becomes
+  something you only notice after it has happened. Re-planning
+  mid-flight (600 s hurried to 4 s) still lands exactly.
+* Tests: 333 unit assertions — new suite runs the full ten-minute
+  catch on the simulated scheduler and checks the 0.08 BPM/s creep;
+  new E2E measures DRY vs WET stem energy, silence fraction, master
+  reconstruction and cross-talk.
+
 ## ZURE — attack, gated sustain, drum TONE/SNAPPY/ACCENT, WANDER, CRT scope
 
 * ATTACK knob on every voice row (defaults equal the old fixed values).

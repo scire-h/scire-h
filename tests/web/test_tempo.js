@@ -268,6 +268,34 @@ suite('CATCH RATE knob is live', () => {
      (d2 ? d2.t.toFixed(2) : 'never') + 's)');
 });
 
+suite('a ten-minute CATCH RATE', () => {
+  // the knob's top end: 600 s. The point is that the tempo has to keep
+  // creeping the whole time rather than snapping once it is "close".
+  const m = mkTrack(120), s = mkTrack(168);
+  T.beginCatch(s, 0, { mode: 'bpm', curve: 'linear', dir: 'nearest', dur: 600 });
+
+  // sample the planned trajectory: a linear 48 BPM move over 600 s
+  [10, 60, 300, 599].forEach(t => {
+    const want = 168 - 48 * t / 600;
+    near(T.rampBpm(s.catchState.ramp, 120, t), want, 1e-9,
+         'at t=' + t + 's the ramp is ' + want.toFixed(3) + ' BPM');
+  });
+
+  // ... and run it for real, on the scheduler, for the full ten minutes
+  const { events } = run(s, m, 620, 600);
+  const done = events.find(e => e.ev === 'bpm-locked');
+  ok(done && done.t > 595 && done.t < 605,
+     'the catch lands at ~600 s, not early (t=' + (done ? done.t.toFixed(1) : 'never') + 's)');
+  near(s.bpm, 120, 0.01, 'and lands exactly on the master BPM');
+
+  // it must still be moving imperceptibly slowly at the start:
+  // 48 BPM over 600 s is 0.08 BPM/s
+  const s2 = mkTrack(168);
+  T.beginCatch(s2, 0, { mode: 'bpm', curve: 'linear', dir: 'nearest', dur: 600 });
+  const perSec = T.rampBpm(s2.catchState.ramp, 120, 0) - T.rampBpm(s2.catchState.ramp, 120, 1);
+  near(perSec, 0.08, 1e-9, 'the tempo creeps at 0.08 BPM per second');
+});
+
 suite('PHASE SYNC is robust across tempos and offsets', () => {
   let worst = 0, worstCase = '';
   let allLocked = true;

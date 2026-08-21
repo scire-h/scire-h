@@ -328,6 +328,11 @@
             <button data-v="0">OFF</button><button data-v="1">ON</button>
           </div>
         </div>
+        <div class="seg"><span class="sl">STEM</span>
+          <div class="opts" id="optRecWet">
+            <button data-v="0">DRY</button><button data-v="1">WET</button>
+          </div>
+        </div>
       </div>
       <div class="hint" id="recStat"></div>
     </div>
@@ -394,8 +399,9 @@
       <b>優先順位は CATCH ＞ WANDER</b>: CATCH をかけると追う側・追われる
       マスター双方の WANDER が止まり、CATCH 中のトラック（および CATCH の
       対象になっているマスター）には WANDER を新たに掛けられない。<br>
-      <b>操作の要点</b>: <code>CATCH RATE</code> は合流にかける時間（左=速い/右=遅い、
-      追従の途中で回すと再計画）。BPM SYNC はテンポのみ一致で小節頭はズレたまま並走、
+      <b>操作の要点</b>: <code>CATCH RATE</code> は合流にかける時間
+      （0.25秒〜10分。左=速い/右=遅い、追従の途中で回すと再計画。60秒以上は
+      分:秒 表示。ゆっくり側に振ると、何分もかけて少しずつテンポが変わっていく）。BPM SYNC はテンポのみ一致で小節頭はズレたまま並走、
       PHASE SYNC は目標BPMを一瞬追い越して小節頭を合わせロックする。
       ヘッダーの A–D でトラックの ON/OFF。グリッドはクリックのほか
       <b>押しながらスライドで連続入力</b>（最初のセルで ON/OFF が決まる）。
@@ -778,7 +784,7 @@ const ACC = ['a', 'b', 'c', 'd'];
 const ACC_HEX = ['#141416', '#454649', '#77787c', '#a2a3a7'];
 
 let ctx = null, master = null, busGain = null, analyser = null, noiseBuf = null;
-let anaBuf = null, recTap = null, transportT0 = 0, revBus = null;
+let anaBuf = null, recTap = null, transportT0 = 0, revIR = null;
 
 function initAudio () {
   if (ctx) return;
@@ -827,14 +833,14 @@ function initAudio () {
   const nd = noiseBuf.getChannelData(0);
   for (let i = 0; i < len; i++) nd[i] = Math.random() * 2 - 1;
 
-  // shared reverb bus: decorrelated exponential noise burst IR
-  revBus = ctx.createGain();
-  revBus.gain.value = 1;
-  const conv = ctx.createConvolver();
+  /* Reverb IR: one decorrelated exponential noise burst, built once and
+     shared by every track's convolver. Each track owns its convolver so
+     that its complete wet signal exists at one node -- that is what
+     makes a per-track WET stem possible at all. */
   const irLen = Math.floor(ctx.sampleRate * 2.6);
-  const ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
+  revIR = ctx.createBuffer(2, irLen, ctx.sampleRate);
   for (let c = 0; c < 2; c++) {
-    const d = ir.getChannelData(c);
+    const d = revIR.getChannelData(c);
     let lp = 0;
     for (let i = 0; i < irLen; i++) {
       const t = i / ctx.sampleRate;
@@ -843,22 +849,34 @@ function initAudio () {
       d[i] = lp * Math.exp(-3.1 * t) * (t < 0.012 ? t / 0.012 : 1);
     }
   }
-  conv.buffer = ir;
-  revBus.connect(conv).connect(busGain);
 }
 
-/* Build a track's output node plus its FX sends: a shared-bus reverb
-   send and a per-track ping-pong (L/R echo) delay whose time follows
-   the TRACK's own tempo -- each loop echoes in its own time. */
+/* Build a track's signal path. Everything the track makes -- dry, its
+   reverb return and its ping-pong (L/R) echo -- meets at tr.wetSum,
+   which is the only thing that feeds the master bus. So:
+
+     tr.node   = the DRY stem tap (post track gain, pre FX)
+     tr.wetSum = the WET stem tap (dry + that track's own FX)
+
+   The echo time follows the TRACK's own tempo, so each loop echoes in
+   its own time. The reverb is per-track (sharing one IR buffer) rather
+   than a shared bus, because a shared bus mixes the four tracks'
+   tails together and could never be split back apart per stem. */
 function ensureTrackNode (tr) {
   if (tr.node) return;
   tr.node = ctx.createGain();
   tr.node.gain.value = tr.gain;
-  tr.node.connect(busGain);
+
+  tr.wetSum = ctx.createGain();
+  tr.wetSum.gain.value = 1;
+  tr.wetSum.connect(busGain);
+  tr.node.connect(tr.wetSum);                      // dry
 
   tr.revSend = ctx.createGain();
   tr.revSend.gain.value = tr.fx.rev;
-  tr.node.connect(tr.revSend).connect(revBus);
+  const conv = ctx.createConvolver();
+  conv.buffer = revIR;
+  tr.node.connect(tr.revSend).connect(conv).connect(tr.wetSum);
 
   const send = ctx.createGain();
   send.gain.value = tr.fx.dly;
@@ -868,8 +886,8 @@ function ensureTrackNode (tr) {
   const pL = ctx.createStereoPanner(), pR = ctx.createStereoPanner();
   pL.pan.value = -0.8; pR.pan.value = 0.8;
   tr.node.connect(send).connect(dL);
-  dL.connect(pL).connect(busGain);
-  dR.connect(pR).connect(busGain);
+  dL.connect(pL).connect(tr.wetSum);
+  dR.connect(pR).connect(tr.wetSum);
   dL.connect(fbL).connect(dR);                     // ping ...
   dR.connect(fbR).connect(dL);                     // ... pong
   tr.dlySend = send;
@@ -1185,7 +1203,7 @@ const S = {
   mode: 'phase', curve: 'exp', dir: 'nearest',
   catchTime: 8.0,
   vol: 0.35,
-  recFmt: 'wav', recBit: 24, recSr: 0, recPara: true
+  recFmt: 'wav', recBit: 24, recSr: 0, recPara: true, recWet: false
 };
 
 function masterTrack () { return tracks[S.masterIdx]; }
@@ -1592,7 +1610,8 @@ const Recorder = {
     if (S.recPara) tracks.forEach(tr => {
       if (tr.muted) return;
       ensureTrackNode(tr);
-      targets.push({ name: tr.name, src: tr.node });
+      // DRY = pre-FX track output, WET = that track's own FX included
+      targets.push({ name: tr.name, src: S.recWet ? tr.wetSum : tr.node });
     });
 
     this.bytes = 0; this.stopping = false;
@@ -1693,9 +1712,9 @@ function setAudioRate (v) {
   if (ctx) {
     try { ctx.close(); } catch (e) {}
     ctx = null; master = null; busGain = null; analyser = null; anaBuf = null;
-    noiseBuf = null; recTap = null; revBus = null;
+    noiseBuf = null; recTap = null; revIR = null;
     tracks.forEach(tr => {
-      tr.node = null; tr.srcNode = null;
+      tr.node = null; tr.srcNode = null; tr.wetSum = null;
       tr.revSend = null; tr.dlySend = null; tr.dl = null; tr.live = {};
     });
   }
@@ -1797,7 +1816,7 @@ function segPaint (id, get) {
 
 function buildConsole () {
   kCatch = new Knob(document.getElementById('kCatch'), {
-    label: 'CATCH RATE', min: 0.25, max: 120, def: 8, log: true, id: 'catchTime',
+    label: 'CATCH RATE', min: 0.25, max: 600, def: 8, log: true, id: 'catchTime',
     get: () => S.catchTime,
     set: v => {
       S.catchTime = v;
@@ -1809,7 +1828,8 @@ function buildConsole () {
         });
       }
     },
-    fmt: v => (v < 10 ? v.toFixed(2) : v.toFixed(1)) + ' s'
+    fmt: v => v >= 60 ? Math.floor(v / 60) + ':' + String(Math.round(v % 60)).padStart(2, '0')
+            : (v < 10 ? v.toFixed(2) : v.toFixed(1)) + ' s'
   });
   knobs.catchTime = kCatch;
 
@@ -1857,6 +1877,7 @@ function buildRecorder () {
   });
   segInit('optRecSr', () => S.recSr, v => setAudioRate(v));
   segInit('optRecPara', () => S.recPara ? 1 : 0, v => S.recPara = v === '1');
+  segInit('optRecWet', () => S.recWet ? 1 : 0, v => S.recWet = v === '1');
   const b = document.getElementById('btnRec');
   b.onclick = () => {
     if (Midi.armFromClick({ el: b, isBtn: true, id: 'rec' })) return;
@@ -2625,7 +2646,8 @@ function frame () {
     const sr = ctx ? ctx.sampleRate + ' Hz' : (S.recSr ? S.recSr + ' Hz' : 'デバイスレート');
     rs.textContent = (S.recBit === 32 ? '32bit float' : S.recBit + 'bit') + ' ' +
       S.recFmt.toUpperCase() + ' · ' + sr +
-      (S.recPara ? ' · パラ ON: マスター+非ミュート各トラックを同時書き出し' : ' · マスターのみ') +
+      (S.recPara ? ' · パラ ON: マスター+非ミュート各トラック（ステム=' +
+        (S.recWet ? 'WET: 各トラックのFX込み' : 'DRY: FXなし') + '）' : ' · マスターのみ') +
       ' — R キーでも開始/停止';
   }
 
@@ -2907,7 +2929,8 @@ function loadProject (obj) {
   const SEGS = {
     optMode: () => S.mode, optCurve: () => S.curve, optDir: () => S.dir,
     optMaster: () => S.masterIdx, optRecFmt: () => S.recFmt, optRecBit: () => S.recBit,
-    optRecSr: () => S.recSr, optRecPara: () => S.recPara ? 1 : 0
+    optRecSr: () => S.recSr, optRecPara: () => S.recPara ? 1 : 0,
+    optRecWet: () => S.recWet ? 1 : 0
   };
   Object.keys(SEGS).forEach(id => segPaint(id, SEGS[id]));
   paintTrkTgl();

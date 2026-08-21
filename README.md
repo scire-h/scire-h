@@ -59,7 +59,7 @@ moving underneath it.
 
 | control | effect |
 |---|---|
-| **CATCH RATE** | how long the merge takes, 0.25 s – 120 s. Turning it *during* a catch re-plans the remaining travel from that instant, so a catch can be hurried or stretched while it is audibly in flight |
+| **CATCH RATE** | how long the merge takes, 0.25 s – 10 min (readout switches to M:SS above a minute). At the far end the tempo creeps at hundredths of a BPM per second — a convergence you notice only after it has happened. Turning the knob *during* a catch re-plans the remaining travel from that instant, so a catch can be hurried or stretched while it is audibly in flight |
 | **BPM SYNC** | tempo only. Bar heads stay apart and the two loops keep running out of phase |
 | **PHASE SYNC** | tempo *and* bar heads. After the tempos converge, the BPM briefly swells past the target and settles back, walking the bar head into place, then locks |
 | **LINEAR / EXP** | constant-rate merge, or fast-then-asymptotic |
@@ -80,9 +80,12 @@ tempo is now. While stopped, changes apply instantly.
 
 **Recording.** The RECORDER panel (or the `R` key) captures the master
 bus — post soft-clip, pre monitor volume — and, with PARA on, every
-unmuted track's dry post-gain signal in parallel. Capture is raw
-Float32 via an AudioWorklet; every file is cut to the identical frame
-range, so all stems are sample-aligned. Output is WAV (16 / 24 /
+unmuted track in parallel. A STEM switch picks what the stems carry:
+DRY taps the track post-gain before its FX, WET taps the point where
+the track's dry signal, its reverb return and its ping-pong echo have
+summed — the full produced track, isolated. Capture is raw Float32 via
+an AudioWorklet; every file is cut to the identical frame range, so
+all stems are sample-aligned. Output is WAV (16 / 24 /
 32-bit float) or AIFF (16 / 24), at the context rate — selectable
 44.1 / 48 / 88.2 / 96 kHz (the AudioContext is rebuilt on change, so
 rate switching happens while stopped).
@@ -120,12 +123,14 @@ directly — tuning *is* tempo, which is the point of the machine.
 Audio files carry no BPM metadata, so a loaded sample's BASE BPM
 defaults to 120; FIT LOOP derives it from the loop length, or type it.
 
-**Per-track FX.** Each track has a send into a shared reverb and its
+**Per-track FX.** Each track has a reverb send and its
 own ping-pong L/R echo. The echo time is set as a note value (1/16 -
 1/2) against that track's OWN tempo, so during a catch-up the echoes
 sweep along with the pitch — or set FREE (turning the TIME knob claims
-it automatically) for a manual 20 ms - 2 s time. Recorded stems stay dry; FX print only on
-the master.
+it automatically) for a manual 20 ms - 2 s time. The reverb is built
+per track (four convolvers sharing one impulse response) rather than
+as a shared bus, precisely so that a WET stem can carry its own tail
+and nobody else's.
 
 **FILL.** One button (or `F`): every unmuted drum track drops into a
 one-bar randomly generated fill (six template families plus jitter) at
@@ -165,7 +170,7 @@ catch, `0` to realign.
 cd tests/web && ./run_all.sh     # or: make test-web
 ```
 
-296 assertions over the timing math, the catch-up/glide state machine,
+333 assertions over the timing math, the catch-up/glide state machine,
 the voice library (including the waveform/decay/sustain edit layer and
 the choke handles) and the file writers. All three suites read the code
 straight out of `zure.html`, so there is no duplicated copy to
