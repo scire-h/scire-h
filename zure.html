@@ -333,6 +333,11 @@
             <button data-v="0">DRY</button><button data-v="1">WET</button>
           </div>
         </div>
+        <div class="seg"><span class="sl">DEST</span>
+          <div class="opts" id="optRecDest">
+            <button data-v="0">MEM</button><button data-v="1">DISK</button>
+          </div>
+        </div>
       </div>
       <div class="hint" id="recStat"></div>
     </div>
@@ -717,17 +722,17 @@ const RecorderCore = (function () {
     dv.setUint32(off + 6, lo);
   }
 
-  /* channels: array of equal-length Float32Arrays.
-     bits: 16 / 24 (integer PCM) or 32 (IEEE float). */
-  function encodeWav (channels, sampleRate, bits) {
-    const ch = channels.length, frames = channels[0].length;
+  /* WAV header for a known frame count. Split from encodeWav so a
+     disk-streaming recorder can write a provisional header first and
+     re-write it with the real frame count when the take ends. */
+  function wavHeader (frames, ch, sampleRate, bits) {
     const isF = bits === 32;
     const bytes = bits / 8, blockAlign = ch * bytes, dataLen = frames * blockAlign;
     const fmtLen = isF ? 18 : 16;                        // float fmt carries cbSize=0
     const factLen = isF ? 12 : 0;                        // float requires a fact chunk
-    const buf = new ArrayBuffer(12 + 8 + fmtLen + factLen + 8 + dataLen);
+    const buf = new ArrayBuffer(12 + 8 + fmtLen + factLen + 8);
     const dv = new DataView(buf);
-    wStr(dv, 0, 'RIFF'); dv.setUint32(4, buf.byteLength - 8, true); wStr(dv, 8, 'WAVE');
+    wStr(dv, 0, 'RIFF'); dv.setUint32(4, buf.byteLength - 8 + dataLen, true); wStr(dv, 8, 'WAVE');
     let o = 12;
     wStr(dv, o, 'fmt '); dv.setUint32(o + 4, fmtLen, true);
     dv.setUint16(o + 8, isF ? 3 : 1, true);              // 3 = IEEE float, 1 = PCM
@@ -739,27 +744,45 @@ const RecorderCore = (function () {
     if (isF) dv.setUint16(o + 24, 0, true);
     o += 8 + fmtLen;
     if (isF) { wStr(dv, o, 'fact'); dv.setUint32(o + 4, 4, true); dv.setUint32(o + 8, frames, true); o += 12; }
-    wStr(dv, o, 'data'); dv.setUint32(o + 4, dataLen, true); o += 8;
-    for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) {
-      const x = channels[c][i];
-      if (isF) { dv.setFloat32(o, x, true); o += 4; }
-      else if (bits === 24) {
-        const v = quantize(x, 8388607);
-        dv.setUint8(o, v & 255); dv.setUint8(o + 1, (v >> 8) & 255); dv.setUint8(o + 2, (v >> 16) & 255);
-        o += 3;
-      } else { dv.setInt16(o, quantize(x, 32767), true); o += 2; }
-    }
+    wStr(dv, o, 'data'); dv.setUint32(o + 4, dataLen, true);
     return buf;
   }
 
-  /* bits: 16 / 24 (big-endian integer PCM — plain AIFF, no AIFC). */
-  function encodeAiff (channels, sampleRate, bits) {
+  /* Interleave + quantize a run of channel data into WAV (LE) bytes. */
+  function packWav (channels, bits) {
     const ch = channels.length, frames = channels[0].length;
-    const bytes = bits / 8, dataLen = frames * ch * bytes;
+    const out = new Uint8Array(frames * ch * (bits / 8));
+    const dv = new DataView(out.buffer);
+    let o = 0;
+    for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) {
+      const x = channels[c][i];
+      if (bits === 32) { dv.setFloat32(o, x, true); o += 4; }
+      else if (bits === 24) {
+        const v = quantize(x, 8388607);
+        out[o] = v & 255; out[o + 1] = (v >> 8) & 255; out[o + 2] = (v >> 16) & 255;
+        o += 3;
+      } else { dv.setInt16(o, quantize(x, 32767), true); o += 2; }
+    }
+    return out;
+  }
+
+  /* channels: array of equal-length Float32Arrays.
+     bits: 16 / 24 (integer PCM) or 32 (IEEE float). */
+  function encodeWav (channels, sampleRate, bits) {
+    const head = new Uint8Array(wavHeader(channels[0].length, channels.length, sampleRate, bits));
+    const body = packWav(channels, bits);
+    const buf = new Uint8Array(head.length + body.length);
+    buf.set(head, 0); buf.set(body, head.length);
+    return buf.buffer;
+  }
+
+  /* AIFF header for a known frame count (same split as wavHeader). */
+  function aiffHeader (frames, ch, sampleRate, bits) {
+    const dataLen = frames * ch * (bits / 8);
     const pad = dataLen & 1;                             // IFF chunks are word-aligned
-    const buf = new ArrayBuffer(12 + (8 + 18) + (8 + 8 + dataLen + pad));
+    const buf = new ArrayBuffer(12 + (8 + 18) + 16);
     const dv = new DataView(buf);
-    wStr(dv, 0, 'FORM'); dv.setUint32(4, buf.byteLength - 8); wStr(dv, 8, 'AIFF');
+    wStr(dv, 0, 'FORM'); dv.setUint32(4, buf.byteLength - 8 + dataLen + pad); wStr(dv, 8, 'AIFF');
     let o = 12;
     wStr(dv, o, 'COMM'); dv.setUint32(o + 4, 18);
     dv.setInt16(o + 8, ch);
@@ -769,18 +792,37 @@ const RecorderCore = (function () {
     o += 8 + 18;
     wStr(dv, o, 'SSND'); dv.setUint32(o + 4, 8 + dataLen);
     dv.setUint32(o + 8, 0); dv.setUint32(o + 12, 0);     // offset, blockSize
-    o += 16;
-    for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) {
-      if (bits === 24) {
-        const v = quantize(channels[c][i], 8388607);
-        dv.setUint8(o, (v >> 16) & 255); dv.setUint8(o + 1, (v >> 8) & 255); dv.setUint8(o + 2, v & 255);
-        o += 3;
-      } else { dv.setInt16(o, quantize(channels[c][i], 32767)); o += 2; }
-    }
     return buf;
   }
 
-  return { encodeWav, encodeAiff, writeFloat80, quantize };
+  /* Interleave + quantize a run of channel data into AIFF (BE) bytes. */
+  function packAiff (channels, bits) {
+    const ch = channels.length, frames = channels[0].length;
+    const out = new Uint8Array(frames * ch * (bits / 8));
+    const dv = new DataView(out.buffer);
+    let o = 0;
+    for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) {
+      if (bits === 24) {
+        const v = quantize(channels[c][i], 8388607);
+        out[o] = (v >> 16) & 255; out[o + 1] = (v >> 8) & 255; out[o + 2] = v & 255;
+        o += 3;
+      } else { dv.setInt16(o, quantize(channels[c][i], 32767)); o += 2; }
+    }
+    return out;
+  }
+
+  /* bits: 16 / 24 (big-endian integer PCM — plain AIFF, no AIFC). */
+  function encodeAiff (channels, sampleRate, bits) {
+    const head = new Uint8Array(aiffHeader(channels[0].length, channels.length, sampleRate, bits));
+    const body = packAiff(channels, bits);
+    const dataLen = body.length, pad = dataLen & 1;
+    const buf = new Uint8Array(head.length + dataLen + pad);
+    buf.set(head, 0); buf.set(body, head.length);        // pad byte stays zero
+    return buf.buffer;
+  }
+
+  return { encodeWav, encodeAiff, wavHeader, packWav, aiffHeader, packAiff,
+           writeFloat80, quantize };
 })();
 /*<<<END_RECORDER_CORE>>>*/
 
@@ -1230,7 +1272,7 @@ const S = {
   mode: 'phase', curve: 'exp', dir: 'nearest',
   catchTime: 8.0,
   vol: 0.35,
-  recFmt: 'wav', recBit: 24, recSr: 0, recPara: true, recWet: false
+  recFmt: 'wav', recBit: 24, recSr: 0, recPara: true, recWet: false, recDisk: false
 };
 
 function masterTrack () { return tracks[S.masterIdx]; }
@@ -1606,7 +1648,8 @@ registerProcessor('pt-cap', Cap);`;
 
 const Recorder = {
   active: false, stopping: false, taps: [], startFrame: 0, bytes: 0,
-  MAX_BYTES: 1.5e9,                       // auto-stop before the tab dies
+  MAX_BYTES: 1.5e9,                       // memory mode: auto-stop before the tab dies
+  dir: null, toDisk: false, bits: 24, diskErr: false,
 
   async ensureModule () {
     if (ctx._ptCap) return;
@@ -1626,6 +1669,22 @@ const Recorder = {
 
   async begin () {
     if (this.active) return;
+
+    /* DISK mode: ask for the folder FIRST, while the click that armed
+       the recorder still counts as a user gesture. One folder per
+       session -- later takes stream into it without asking again. */
+    this.toDisk = false;
+    if (S.recDisk) {
+      if (!window.showDirectoryPicker) {
+        toast('このブラウザは DISK 録音非対応 — メモリ録音にします');
+      } else {
+        try {
+          if (!this.dir) this.dir = await showDirectoryPicker({ mode: 'readwrite' });
+          this.toDisk = true;
+        } catch (e) { toast('フォルダ未選択 — メモリ録音にします'); }
+      }
+    }
+
     initAudio();
     if (!ctx.audioWorklet || !window.AudioWorkletNode) { toast('このブラウザは AudioWorklet 非対応です'); return; }
     if (ctx.state === 'suspended') await ctx.resume();
@@ -1641,27 +1700,70 @@ const Recorder = {
       targets.push({ name: tr.name, src: S.recWet ? tr.wetSum : tr.node });
     });
 
-    this.bytes = 0; this.stopping = false;
+    this.bytes = 0; this.stopping = false; this.diskErr = false;
+    this.bits = S.recFmt === 'aif' && S.recBit === 32 ? 24 : S.recBit;
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
+    const ext = S.recFmt === 'aif' ? 'aif' : 'wav';
     this.taps = targets.map(t => {
       const node = new AudioWorkletNode(ctx, 'pt-cap',
         { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2, channelCountMode: 'explicit' });
-      const tap = { name: t.name, node, c0: [], c1: [], frames: 0 };
+      const tap = { name: t.name, node, c0: [], c1: [], frames: 0,
+                    file: 'zure-' + stamp + '-' + t.name + '.' + ext,
+                    w: null, pos: 0, headLen: 0, q: Promise.resolve() };
       tap.donep = new Promise(res => { tap.done = res; });
       node.port.onmessage = e => {
         const d = e.data;
         if (d.done) { tap.done(); return; }
+        if (this.toDisk) {
+          /* pack each chunk at the target bit depth and append; the
+             write chain keeps ordering, so memory never accumulates */
+          for (let i = 0; i < d.b0.length; i++) {
+            const bytes = S.recFmt === 'aif'
+              ? RecorderCore.packAiff([d.b0[i], d.b1[i]], this.bits)
+              : RecorderCore.packWav([d.b0[i], d.b1[i]], this.bits);
+            const pos = tap.pos; tap.pos += bytes.length;
+            tap.q = tap.q.then(() => tap.w.write({ type: 'write', position: pos, data: bytes }))
+              .catch(err => {
+                if (!this.diskErr) { this.diskErr = true; toast('DISK 書き込みエラー: ' + err.message); this.end(); }
+              });
+          }
+          tap.frames += d.n;
+          return;
+        }
         for (const a of d.b0) tap.c0.push(a);
         for (const a of d.b1) tap.c1.push(a);
         tap.frames += d.n;
         this.bytes += d.n * 8;
         if (this.bytes > this.MAX_BYTES && !this.stopping) {
-          toast('メモリ上限に達したため録音を停止します');
+          toast('メモリ上限に達したため録音を停止します — DISK モードなら長さ無制限です');
           this.end();
         }
       };
       t.src.connect(node);
       return tap;
     });
+
+    /* DISK: open one file per tap and lay down a provisional header
+       (its layout never changes -- only the sizes get rewritten at the
+       end). If the folder has gone stale, fall back to memory. */
+    if (this.toDisk) {
+      try {
+        for (const tap of this.taps) {
+          const fh = await this.dir.getFileHandle(tap.file, { create: true });
+          tap.w = await fh.createWritable();
+          const head = S.recFmt === 'aif'
+            ? RecorderCore.aiffHeader(0, 2, ctx.sampleRate, this.bits)
+            : RecorderCore.wavHeader(0, 2, ctx.sampleRate, this.bits);
+          tap.headLen = head.byteLength;
+          await tap.w.write({ type: 'write', position: 0, data: head });
+          tap.pos = tap.headLen;
+        }
+      } catch (e) {
+        toast('フォルダへ書けません — メモリ録音にします (' + e.message + ')');
+        for (const tap of this.taps) { try { if (tap.w) await tap.w.close(); } catch (_) {} tap.w = null; }
+        this.dir = null; this.toDisk = false;
+      }
+    }
 
     /* Fresh transport: start capturing 50 ms before the first downbeat
        so its attack is never clipped. Punch-in on a running transport:
@@ -1684,9 +1786,36 @@ const Recorder = {
     this.active = false;
     paintRec();
 
-    toast('書き出し中…');
     const sr = ctx.sampleRate;
-    const bits = S.recFmt === 'aif' && S.recBit === 32 ? 24 : S.recBit;
+    const bits = this.bits;
+    const n = this.taps.length;
+    const secs = n ? this.taps[0].frames / sr : 0;
+
+    if (this.toDisk) {
+      /* Everything is already on disk -- drain the write chains, then
+         rewrite each header with the real frame count and close. */
+      toast('ファイナライズ中…');
+      for (const t of this.taps) {
+        await t.q;
+        if (!t.w) continue;
+        try {
+          const dataLen = t.pos - t.headLen;
+          if (S.recFmt === 'aif' && (dataLen & 1))       // IFF word alignment
+            await t.w.write({ type: 'write', position: t.pos, data: new Uint8Array(1) });
+          const head = S.recFmt === 'aif'
+            ? RecorderCore.aiffHeader(t.frames, 2, sr, bits)
+            : RecorderCore.wavHeader(t.frames, 2, sr, bits);
+          await t.w.write({ type: 'write', position: 0, data: head });
+          await t.w.close();
+        } catch (e) { toast('ファイナライズ失敗 (' + t.file + '): ' + e.message); }
+      }
+      this.taps = [];
+      toast(n + ' ファイル · ' + secs.toFixed(1) + ' s · ' + sr + ' Hz / ' +
+            (bits === 32 ? '32f' : bits) + 'bit をフォルダへ書き込みました');
+      return;
+    }
+
+    toast('書き出し中…');
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
     const ext = S.recFmt === 'aif' ? 'aif' : 'wav';
     this.taps.forEach((t, i) => {
@@ -1697,8 +1826,6 @@ const Recorder = {
       downloadBlob(new Blob([buf], { type: S.recFmt === 'aif' ? 'audio/aiff' : 'audio/wav' }),
         'zure-' + stamp + '-' + t.name + '.' + ext, i * 350);
     });
-    const n = this.taps.length;
-    const secs = n ? this.taps[0].frames / sr : 0;
     this.taps = [];
     toast(n + ' ファイル · ' + secs.toFixed(1) + ' s · ' + sr + ' Hz / ' +
           (bits === 32 ? '32f' : bits) + 'bit を書き出しました');
@@ -1911,6 +2038,12 @@ function buildRecorder () {
   segInit('optRecSr', () => S.recSr, v => setAudioRate(v));
   segInit('optRecPara', () => S.recPara ? 1 : 0, v => S.recPara = v === '1');
   segInit('optRecWet', () => S.recWet ? 1 : 0, v => S.recWet = v === '1');
+  segInit('optRecDest', () => S.recDisk ? 1 : 0, v => {
+    if (v === '1' && !window.showDirectoryPicker) {
+      toast('このブラウザは DISK 録音非対応です（Chrome / Edge で使えます）'); return;
+    }
+    S.recDisk = v === '1';
+  });
   const b = document.getElementById('btnRec');
   b.onclick = () => {
     if (Midi.armFromClick({ el: b, isBtn: true, id: 'rec' })) return;
@@ -2681,6 +2814,7 @@ function frame () {
       S.recFmt.toUpperCase() + ' · ' + sr +
       (S.recPara ? ' · パラ ON: マスター+非ミュート各トラック（ステム=' +
         (S.recWet ? 'WET: 各トラックのFX込み' : 'DRY: FXなし') + '）' : ' · マスターのみ') +
+      (S.recDisk ? ' · DISK: フォルダへ直接書き込み・長さ無制限' : ' · MEM: 約13分でメモリ上限') +
       ' — R キーでも開始/停止';
   }
 
@@ -2963,7 +3097,8 @@ function loadProject (obj) {
     optMode: () => S.mode, optCurve: () => S.curve, optDir: () => S.dir,
     optMaster: () => S.masterIdx, optRecFmt: () => S.recFmt, optRecBit: () => S.recBit,
     optRecSr: () => S.recSr, optRecPara: () => S.recPara ? 1 : 0,
-    optRecWet: () => S.recWet ? 1 : 0
+    optRecWet: () => S.recWet ? 1 : 0,
+    optRecDest: () => S.recDisk ? 1 : 0
   };
   Object.keys(SEGS).forEach(id => segPaint(id, SEGS[id]));
   paintTrkTgl();

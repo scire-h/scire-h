@@ -212,5 +212,49 @@ suite('channel-count generality', () => {
 });
 
 /* =================================================================== */
+suite('streaming split == whole-file encode', () => {
+  // The disk recorder writes header(0) + packed chunks + header(N)
+  // rewritten over the front. That is only correct if the pieces are
+  // byte-identical to the one-shot encoders.
+  const L = Float32Array.from({ length: 777 }, (_, i) => Math.sin(i / 5) * 0.8);
+  const Rr = Float32Array.from({ length: 777 }, (_, i) => Math.cos(i / 7) * 0.5);
+
+  for (const bits of [16, 24, 32]) {
+    const whole = new Uint8Array(R.encodeWav([L, Rr], 48000, bits));
+    const head = new Uint8Array(R.wavHeader(777, 2, 48000, bits));
+    // chunked pack: 3 uneven slices, like worklet messages
+    const cuts = [[0, 100], [100, 512], [512, 777]];
+    const parts = cuts.map(([a, b]) => R.packWav([L.subarray(a, b), Rr.subarray(a, b)], bits));
+    const stitched = new Uint8Array(head.length + parts.reduce((n, p) => n + p.length, 0));
+    stitched.set(head, 0);
+    let o = head.length;
+    for (const p of parts) { stitched.set(p, o); o += p.length; }
+    ok(whole.length === stitched.length &&
+       whole.every((v, i) => v === stitched[i]),
+       'WAV ' + bits + '-bit: header + chunked packs == encodeWav, byte for byte');
+    // provisional header (frames=0) has the same layout, only sizes differ
+    const prov = new Uint8Array(R.wavHeader(0, 2, 48000, bits));
+    ok(prov.length === head.length, 'WAV ' + bits + '-bit: provisional header length is final');
+  }
+
+  for (const bits of [16, 24]) {
+    const whole = new Uint8Array(R.encodeAiff([L, Rr], 44100, bits));
+    const head = new Uint8Array(R.aiffHeader(777, 2, 44100, bits));
+    const parts = [[0, 300], [300, 777]].map(([a, b]) =>
+      R.packAiff([L.subarray(a, b), Rr.subarray(a, b)], bits));
+    const dataLen = parts.reduce((n, p) => n + p.length, 0);
+    const pad = dataLen & 1;
+    const stitched = new Uint8Array(head.length + dataLen + pad);   // pad byte stays 0
+    stitched.set(head, 0);
+    let o = head.length;
+    for (const p of parts) { stitched.set(p, o); o += p.length; }
+    ok(whole.length === stitched.length &&
+       whole.every((v, i) => v === stitched[i]),
+       'AIFF ' + bits + '-bit: header + chunked packs (+pad) == encodeAiff, byte for byte');
+    ok(new Uint8Array(R.aiffHeader(0, 2, 44100, bits)).length === head.length,
+       'AIFF ' + bits + '-bit: provisional header length is final');
+  }
+});
+
 console.log('\n' + (fail ? 'FAILED' : 'OK') + ' — ' + pass + ' assertions passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

@@ -88,7 +88,14 @@ an AudioWorklet; every file is cut to the identical frame range, so
 all stems are sample-aligned. Output is WAV (16 / 24 /
 32-bit float) or AIFF (16 / 24), at the context rate — selectable
 44.1 / 48 / 88.2 / 96 kHz (the AudioContext is rebuilt on change, so
-rate switching happens while stopped).
+rate switching happens while stopped). Stems print DRY (pre-FX) or
+WET (each track's own reverb/echo included) — switchable on the
+panel. DEST picks where the take goes: MEM buffers in memory and
+downloads on stop (auto-stops near 1.5 GB — about 13 minutes of
+5-file para at 48 kHz), while DISK (Chrome/Edge) asks for a folder
+once and streams every file straight to it with the header rewritten
+on stop — take length limited only by the drive, sized for hour-long
+tempo moves.
 
 **Sound.** Per track: an 808 or 909 drum kit (kick / snare / closed and
 open hat), a chord voice playing scale degrees I / IV / V / vi over

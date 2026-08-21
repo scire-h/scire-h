@@ -3,6 +3,28 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## ZURE — DISK recording: takes that never stop
+
+* The recorder's memory cap (1.5 GB — about 13 minutes of para
+  recording at 48 kHz) was ending long takes. New **DEST: MEM / DISK**
+  switch in the RECORDER panel: DISK asks for a folder once
+  (File System Access API, Chrome/Edge) and streams master + stems
+  straight to files while recording — nothing accumulates in memory,
+  so take length is limited only by the drive.
+* Implementation: the WAV/AIFF encoders are split into header +
+  chunk-pack halves; the disk path writes a provisional header, then
+  packed chunks at the target bit depth as they arrive from the
+  worklets (per-file ordered write chains), and rewrites the header
+  with the real frame count on stop. Unit tests prove header+chunks
+  is byte-identical to the one-shot encoders for every format/depth
+  (57 recorder assertions).
+* Browsers without the API (or a cancelled picker, or a stale folder)
+  fall back to memory recording with a toast; the memory-limit toast
+  now points at DISK mode. Stems stay sample-aligned on disk —
+  verified in-browser via a mocked directory handle: 2 streamed
+  files, equal frame counts, headers finalized, zero bytes held in
+  memory during the take.
+
 ## ZURE — hour-long tempo moves
 
 * CATCH RATE upper limit raised 10 min → **60 min**, and WANDER's
