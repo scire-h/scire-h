@@ -294,6 +294,18 @@ suite('a ten-minute CATCH RATE', () => {
   T.beginCatch(s2, 0, { mode: 'bpm', curve: 'linear', dir: 'nearest', dur: 600 });
   const perSec = T.rampBpm(s2.catchState.ramp, 120, 0) - T.rampBpm(s2.catchState.ramp, 120, 1);
   near(perSec, 0.08, 1e-9, 'the tempo creeps at 0.08 BPM per second');
+
+  // ... and the knob now reaches a full hour. 48 BPM over 3600 s:
+  // 0.0133 BPM/s, landing exactly at t=3600 with no drift.
+  const m3 = mkTrack(120), s3 = mkTrack(168);
+  T.beginCatch(s3, 0, { mode: 'bpm', curve: 'linear', dir: 'nearest', dur: 3600 });
+  near(T.rampBpm(s3.catchState.ramp, 120, 1800), 144, 1e-9,
+       'an hour-long catch is halfway (144 BPM) at 30 minutes');
+  const r3 = run(s3, m3, 3660, 3600);
+  const d3 = r3.events.find(e => e.ev === 'bpm-locked');
+  ok(d3 && d3.t > 3590 && d3.t < 3610,
+     'the hour-long catch lands at ~3600 s (t=' + (d3 ? d3.t.toFixed(0) : 'never') + 's)');
+  near(s3.bpm, 120, 0.01, 'and still lands exactly on the master BPM');
 });
 
 suite('PHASE SYNC is robust across tempos and offsets', () => {

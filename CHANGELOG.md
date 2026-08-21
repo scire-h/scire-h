@@ -3,6 +3,17 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## ZURE — hour-long tempo moves
+
+* CATCH RATE upper limit raised 10 min → **60 min**, and WANDER's
+  per-track TRAVEL raised 2 min → **60 min** per leg. A BPM move can
+  now take a full hour: 48 BPM over 3600 s creeps at 0.013 BPM/s.
+* Both knobs share one time display: seconds below a minute, M:SS
+  above (3600 → 60:00), with the rounding trap (5:60) fixed.
+* Unit-tested: an hour-long catch is exactly halfway at 30 minutes,
+  lands at ~3600 s on the simulated scheduler, and still lands
+  exactly on the master BPM.
+
 ## ZURE — the dry path is sacred (FX graph hardening)
 
 * Report of the WET-stem build going silent on one machine (not

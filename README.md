@@ -59,7 +59,7 @@ moving underneath it.
 
 | control | effect |
 |---|---|
-| **CATCH RATE** | how long the merge takes, 0.25 s – 10 min (readout switches to M:SS above a minute). At the far end the tempo creeps at hundredths of a BPM per second — a convergence you notice only after it has happened. Turning the knob *during* a catch re-plans the remaining travel from that instant, so a catch can be hurried or stretched while it is audibly in flight |
+| **CATCH RATE** | how long the merge takes, 0.25 s – 60 min (readout switches to M:SS above a minute). At the far end the tempo creeps at hundredths of a BPM per second — a convergence you notice only after it has happened. Turning the knob *during* a catch re-plans the remaining travel from that instant, so a catch can be hurried or stretched while it is audibly in flight |
 | **BPM SYNC** | tempo only. Bar heads stay apart and the two loops keep running out of phase |
 | **PHASE SYNC** | tempo *and* bar heads. After the tempos converge, the BPM briefly swells past the target and settles back, walking the bar head into place, then locks |
 | **LINEAR / EXP** | constant-rate merge, or fast-then-asymptotic |
@@ -112,7 +112,8 @@ survive 808↔909 switches and are saved in the project file.
 **WANDER.** Each track's header row holds an oscillating tempo drive:
 engage it and the BPM bounces between its home value and DEST,
 dwelling DWELL seconds at each end and travelling each leg over
-TRAVEL seconds through the same step-exact glide machinery. Manual
+TRAVEL seconds — anywhere from 0.25 s to a full hour per leg —
+through the same step-exact glide machinery. Manual
 BPM moves or a CATCH take the wheel back automatically.
 
 **Pitch.** Synth tracks are clock-driven, so tempo changes do not move

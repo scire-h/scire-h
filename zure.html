@@ -400,8 +400,9 @@
       マスター双方の WANDER が止まり、CATCH 中のトラック（および CATCH の
       対象になっているマスター）には WANDER を新たに掛けられない。<br>
       <b>操作の要点</b>: <code>CATCH RATE</code> は合流にかける時間
-      （0.25秒〜10分。左=速い/右=遅い、追従の途中で回すと再計画。60秒以上は
-      分:秒 表示。ゆっくり側に振ると、何分もかけて少しずつテンポが変わっていく）。BPM SYNC はテンポのみ一致で小節頭はズレたまま並走、
+      （0.25秒〜60分。左=速い/右=遅い、追従の途中で回すと再計画。60秒以上は
+      分:秒 表示。ゆっくり側に振ると、何十分もかけて少しずつテンポが変わっていく。
+      WANDER の TRAVEL も同じく片道60分まで）。BPM SYNC はテンポのみ一致で小節頭はズレたまま並走、
       PHASE SYNC は目標BPMを一瞬追い越して小節頭を合わせロックする。
       ヘッダーの A–D でトラックの ON/OFF。グリッドはクリックのほか
       <b>押しながらスライドで連続入力</b>（最初のセルで ON/OFF が決まる）。
@@ -1840,9 +1841,16 @@ function segPaint (id, get) {
   box.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
 }
 
+/* seconds -> "8.00 s" below a minute, "M:SS" above (3600 -> 60:00) */
+function fmtSecs (v) {
+  if (v < 60) return (v < 10 ? v.toFixed(2) : v.toFixed(1)) + ' s';
+  const t = Math.round(v);
+  return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+}
+
 function buildConsole () {
   kCatch = new Knob(document.getElementById('kCatch'), {
-    label: 'CATCH RATE', min: 0.25, max: 600, def: 8, log: true, id: 'catchTime',
+    label: 'CATCH RATE', min: 0.25, max: 3600, def: 8, log: true, id: 'catchTime',
     get: () => S.catchTime,
     set: v => {
       S.catchTime = v;
@@ -1854,8 +1862,7 @@ function buildConsole () {
         });
       }
     },
-    fmt: v => v >= 60 ? Math.floor(v / 60) + ':' + String(Math.round(v % 60)).padStart(2, '0')
-            : (v < 10 ? v.toFixed(2) : v.toFixed(1)) + ' s'
+    fmt: fmtSecs
   });
   knobs.catchTime = kCatch;
 
@@ -2196,10 +2203,10 @@ function buildWander (tr) {
          id: 'wd' + tr.idx + 'W',
          get: () => w.dwell, set: v => w.dwell = v,
          fmt: v => v.toFixed(1) + ' s' });   // stay at each turn-around
-  addK({ label: 'TRAVEL', min: 0.25, max: 120, def: w.travel, log: true,
+  addK({ label: 'TRAVEL', min: 0.25, max: 3600, def: w.travel, log: true,
          id: 'wd' + tr.idx + 'T',
          get: () => w.travel, set: v => w.travel = v,
-         fmt: v => (v < 10 ? v.toFixed(2) : v.toFixed(1)) + ' s' });
+         fmt: fmtSecs });
 
   const st = document.createElement('span');
   st.className = 'stat';
