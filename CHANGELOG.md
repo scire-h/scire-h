@@ -3,6 +3,222 @@
 All notable changes to this project. The dates are when each phase
 landed on the development branch.
 
+## ZURE — DISK recording: takes that never stop
+
+* The recorder's memory cap (1.5 GB — about 13 minutes of para
+  recording at 48 kHz) was ending long takes. New **DEST: MEM / DISK**
+  switch in the RECORDER panel: DISK asks for a folder once
+  (File System Access API, Chrome/Edge) and streams master + stems
+  straight to files while recording — nothing accumulates in memory,
+  so take length is limited only by the drive.
+* Implementation: the WAV/AIFF encoders are split into header +
+  chunk-pack halves; the disk path writes a provisional header, then
+  packed chunks at the target bit depth as they arrive from the
+  worklets (per-file ordered write chains), and rewrites the header
+  with the real frame count on stop. Unit tests prove header+chunks
+  is byte-identical to the one-shot encoders for every format/depth
+  (57 recorder assertions).
+* Browsers without the API (or a cancelled picker, or a stale folder)
+  fall back to memory recording with a toast; the memory-limit toast
+  now points at DISK mode. Stems stay sample-aligned on disk —
+  verified in-browser via a mocked directory handle: 2 streamed
+  files, equal frame counts, headers finalized, zero bytes held in
+  memory during the take.
+
+## ZURE — hour-long tempo moves
+
+* CATCH RATE upper limit raised 10 min → **60 min**, and WANDER's
+  per-track TRAVEL raised 2 min → **60 min** per leg. A BPM move can
+  now take a full hour: 48 BPM over 3600 s creeps at 0.013 BPM/s.
+* Both knobs share one time display: seconds below a minute, M:SS
+  above (3600 → 60:00), with the rounding trap (5:60) fixed.
+* Unit-tested: an hour-long catch is exactly halfway at 30 minutes,
+  lands at ~3600 s on the simulated scheduler, and still lands
+  exactly on the master BPM.
+
+## ZURE — the dry path is sacred (FX graph hardening)
+
+* Report of the WET-stem build going silent on one machine (not
+  reproducible in Chromium — every path measured sound). Three
+  defences shipped regardless:
+* The dry connection (`track → wetSum → master bus`) is wired first
+  and each FX section (reverb, echo) builds inside its own try/catch —
+  a browser that refuses any FX node now costs that track its effect,
+  never its sound, and never aborts the transport.
+* Reverb convolvers are created lazily on the first non-zero REV
+  send. With all REV knobs at zero (the default) no convolver exists
+  at all — idle CPU is now lower than the old shared-bus version, and
+  four convolvers run only if four reverbs are actually in use.
+* Uncaught errors and promise rejections now surface as an ERROR
+  toast on the machine itself, so a failure on hardware we cannot
+  reach reports its own cause instead of dying silently.
+
+## ZURE — WET para stems, 10-minute CATCH RATE
+
+* Para recording can now print each track's FX: a STEM DRY/WET switch
+  in the RECORDER panel. DRY taps post-gain pre-FX (the old
+  behaviour, still the default); WET taps the new per-track sum of
+  dry + reverb return + ping-pong echo — the full produced track,
+  isolated. Saved in the project file.
+* To make a WET stem possible at all, the reverb moved off the shared
+  bus: each track owns a ConvolverNode (all four share one impulse-
+  response buffer), and everything a track makes now meets at a
+  per-track `wetSum` node that alone feeds the master bus. E2E:
+  a soloed WET stem reconstructs the master through the soft clip
+  (envelope r = 0.993) and an empty track's WET stem is digital
+  silence even when a neighbour drowns in echo — no cross-track leak.
+* CATCH RATE now reaches 10 minutes (0.25 s – 600 s, log taper; the
+  readout switches to M:SS above a minute). At the top the tempo
+  creeps at hundredths of a BPM per second, so a catch becomes
+  something you only notice after it has happened. Re-planning
+  mid-flight (600 s hurried to 4 s) still lands exactly.
+* Tests: 333 unit assertions — new suite runs the full ten-minute
+  catch on the simulated scheduler and checks the 0.08 BPM/s creep;
+  new E2E measures DRY vs WET stem energy, silence fraction, master
+  reconstruction and cross-talk.
+
+## ZURE — attack, gated sustain, drum TONE/SNAPPY/ACCENT, WANDER, CRT scope
+
+* ATTACK knob on every voice row (defaults equal the old fixed values).
+* SUSTAIN is now gated by the painted run: consecutive ON cells form
+  one note, released right after the last cell — "the length you
+  clicked in". sus=0 keeps per-cell one-shots. A fully painted row
+  re-opens its gate if the voice is silent.
+* Drum params: TONE (attack hardness + brightness, neutral at 0.5,
+  ±12 dB shelf @3 kHz and 2x..0.5x attack), SNAPPY on the snare
+  (0 = tom), per-kit ACCENT (level lift + kick tanh saturation +
+  harder kick attack; the gate release falls from the lifted level).
+* WANDER per track: bounce between home BPM and DEST with per-end
+  DWELL and per-leg TRAVEL, through the glide machinery. Manual BPM
+  moves or CATCH disengage it. MIDI-learnable, saved in the project.
+* PHASE SCOPE is a green-phosphor CRT now: persistence trails
+  (previous frame decays instead of clearing), pixelated bloom —
+  Fairlight, not a plotter.
+* Credits in the design: SCIRE, hayato YAMADA (header + footer).
+* Loop lengths 3 and 4 BARS (64-step patterns; legacy files padded).
+* Tests: 312 unit assertions; new E2E covers the gate (run start /
+  release / full-row edge), WANDER round trips + manual override,
+  green-only scope pixels, and save/load of all new params.
+
+## ZURE — the name, and 1992
+
+* The machine is now called **ZURE** (`zure.html`; the ずれ is the
+  instrument). Tests, Makefile (`make zure`, `poly` kept as an alias),
+  workflow names, project/recording file names and the MIDI-map
+  localStorage key follow (the old key is still read as a fallback).
+* Reskin: a 1992 personal computer, not a game console. Paper white +
+  ink black, 2x2 checkerboard dither in place of every gradient,
+  bitmap-font stack (MS Gothic / Osaka-Mono / monospace), zero border
+  radius, hard offset shadows, System-7 striped title bars, buttons
+  that press into their own shadow, blinking dithered REC.
+* The phase scope now rasterises at 92x92 and upscales through
+  `image-rendering: pixelated` — real chunky dots, no glow.
+* Header BPM stepper for the selected track: left/right buttons per
+  digit (±0.01 / 0.1 / 1 / 10), hold for auto-repeat, letter button
+  cycles the selection, live target readout. All through the glide.
+* Echo gains a manual mode: a TIME knob (20 ms - 2 s) plus FREE in the
+  division row; turning the knob claims the delay from tempo sync.
+
+## POLYTEMPO — FX, fill, memories, performance controls, Platinum
+
+* Per-track FX: send into a shared convolver reverb (generated
+  exponential-noise IR) plus a per-track ping-pong L/R echo whose time
+  is a note value against that track's own tempo — updated every tick,
+  so echoes sweep with glides and catch-ups. Stems record dry.
+* FILL button / `F` key: every unmuted drum track plays one bar of
+  randomly generated fill (six template families + jitter) from its
+  own next bar head, then returns to its pattern automatically.
+* Drum tracks: four pattern memories (P1-P4), instant switch, saved in
+  the project JSON.
+* Step grids paint with press-and-slide (pointer capture; the first
+  cell decides on/off, `touch-action: pan-y` keeps page scroll alive).
+* Header now carries A-D track on/off toggles next to PLAY (muting
+  also chokes sustained voices) and a FILL button.
+* Track selection (click a card or Numpad 1-4) + numpad BPM nudge:
+  +/- = 1, Shift = 0.1, * and / = 10 BPM — all through the glide.
+* Mac OS 8 Platinum reskin: deliberate monochrome, hard bevels,
+  striped title bars, hard offset shadows; top panels compacted into
+  one row (page is roughly half as tall to the first track).
+
+## POLYTEMPO — voice editing
+
+* Every synth voice is now editable per track (VOICE EDIT panel):
+  waveform (AUTO / sine / triangle / square / saw), pitch (cutoff for
+  the chord voice), decay and sustain. AUTO keeps the library's stock
+  shape, so untouched tracks sound as before.
+* Rows became mono voices with choke: a new hit releases the previous
+  one through a dedicated choke gain (no envelope cancellation, no
+  cancelAndHoldAtTime portability issues), closed and open hat choke
+  each other, and one chord hit chokes the previous chord. This is
+  what makes SUSTAIN musical in a step sequencer: a sustained voice
+  holds until its row speaks again (8 s safety cap, released on STOP).
+* Envelopes moved from fixed AD to AD(S): decay approaches
+  sus x peak via setTargetAtTime; sus=0 reproduces the old one-shots.
+* Chord decay is a knob now instead of silently tracking tempo.
+* Edit values survive 808/909 switches, are MIDI-learnable, and are
+  saved in the project JSON (older files load with stock defaults).
+* test_voices.js rewritten for the new contract: 296 assertions total.
+
+## POLYTEMPO — recorder, BPM glide, Aqua look
+
+* **Recorder**: hi-res capture to WAV (16 / 24 / 32-bit float) or AIFF
+  (16 / 24-bit) at 44.1 / 48 / 88.2 / 96 kHz. Captures the master bus
+  (post soft-clip, pre monitor volume) and, with PARA on, every unmuted
+  track's dry post-gain signal in parallel. Raw Float32 capture via an
+  AudioWorklet driven by explicit start/end frame numbers, so all stems
+  cover the identical frame range and are sample-aligned. Worklet module
+  loads via data: URL with blob: fallback (Chromium rejects blob:
+  worklets on file:// pages). Encoders are pure functions, including a
+  hand-rolled IEEE 754 80-bit extended writer for the AIFF sample-rate
+  field.
+* **BPM changes glide**: turning a BPM/TUNE knob, typing a value or
+  sending MIDI CC no longer jumps the tempo — it glides from the current
+  playing tempo at the console's CATCH RATE / CURVE, re-planning when
+  re-aimed mid-flight. CATCH RATE range extended to 120 s. Instant while
+  stopped.
+* **Non-blocking BPM entry**: the double-click editor is now an inline
+  input; the old prompt() froze the main thread and stalled the audio.
+* Samples load with BASE BPM = 120 (audio files carry no tempo
+  metadata); FIT LOOP derives it from the loop length instead of the
+  previous silent auto-guess.
+* **Aqua reskin**: Mac OS X Tiger-era look — brushed metal, gel
+  buttons, recessed wells, engraved labels, Lucida Grande.
+* Tests: 57 new assertions (glide behaviour + WAV/AIFF writers
+  re-parsed with independent readers), 233 total.
+
+## POLYTEMPO — four-track polytempo loop machine
+
+* New single-file app `polytempo.html`: four loops, each with its own
+  continuously-variable BPM, and a catch-up operation that merges one
+  into another.
+* Lookahead scheduler on the Web Audio clock. Step length is found by
+  integrating the tempo curve with Simpson's rule under fixed-point
+  iteration, so steps stay exact while the tempo is moving — measured
+  drift is under a microsecond per bar.
+* **CATCH RATE** knob sets the merge time (0.25 s – 60 s) and is live:
+  turning it mid-catch re-plans the remaining travel from that instant,
+  so a merge can be hurried or stretched while it is audibly in flight.
+* **BPM SYNC** matches tempo only, leaving the bar heads to drift.
+  **PHASE SYNC** additionally walks the bar head into place with a
+  raised-cosine BPM swell whose integral equals the measured phase
+  error — it overshoots the target audibly and lands exactly on it.
+  Residual is re-measured and re-corrected until under 15 ms.
+* LINEAR / EXP merge curves; AHEAD / NEAREST / BEHIND phase direction.
+* 808 and 909 voice libraries (kick, snare, closed/open hat, chord
+  tone), switchable while running. Chord tracks play scale degrees
+  I / IV / V / vi over KEY + OCTAVE + FINE.
+* Sample tracks run tape-style: `playbackRate = BPM / BASE BPM`, so
+  tempo moves pitch. Their TUNE knob writes BPM directly — tuning is
+  tempo.
+* Master chain: 20 Hz high-pass → limiter → tanh soft clip, 12 dB of
+  per-track headroom, quiet default volume, peak meter with hold and
+  clip LED.
+* Phase scope, Web MIDI Learn (receive), JSON project save/load.
+* New `tests/web/` suite: 176 assertions run under plain Node with no
+  browser and no npm install. Both suites slice the code they test out
+  of `polytempo.html`, so there is no second copy to drift. Wired into
+  `make test` and a new `Web tests` GitHub Actions workflow.
+
 ## Phase 2.7 — Multi-output bus
 
 * Added four optional stereo aux output buses (`Ch1 Out`…`Ch4 Out`)

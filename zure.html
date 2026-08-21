@@ -1,0 +1,3200 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#e8e8e8" />
+<title>ZURE — 4-track polytempo loop machine</title>
+<style>
+
+  /* ================================================================
+     ZURE — 1992 PC SKIN. One-bit sensibility: paper white, ink black,
+     checkerboard dither where a gradient would have been, bitmap-font
+     stack, zero border-radius, hard offset shadows, pixelated scope.
+     Not a game console — a workstation.
+     ================================================================ */
+  :root{
+    --paper:#ffffff; --ink:#000000; --line:#000000;
+    --bg:#e8e8e8; --panel:#ffffff; --panel2:#ffffff;
+    --text:#000000; --dim:#444444; --dim2:#666666;
+    --a:#000; --b:#333; --c:#000; --d:#777;
+    --hot:#000; --ok:#000;
+    --dith: conic-gradient(#bdbdbd 25%, #ffffff 0 50%, #bdbdbd 0 75%, #ffffff 0);
+    --dithDark: conic-gradient(#000 25%, #fff 0 50%, #000 0 75%, #fff 0);
+    --dithLight: conic-gradient(#e2e2e2 25%, #ffffff 0 50%, #e2e2e2 0 75%, #ffffff 0);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;border-radius:0 !important;
+    -webkit-font-smoothing:none;font-smooth:never}
+  html,body{margin:0;padding:0;color:var(--text);
+    background-image:var(--dith);background-size:2px 2px;
+    font-family:"MS Gothic","ＭＳ ゴシック","Osaka-Mono",Osaka-等幅,"Courier New",monospace;
+    font-size:12px;line-height:1.35;overscroll-behavior:none}
+  .app{max-width:1180px;margin:0 auto;padding:0 0 40px}
+  button{font-family:inherit;color:inherit}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+  /* ---------- header ---------- */
+  .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    padding:6px 10px;background:#fff;border-bottom:2px solid #000;
+    box-shadow:0 2px 0 rgba(0,0,0,.25)}
+  .logo{font-weight:700;letter-spacing:.3em;font-size:16px;color:#000}
+  .logo small{display:block;letter-spacing:.08em;font-size:8px;color:#555;font-weight:400}
+  .top .sp{flex:1}
+
+  /* pixel buttons: press = shift into your own shadow */
+  .tbtn{height:26px;padding:0 12px;border:1px solid #000;background:#fff;
+    color:#000;font-size:11px;font-weight:700;letter-spacing:.05em;cursor:pointer;
+    box-shadow:2px 2px 0 #000}
+  .tbtn:active{transform:translate(2px,2px);box-shadow:none}
+  .tbtn.on,.tbtn.play.playing,.tbtn.warn.on{background:#000;color:#fff}
+  .tbtn.play{box-shadow:2px 2px 0 #000, 0 0 0 1px #fff inset, 0 0 0 2px #000 inset}
+  .tbtn.play.playing{box-shadow:2px 2px 0 #000, 0 0 0 1px #000 inset, 0 0 0 2px #fff inset}
+
+  /* selected-track BPM digit stepper */
+  .stepper{display:flex;align-items:stretch;border:1px solid #000;box-shadow:2px 2px 0 #000;
+    background:#fff;height:26px}
+  .stepper button{border:0;border-right:1px solid #000;background:#fff;color:#000;
+    font-size:9px;font-weight:700;padding:0 5px;cursor:pointer;font-family:inherit}
+  .stepper button:last-child{border-right:0}
+  .stepper button:active{background:#000;color:#fff}
+  .stepper .stSel{background:#000;color:#fff;min-width:22px}
+  .stepper .stBpm{display:flex;align-items:center;padding:0 6px;font-size:12px;font-weight:700;
+    border-right:1px solid #000;min-width:58px;justify-content:center;
+    background-image:var(--dithLight);background-size:2px 2px}
+
+  .trkTgl{display:flex;border:1px solid #000;box-shadow:2px 2px 0 #000;background:#fff}
+  .trkTgl button{width:28px;height:24px;border:0;border-right:1px solid #000;background:#fff;
+    font-size:11px;font-weight:700;cursor:pointer;color:#000}
+  .trkTgl button:last-child{border-right:0}
+  .trkTgl button:not(.on){background-image:var(--dithLight);background-size:2px 2px;color:#888}
+  .trkTgl button.on{background:#000;color:#fff}
+
+  /* ---------- meter: block segments ---------- */
+  .meter{display:flex;align-items:center;gap:6px}
+  .mbar{position:relative;width:100px;height:10px;background:#fff;border:1px solid #000;overflow:hidden}
+  .mfill{position:absolute;inset:0;width:0%;
+    background-image:repeating-linear-gradient(90deg,#000 0 4px,#fff 4px 6px)}
+  .mpk{position:absolute;top:0;bottom:0;width:2px;background:#000;left:0}
+  .clip{width:10px;height:10px;background:#fff;border:1px solid #000}
+  .clip.on{background:#000}
+  .mdb{font-size:10px;color:#333;min-width:44px;text-align:right}
+
+  /* ---------- panels ---------- */
+  .panelRow{display:grid;grid-template-columns:minmax(380px,5fr) minmax(330px,4fr) minmax(250px,3fr);
+    gap:10px;margin:10px 12px}
+  .panelRow .panel{margin:0}
+  @media (max-width:1020px){ .panelRow{grid-template-columns:1fr} }
+  .panel{background:#fff;border:1px solid #000;margin:10px 12px;padding:9px 10px;
+    box-shadow:3px 3px 0 #000}
+  /* System-7 striped title */
+  .ptitle{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;
+    letter-spacing:.12em;color:#000;margin:0 0 8px;white-space:nowrap}
+  .ptitle::before,.ptitle::after{content:"";flex:1;height:9px;min-width:10px;
+    background:repeating-linear-gradient(180deg,#000 0 1px,#fff 1px 3px)}
+  .ptitle::before{min-width:8px;flex:0 0 8px}
+
+  /* ---------- knob: flat ink-and-paper dial ---------- */
+  .knob{display:flex;flex-direction:column;align-items:center;gap:4px;width:70px;flex:none;
+    cursor:ns-resize;touch-action:none}
+  .knob .dial{position:relative;flex:none;width:44px;height:44px;border-radius:50% !important;
+    background:#fff;border:2px solid #000;
+    box-shadow:2px 2px 0 rgba(0,0,0,.55)}
+  .knob .dial::after{content:"";position:absolute;inset:3px;border-radius:50%;
+    background-image:var(--dithLight);background-size:2px 2px}
+  .knob .dial i{position:absolute;left:50%;top:3px;width:3px;height:14px;margin-left:-2px;
+    background:#000;transform-origin:50% 17px;z-index:1}
+  .knob .kl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#555;white-space:nowrap}
+  .knob .kv{font-size:11px;font-weight:700;color:#000;white-space:nowrap}
+  .knob.inline{flex-direction:row;align-items:center;width:auto;height:26px;gap:6px;cursor:ns-resize}
+  .knob.inline .dial{width:24px;height:24px;border-width:2px}
+  .knob.inline .dial i{height:8px;top:2px;width:2px;margin-left:-1px;transform-origin:50% 9px}
+  .knob.inline .kl{font-size:9px}
+  .knob.inline .kv{font-size:11px;min-width:48px;text-align:right}
+  .knob.big{width:92px}
+  .knob.big .dial{width:60px;height:60px}
+  .knob.big .dial i{height:20px;top:4px;transform-origin:50% 25px;width:4px}
+  .knob.big .kv{font-size:12px;color:#000}
+  .knob.sm{width:52px;gap:3px}
+  .knob.sm .dial{width:28px;height:28px;border-width:2px}
+  .knob.sm .dial i{height:9px;top:2px;width:2px;margin-left:-1px;transform-origin:50% 11px}
+  .knob.sm .kl{font-size:8px}
+  .knob.sm .kv{font-size:10px}
+  .knob.learn{outline:2px dashed #000;outline-offset:3px}
+  .knob.mapped .kl::after{content:" *";color:#000;font-weight:700}
+
+  /* ---------- recorder ---------- */
+  .recBtn{height:34px;padding:0 16px;border:1px solid #000;background:#fff;
+    color:#000;font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;
+    box-shadow:2px 2px 0 #000}
+  .recBtn:active{transform:translate(2px,2px);box-shadow:none}
+  .recBtn.on{background:#000;color:#fff;animation:blink 0.9s steps(1) infinite}
+  @keyframes blink{0%,55%{background:#000;color:#fff}
+    56%,100%{background-image:var(--dithDark);background-size:2px 2px;color:#fff}}
+  #recStat b{color:#000}
+
+  /* ---------- console ---------- */
+  .console{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+  .segs{display:flex;flex-direction:column;gap:6px;min-width:200px}
+  .seg{display:flex;align-items:center;gap:7px}
+  .seg .sl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#555;width:56px;flex:none}
+  .opts{display:flex;border:1px solid #000;background:#fff;box-shadow:2px 2px 0 rgba(0,0,0,.55)}
+  .opts button{border:0;color:#000;font-size:10px;font-weight:700;
+    letter-spacing:.04em;padding:5px 8px;cursor:pointer;border-right:1px solid #000;background:#fff}
+  .opts button:last-child{border-right:0}
+  .opts button.on{background:#000;color:#fff}
+  .opts.learn{outline:2px dashed #000;outline-offset:2px}
+  .hint{font-size:10px;color:#444;line-height:1.7;max-width:320px}
+  .hint b{color:#000;font-weight:700}
+
+  /* ---------- phase scope: honest pixels ---------- */
+  .scopeWrap{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+  canvas#scope{width:172px;height:172px;flex:none;background:#051007;border:1px solid #000;
+    box-shadow:2px 2px 0 rgba(0,0,0,.55),
+      inset 0 0 30px rgba(0,0,0,.6);border-radius:4px !important}
+  .legend{display:flex;flex-direction:column;gap:5px;font-size:10px}
+  .legend .row{display:flex;align-items:center;gap:6px}
+  .legend .sw{width:9px;height:9px;border:1px solid #000}
+  .legend .nm{width:14px;font-weight:700}
+  .legend .st{color:#444;font-size:9px;min-width:120px}
+
+  /* ---------- tracks ---------- */
+  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 12px}
+  @media (max-width:900px){ .tracks{grid-template-columns:1fr} }
+  .trk{background:#fff;border:1px solid #000;padding:9px;box-shadow:3px 3px 0 #000}
+  .trk.master{box-shadow:3px 3px 0 #000, 0 0 0 1px #fff inset, 0 0 0 3px #000 inset;
+    padding:11px}
+  .trk.selected{outline:2px dashed #000;outline-offset:3px}
+  .thead{display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap}
+  .tid{width:24px;height:24px;display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:13px;color:#fff;flex:none;background:#000;border:1px solid #000}
+  .tbpm{font-size:19px;font-weight:700;color:#000;letter-spacing:.02em;cursor:text}
+  .tbpm small{font-size:8px;color:#666;letter-spacing:.1em;margin-left:3px}
+  .thead .sp{flex:1}
+  .mini{height:23px;padding:0 8px;border:1px solid #000;background:#fff;
+    font-size:9px;font-weight:700;letter-spacing:.04em;cursor:pointer;color:#000;
+    box-shadow:1px 1px 0 #000}
+  .mini:active{transform:translate(1px,1px);box-shadow:none}
+  .mini.on,.mini.catch.run{background:#000;color:#fff}
+  .mini.learn{outline:2px dashed #000;outline-offset:2px}
+  .mini:disabled{opacity:.3;cursor:default;box-shadow:none}
+  .mini.pm{width:32px}
+  .trow{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
+  .wanderRow{border:1px dashed #999;padding:4px 6px;background:#fafafa}
+  .shiftGrp{margin-left:auto}
+  .wanderRow:empty{display:none}
+  .stat{font-size:9px;color:#444;letter-spacing:.02em}
+  .stat b{color:#000}
+  .stat.lock b{color:#000}
+
+  /* grid: paper cells, ink pips, dithered beat guides */
+  .grid{display:flex;flex-direction:column;gap:2px;margin-top:3px}
+  .grow{display:grid;grid-template-columns:28px 1fr;gap:4px;align-items:center}
+  .rlbl{font-size:9px;font-weight:700;color:#555;text-align:right;letter-spacing:.02em}
+  .cells{display:grid;gap:2px;touch-action:pan-y;user-select:none}
+  .pmRow{display:flex;gap:5px;margin:2px 0 6px}
+  .pmRow:empty{display:none}
+  .cell{height:17px;border:1px solid #000;background:#fff;cursor:pointer}
+  .cell.beat{background-image:var(--dithLight);background-size:2px 2px}
+  .cell.on{background:#000}
+  .cell.now{box-shadow:inset 0 0 0 2px #000, inset 0 0 0 3px #fff}
+  .cell.on.now{box-shadow:inset 0 0 0 2px #fff}
+  .fileRow{display:flex;gap:7px;align-items:center;font-size:9px;color:#444;flex-wrap:wrap}
+  .fileRow input[type=file]{display:none}
+  .bpmEdit{width:88px;background:#fff;border:none;border-bottom:2px solid #000;
+    color:#000;font:inherit;font-size:19px;font-weight:700;outline:none;padding:0}
+  .numIn{width:72px;height:23px;border:1px solid #000;background:#fff;color:#000;
+    font-size:10px;padding:0 5px;font-family:inherit;font-variant-numeric:tabular-nums}
+  .numIn:disabled{opacity:.35}
+  .fbtn{height:23px;padding:0 8px;border:1px dashed #000;background:#fff;
+    color:#333;font-size:9px;font-weight:700;cursor:pointer}
+  .fbtn:hover{background:#000;color:#fff}
+  .sel{height:23px;border:1px solid #000;background:#fff;color:#000;
+    font-size:10px;padding:0 3px;font-family:inherit}
+
+  /* voice / fx editor */
+  details.vedit{margin:2px 0 7px;border:1px solid #000;background:#fff}
+  details.vedit summary{cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.1em;
+    color:#000;padding:4px 8px;background-image:var(--dithLight);background-size:2px 2px}
+  details.vedit[open] summary{border-bottom:1px solid #000}
+  .vrow{display:flex;align-items:center;gap:7px;padding:5px 8px;flex-wrap:wrap}
+  .vrow + .vrow{border-top:1px solid #999}
+  .vlbl{width:32px;flex:none;font-size:9px;font-weight:700;color:#000;letter-spacing:.04em}
+  .opts.sm button{padding:3px 5px;font-size:9px}
+
+  /* footer / docs */
+  details.doc{margin:12px;border:1px solid #000;background:#fff;padding:8px 10px;
+    box-shadow:3px 3px 0 #000}
+  details.doc summary{cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.08em;color:#000}
+  details.doc div{font-size:11px;color:#333;line-height:1.9;margin-top:8px}
+  details.doc b{color:#000}
+  details.doc code{background:#fff;border:1px solid #000;padding:0 4px;font-size:10px}
+
+  .credit{margin:14px 12px 0;font-size:9px;letter-spacing:.22em;color:#555;text-align:center}
+
+  /* alert toast */
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:200;
+    background:#fff;border:1px solid #000;padding:7px 14px;font-size:11px;color:#000;
+    box-shadow:3px 3px 0 #000;opacity:0;pointer-events:none;transition:opacity .1s steps(1)}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="top">
+    <div class="logo">ZURE<small>POLYTEMPO LOOP MACHINE — SCIRE, hayato YAMADA</small></div>
+    <button class="tbtn play" id="btnPlay">PLAY</button>
+    <button class="tbtn" id="btnAlign" title="全トラックの位相を今すぐ揃える">ALIGN</button>
+    <div class="trkTgl" id="trkTgl" title="トラック ON/OFF">
+      <button data-i="0">A</button><button data-i="1">B</button><button data-i="2">C</button><button data-i="3">D</button>
+    </div>
+    <button class="tbtn" id="btnFill" title="次の小節頭で1小節のフィル（ドラムトラック）">FILL</button>
+    <div class="stepper" id="stepper" title="選択トラックのBPMを桁ごとに増減（長押しで連続）">
+      <button data-d="-10">&#9668;10</button><button data-d="-1">&#9668;1</button><button data-d="-0.1">&#9668;.1</button><button data-d="-0.01">&#9668;.01</button>
+      <button class="stSel" id="stSel">A</button><span class="stBpm num" id="stBpm">120.00</span>
+      <button data-d="0.01">.01&#9658;</button><button data-d="0.1">.1&#9658;</button><button data-d="1">1&#9658;</button><button data-d="10">10&#9658;</button>
+    </div>
+    <div class="sp"></div>
+    <div class="meter">
+      <div class="clip" id="clipLed" title="clip"></div>
+      <div class="mbar"><div class="mfill" id="mFill"></div><div class="mpk" id="mPk"></div></div>
+      <div class="mdb num" id="mDb">-inf</div>
+    </div>
+    <div class="knob inline" id="kVol"></div>
+    <button class="tbtn" id="btnMidi">MIDI</button>
+    <button class="tbtn warn" id="btnLearn">LEARN</button>
+    <button class="tbtn" id="btnSave">SAVE</button>
+    <button class="tbtn" id="btnLoad">LOAD</button>
+    <input type="file" id="fileProj" accept="application/json" style="display:none" />
+  </div>
+
+  <div class="panelRow">
+  <div class="panel">
+    <div class="ptitle">CATCH-UP CONSOLE</div>
+    <div class="console">
+      <div class="knob big" id="kCatch"></div>
+      <div class="segs">
+        <div class="seg"><span class="sl">SYNC</span>
+          <div class="opts" id="optMode">
+            <button data-v="bpm">BPM SYNC</button><button data-v="phase">PHASE SYNC</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">CURVE</span>
+          <div class="opts" id="optCurve">
+            <button data-v="linear">LINEAR</button><button data-v="exp">EXP</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">PHASE DIR</span>
+          <div class="opts" id="optDir">
+            <button data-v="ahead">前 AHEAD</button><button data-v="nearest">NEAREST</button><button data-v="behind">後 BEHIND</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">MASTER</span>
+          <div class="opts" id="optMaster">
+            <button data-v="0">A</button><button data-v="1">B</button><button data-v="2">C</button><button data-v="3">D</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">&nbsp;</span>
+          <button class="tbtn" id="btnCatchAll">CATCH ALL</button>
+          <button class="tbtn" id="btnCancelAll">CANCEL</button>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ptitle">RECORDER</div>
+    <div class="console">
+      <button class="recBtn" id="btnRec">● REC</button>
+      <div class="segs">
+        <div class="seg"><span class="sl">FORMAT</span>
+          <div class="opts" id="optRecFmt">
+            <button data-v="wav">WAV</button><button data-v="aif">AIF</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">BIT</span>
+          <div class="opts" id="optRecBit">
+            <button data-v="16">16</button><button data-v="24">24</button><button data-v="32">32F</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">RATE</span>
+          <div class="opts" id="optRecSr">
+            <button data-v="0">AUTO</button><button data-v="44100">44.1k</button><button data-v="48000">48k</button><button data-v="88200">88.2k</button><button data-v="96000">96k</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">PARA</span>
+          <div class="opts" id="optRecPara">
+            <button data-v="0">OFF</button><button data-v="1">ON</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">STEM</span>
+          <div class="opts" id="optRecWet">
+            <button data-v="0">DRY</button><button data-v="1">WET</button>
+          </div>
+        </div>
+        <div class="seg"><span class="sl">DEST</span>
+          <div class="opts" id="optRecDest">
+            <button data-v="0">MEM</button><button data-v="1">DISK</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="recStat"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ptitle">PHASE SCOPE</div>
+    <div class="scopeWrap">
+      <canvas id="scope" width="344" height="344"></canvas>
+      <div class="legend" id="legend"></div>
+    </div>
+  </div>
+
+  </div>
+
+  <div class="tracks" id="tracks"></div>
+
+  <div class="credit">ZURE — SCIRE, hayato YAMADA</div>
+
+  <details class="doc">
+    <summary>ABOUT / 仕様メモ</summary>
+    <div>
+      <b>テンポ</b>: 各トラックは独立した連続BPMを持つ。スケジューラはWeb Audioの
+      オーディオクロック基準（lookahead方式）で、1ステップの長さを
+      テンポ曲線の数値積分（シンプソン則）で求めるため、テンポが動いている最中でも
+      位相がずれない。<br>
+      <b>BPMの変更</b>: つまみ・手入力・MIDIどれで変えても即座には跳ばず、
+      CATCH-UP CONSOLE の CATCH RATE / CURVE に従って現在の再生テンポから
+      グライドする（最大120秒）。グライド中にもう一度動かすと、その地点から
+      新しい目標へ再計画される。停止中は即時反映。<br>
+      <b>ピッチ</b>: シンセ音源はシーケンサークロックの変速なのでピッチ不変。
+      サンプルは <code>playbackRate = BPM / BASE BPM</code> のテープ方式で、
+      テンポの揺れがそのままピッチのうねりになる。サンプルの TUNE つまみは
+      BPMそのものを動かす（チューニング＝テンポの一部）。
+      音声ファイルにはBPM情報が無いため、読み込み時の BASE BPM は 120 とし、
+      FIT LOOP（サンプル全体＝ループ長とみなして算出）か手入力で合わせる。<br>
+      <b>音色エディット</b>: 各トラックの VOICE EDIT で、シンセボイスごとに
+      波形（AUTO/SIN/TRI/SQR/SAW）・ATK（アタック）・ピッチ（コードはカットオフ）・
+      ディケイ・サスティン、ドラムはさらに TONE を編集できる。AUTO はライブラリ
+      本来の波形。<b>SUS を上げた行はゲート式</b>: 連続して塗った（クリックした）
+      セルの並びがひとつのノートになり、並びの最初で発音、最後のセルの直後で
+      リリースされる。SUS=0 なら従来どおりセルごとのワンショット。各行はモノで、
+      新しいノートは前の音をチョーク（CH/OH は相互）。停止時と8秒の上限でも解放。<br>
+      <b>CHORD の音作り（簡易 Prophet-5）</b>: TONE 行の下の OSC B 行で
+      2つ目のオシレータを混ぜられる。波形（AUTOはライブラリ既定）、
+      HARM（倍音比 ×0.5〜×4、Bの音程）、MIX（A:B バランス）、
+      P.MOD（ポリモジュレーション — B の波形で A の周波数を揺らす。上げると
+      金属的・ベル的な倍音が出る）、NOISE（ミキサーにホワイトノイズを足す）。
+      デフォルトは従来の音色相当（808: sine+tri×2 / 909: 2xSAW デチューン）。<br>
+      <b>ドラム専用パラメータ</b>: TONE はアタックの硬さと明るさ（0.5=原音、
+      ±12dB のハイシェルフ+アタック時間の伸縮）。スネアの SNAPPY は響き線の
+      ノイズ量（0でタムのようなトーンだけの音）。KIT の ACCENT は全体の音量に
+      メリハリを付けつつ、アナログ回路よろしくキックの歪み（サチュレーション）と
+      アタック感も連動して変わる。<br>
+      <b>SHIFT（ずらし）</b>: 各トラック上部の ◀BAR ◀拍 拍▶ BAR▶ で、
+      ループ位置を1拍/1小節ぶん一瞬でずらす。タイミンググリッドは触らず
+      パターンの読み出し位置だけが跳ぶので、音は途切れず、ズレたまま維持される。<br>
+      <b>WANDER</b>: 各トラック上部の往復機。ONにした時点のBPMをホームとして、
+      <b>ONの間ずっと</b>ホーム⇔DEST を自動で行ったり来たりし続ける。
+      <b>DWELL は折り返し地点での滞在時間</b>（両端それぞれで、戻り始めるまで
+      その BPM に留まる秒数）。片道は TRAVEL 秒かけて移動する
+      （グライドと同じ機構なのでステップは正確）。表示の ⟲ は通過した片道の数。
+      つまみや CATCH で手動介入すると WANDER は自動で外れる。
+      <b>優先順位は CATCH ＞ WANDER</b>: CATCH をかけると追う側・追われる
+      マスター双方の WANDER が止まり、CATCH 中のトラック（および CATCH の
+      対象になっているマスター）には WANDER を新たに掛けられない。<br>
+      <b>操作の要点</b>: <code>CATCH RATE</code> は合流にかける時間
+      （0.25秒〜60分。左=速い/右=遅い、追従の途中で回すと再計画。60秒以上は
+      分:秒 表示。ゆっくり側に振ると、何十分もかけて少しずつテンポが変わっていく。
+      WANDER の TRAVEL も同じく片道60分まで）。BPM SYNC はテンポのみ一致で小節頭はズレたまま並走、
+      PHASE SYNC は目標BPMを一瞬追い越して小節頭を合わせロックする。
+      ヘッダーの A–D でトラックの ON/OFF。グリッドはクリックのほか
+      <b>押しながらスライドで連続入力</b>（最初のセルで ON/OFF が決まる）。
+      トラックカードをクリックすると選択（破線枠）され、テンキー 1–4 で選択、
+      <code>+</code>/<code>-</code> で ±1 BPM、Shift+テンキー± で ±0.1、
+      <code>*</code>/<code>/</code> で ±10（すべてグライド経由）。
+      ヘッダーの ◀▶ ステッパーでも選択トラックのBPMを 0.01 / 0.1 / 1 / 10 の
+      桁ごとに増減できる（長押しで連続、文字ボタンで選択切替）。<br>
+      <b>PHASE SCOPE</b> は緑蛍光体のブラウン管: 低解像度ラスタを
+      ピクセル拡大し、前フレームを消さずに減衰させることで残光（トレイル）を
+      作っている。<br>
+      <b>FX</b>: 各トラックに共有リバーブへのセンドと、トラック専用のピンポン
+      （L·R）エコー。エコーのタイムは 1/16〜1/2 の音価指定で
+      <b>そのトラック自身のテンポ</b>に追従する — 追いつかせの最中はエコーも一緒に
+      うねる。FREE を選ぶ（または TIME ノブを回す）とテンポから切り離れ、
+      TIME ノブ（20ms〜2s）でマニュアル指定になる。FB はフィードバック量。録音のパラ・ステムはドライ信号のまま
+      （FX はマスターにのみ乗る）。<br>
+      <b>FILL</b>: ヘッダーの FILL（または F キー）で、各ドラムトラックの
+      次の小節頭から1小節、ランダム生成のフィル（6系統のテンプレート+揺らぎ）が
+      入り、自動で元のパターンに戻る。トラックごとに自分のテンポで入るので、
+      ポリテンポのままフィルが回る。<br>
+      <b>パターンメモリ</b>: ドラムトラックは P1–P4 の4つのパターンを持ち、
+      ボタンで即切替（編集はスロットごとに保持、プロジェクトに保存）。<br>
+      <b>録音</b>: RECORDER の REC（または R キー）で開始/停止。マスター
+      （ソフトクリップ後・モニター音量前）と、PARA ON なら非ミュートの各トラック
+      （トラックゲイン後・マスターチェーン前のドライ信号）を AudioWorklet で
+      同時キャプチャする。全ファイルは同一フレーム範囲で切り出されるため
+      サンプル単位でアラインしている。WAV は 16/24/32bit float、AIF は 16/24bit。
+      RATE の変更は AudioContext を作り直すため停止中のみ（AUTO はデバイスレート）。
+      パラ録音では複数ファイルを連続ダウンロードするので、ブラウザが許可を
+      求めることがある。<br>
+      <b>PHASE SYNC の着地</b>: 収束が終わった時点で両者の次の小節頭の時刻差 e を測り、
+      レイズドコサイン形のBPMの膨らみ（面積がちょうど e になる）を1回かける。
+      始点と終点でBPMは目標値に一致し、位相だけが e ぶん進む。
+      残差が閾値以下になったらステップ時刻をスナップしてロックする。<br>
+      <b>安全設計</b>: 各トラック −12dB のヘッドルーム、マスターに 20Hz ハイパス →
+      リミッター → tanh ソフトクリップ。起動時の音量は控えめ。<br>
+      <b>MIDI</b>: 受け専用。LEARN を押してから操作子をクリックし、CC を動かすと割り当て。
+      割り当ては localStorage に保存される。MIDIクロックは1本しか流せないため、
+      4つの異なるBPMの同時送出は原理的に不可能。<br>
+      <b>保存</b>: SAVE は JSON を書き出す。サンプルの音声データは含まれないので、
+      読み込み後にファイルを選び直す必要がある。
+    </div>
+  </details>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* Anything that dies must die loudly: a silent machine with no clue
+   is the one bug that cannot be reported. toast() is hoisted, so this
+   works even for errors thrown while the rest of this script boots. */
+window.addEventListener('error', e => {
+  try { toast('ERROR: ' + e.message); } catch (_) {}
+});
+window.addEventListener('unhandledrejection', e => {
+  const m = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+  try { toast('ERROR: ' + m); } catch (_) {}
+});
+
+/*<<<TEMPO_CORE>>>*/
+/* ===================================================================
+   TEMPO CORE — pure timing math + per-track catch-up state machine.
+   No DOM, no Web Audio, no globals: everything is a function of an
+   explicit `now`. Extracted verbatim by tests/web/test_tempo.js.
+   =================================================================== */
+const TempoCore = (function () {
+  const STEPS_PER_BEAT = 4;                              // 16th notes
+  const BEATS_PER_BAR  = 4;                              // 4/4
+  const STEPS_PER_BAR  = STEPS_PER_BEAT * BEATS_PER_BAR; // 16
+
+  /* Fraction of the remaining BPM distance still to travel at
+     normalised ramp position u. shape(0)=1, shape(1)=0, monotonic. */
+  function catchShape (u, curve) {
+    if (u <= 0) return 1;
+    if (u >= 1) return 0;
+    if (curve === 'exp') {
+      const k = 5, e1 = Math.exp(-k);
+      return (Math.exp(-k * u) - e1) / (1 - e1);   // fast first, asymptotic
+    }
+    return 1 - u;                                  // linear
+  }
+
+  /* BPM during the converge stage. `target` is read live, so a moving
+     master is tracked without re-planning the ramp. */
+  function rampBpm (ramp, target, t) {
+    const u = ramp.dur > 0 ? (t - ramp.t0) / ramp.dur : 1;
+    return target + (ramp.startBpm - target) * catchShape(u, ramp.curve);
+  }
+
+  /* Raised-cosine BPM swell used to walk the phase into place.
+     Zero and C1-continuous at both ends, so it lands exactly on the
+     target BPM while having moved the bar head by a known amount. */
+  function lockDev (lock, t) {
+    const u = (t - lock.t0) / lock.dur;
+    if (u <= 0 || u >= 1) return 0;
+    return lock.amp * 0.5 * (1 - Math.cos(2 * Math.PI * u));
+  }
+
+  /* Amplitude whose integral advances the track by `errBars` bars:
+       bars = amp*dur/2/60/BEATS_PER_BAR  =>  amp = 120*BEATS_PER_BAR*bars/dur */
+  function lockAmp (errBars, dur) {
+    return 120 * BEATS_PER_BAR * errBars / dur;
+  }
+
+  /* Fold a raw bar offset into the window implied by the chosen
+     catch-up direction. Positive result = the track must speed up. */
+  function wrapPhase (x, dir) {
+    let f = x - Math.floor(x);                 // [0,1)
+    if (f > 1 - 1e-9) f = 0;
+    if (dir === 'ahead')  return f;            // [0,1)   speed up
+    if (dir === 'behind') return f - 1;        // (-1,0]  slow down
+    return f > 0.5 ? f - 1 : f;                // nearest
+  }
+
+  /* Length of one step starting at t under a time-varying BPM: solve
+       ∫ bpm(t..t+dt) dt = 60/STEPS_PER_BEAT
+     by fixed-point iteration on Simpson's rule. Exact for tempo curves
+     up to cubic, so a step never drifts even mid-ramp. */
+  function stepDur (bpmFn, t) {
+    const q = 6 * 60 / STEPS_PER_BEAT, b0 = bpmFn(t);
+    let dt = 60 / (b0 * STEPS_PER_BEAT);
+    for (let i = 0; i < 8; i++) {
+      const n = q / (b0 + 4 * bpmFn(t + dt / 2) + bpmFn(t + dt));
+      const conv = Math.abs(n - dt) < 1e-13;
+      dt = n;
+      if (conv) break;
+    }
+    return dt;
+  }
+
+  /* Live BPM of a track: its own value, or wherever the catch-up
+     curve currently is. targetAt(t) supplies the master's BPM. */
+  function bpmAt (tr, targetAt, t) {
+    const c = tr.catchState;
+    if (!c) return tr.bpm;
+    /* a glide knows its own destination; without that, a track being
+       used as a reference (e.g. a wandering master) reported its stale
+       bpm to whoever was catching it */
+    const target = targetAt ? targetAt(t)
+                 : c.fixedBpm != null ? c.fixedBpm : tr.bpm;
+    if (c.stage === 'converge') return rampBpm(c.ramp, target, t);
+    if (c.stage === 'lock')     return target + lockDev(c.lock, t);
+    return tr.bpm;
+  }
+
+  /* Time of the first bar head at or after t, extrapolated from the
+     next step the scheduler will emit. */
+  function nextBarHead (tr, t, sd) {
+    const k = (STEPS_PER_BAR - (tr.stepIndex % STEPS_PER_BAR)) % STEPS_PER_BAR;
+    const barDur = sd * STEPS_PER_BAR;
+    let bh = tr.nextStepTime + k * sd;
+    while (bh < t - 1e-9) bh += barDur;
+    return bh;
+  }
+
+  /* How far `tr` must advance (in bars) to sit on `master`'s bar grid. */
+  function phaseErrorBars (tr, master, sd, dir) {
+    const barDur = sd * STEPS_PER_BAR;
+    const t0 = Math.max(tr.nextStepTime, master.nextStepTime);
+    const raw = (nextBarHead(tr, t0, sd) - nextBarHead(master, t0, sd)) / barDur;
+    return wrapPhase(raw, dir);
+  }
+
+  function beginCatch (tr, now, opt) {
+    tr.catchState = {
+      stage: 'converge', mode: opt.mode, curve: opt.curve, dir: opt.dir,
+      ramp: { t0: now, dur: Math.max(0.05, opt.dur), startBpm: tr.bpm, curve: opt.curve },
+      lockTries: 0
+    };
+  }
+
+  /* Glide to a FIXED BPM (a knob or typed value) instead of chasing a
+     master track. Same converge machinery, mode 'bpm', so the tempo
+     eases over at the console's rate rather than jumping. Re-issuing
+     mid-glide simply retargets from wherever the ramp is now. */
+  function beginGlide (tr, now, target, opt) {
+    tr.catchState = {
+      stage: 'converge', mode: 'bpm', curve: opt.curve, dir: 'nearest',
+      isGlide: true, fixedBpm: target,
+      ramp: { t0: now, dur: Math.max(0.05, opt.dur), startBpm: tr.bpm, curve: opt.curve },
+      lockTries: 0
+    };
+  }
+
+  /* CATCH RATE moved mid-flight: re-plan from where the ramp is now,
+     so the remaining travel takes exactly the new duration. */
+  function retimeCatch (tr, now, newDur, curBpm) {
+    const c = tr.catchState;
+    if (!c || c.stage !== 'converge') return false;
+    c.ramp = { t0: now, dur: Math.max(0.05, newDur), startBpm: curBpm, curve: c.curve };
+    return true;
+  }
+
+  function endCatch (tr, bpm) { tr.catchState = null; tr.bpm = bpm; }
+
+  /* Plan (or re-plan) the phase-lock swell. Returns false when the
+     residual is already inside the snap window. */
+  function planLock (tr, master, now, opt) {
+    const c = tr.catchState;
+    const tgt = bpmAt(master, null, now);
+    tr.bpm = tgt;                                   // BPM has converged
+    const sd = 60 / (tgt * STEPS_PER_BEAT), barDur = sd * STEPS_PER_BAR;
+    const err = phaseErrorBars(tr, master, sd, c.lockTries === 0 ? c.dir : 'nearest');
+    if (Math.abs(err) * barDur <= opt.snapSec) return false;
+
+    const dur = Math.max(0.2, opt.lockDur);
+    let amp = lockAmp(err, dur);
+    const lim = tgt * opt.maxDev;                   // keep the swell musical
+    if (Math.abs(amp) > lim) amp = (amp < 0 ? -1 : 1) * lim;
+    c.stage = 'lock';
+    c.lockTries++;
+    /* Start at the first step not yet handed to the audio clock, so no
+       part of the swell is lost to steps already scheduled. */
+    c.lock = { t0: Math.max(tr.nextStepTime, master.nextStepTime), dur, amp };
+    return true;
+  }
+
+  /* Nudge the track onto the master's bar grid. Only ever called with a
+     residual of a few milliseconds, so it is inaudible. */
+  function snapPhase (tr, master, now, sd) {
+    const barDur = sd * STEPS_PER_BAR;
+    const t0 = Math.max(tr.nextStepTime, master.nextStepTime);
+    let d = nextBarHead(tr, t0, sd) - nextBarHead(master, t0, sd);
+    d -= Math.round(d / barDur) * barDur;
+    tr.nextStepTime -= d;
+    while (tr.nextStepTime < now) tr.nextStepTime += barDur;
+    return d;
+  }
+
+  /* Drive the state machine. Returns null, or an event name for the UI. */
+  function updateCatch (tr, master, now, opt) {
+    const c = tr.catchState;
+    if (!c) return null;
+    const targetAt = c.fixedBpm != null ? () => c.fixedBpm
+                                        : t => bpmAt(master, null, t);
+
+    if (c.stage === 'converge') {
+      if (now < c.ramp.t0 + c.ramp.dur) return null;
+      const tgt = targetAt(now);
+      if (c.mode === 'bpm') { endCatch(tr, tgt); return 'bpm-locked'; }
+      if (planLock(tr, master, now, opt)) return 'lock-start';
+      snapPhase(tr, master, now, 60 / (tgt * STEPS_PER_BEAT));
+      endCatch(tr, tgt);
+      return 'phase-locked';
+    }
+
+    if (c.stage === 'lock') {
+      if (now < c.lock.t0 + c.lock.dur) return null;
+      const tgt = targetAt(now);
+      const sd = 60 / (tgt * STEPS_PER_BEAT);
+      if (c.lockTries < opt.maxTries && planLock(tr, master, now, opt)) return 'lock-start';
+      snapPhase(tr, master, now, sd);
+      endCatch(tr, tgt);
+      return 'phase-locked';
+    }
+    return null;
+  }
+
+  /* Emit every step whose start time falls before the horizon. */
+  function advance (tr, horizon, bpmFn, emit) {
+    let n = 0;
+    while (tr.nextStepTime < horizon && n < 512) {
+      emit(tr.stepIndex % tr.loopSteps, tr.nextStepTime, tr.stepIndex);
+      tr.nextStepTime += stepDur(bpmFn, tr.nextStepTime);
+      tr.stepIndex++;
+      n++;
+    }
+    return n;
+  }
+
+  /* Continuous step position at time t (for the phase scope). */
+  function stepPosAt (tr, t, sd) {
+    return tr.stepIndex - (tr.nextStepTime - t) / sd;
+  }
+
+  return {
+    STEPS_PER_BEAT, BEATS_PER_BAR, STEPS_PER_BAR,
+    catchShape, rampBpm, lockDev, lockAmp, wrapPhase, stepDur,
+    bpmAt, nextBarHead, phaseErrorBars, beginCatch, beginGlide, retimeCatch,
+    endCatch, planLock, snapPhase, updateCatch, advance, stepPosAt
+  };
+})();
+/*<<<END_TEMPO_CORE>>>*/
+
+
+/*<<<RECORDER_CORE>>>*/
+/* ===================================================================
+   RECORDER CORE — pure WAV / AIFF encoders. No DOM, no Web Audio:
+   Float32 channel data in, ArrayBuffer out. Extracted verbatim by
+   tests/web/test_recorder.js.
+   =================================================================== */
+const RecorderCore = (function () {
+  function wStr (dv, off, s) {
+    for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i));
+  }
+  function quantize (x, max) {
+    if (x < -1) x = -1; else if (x > 1) x = 1;
+    return Math.round(x * max);
+  }
+
+  /* IEEE 754 extended precision (10 bytes, big-endian) — the AIFF
+     COMM chunk's sample-rate field. Explicit leading-1 mantissa. */
+  function writeFloat80 (dv, off, v) {
+    if (!(v > 0) || !isFinite(v)) throw new Error('float80: need a positive finite value');
+    const e = Math.floor(Math.log2(v));
+    const m = v / Math.pow(2, e);                       // [1, 2)
+    let hi = Math.floor(m * 0x80000000);
+    let lo = Math.round((m * 0x80000000 - hi) * 0x100000000);
+    if (lo === 0x100000000) { lo = 0; hi++; }
+    dv.setUint16(off, 16383 + e);
+    dv.setUint32(off + 2, hi);
+    dv.setUint32(off + 6, lo);
+  }
+
+  /* WAV header for a known frame count. Split from encodeWav so a
+     disk-streaming recorder can write a provisional header first and
+     re-write it with the real frame count when the take ends. */
+  function wavHeader (frames, ch, sampleRate, bits) {
+    const isF = bits === 32;
+    const bytes = bits / 8, blockAlign = ch * bytes, dataLen = frames * blockAlign;
+    const fmtLen = isF ? 18 : 16;                        // float fmt carries cbSize=0
+    const factLen = isF ? 12 : 0;                        // float requires a fact chunk
+    const buf = new ArrayBuffer(12 + 8 + fmtLen + factLen + 8);
+    const dv = new DataView(buf);
+    wStr(dv, 0, 'RIFF'); dv.setUint32(4, buf.byteLength - 8 + dataLen, true); wStr(dv, 8, 'WAVE');
+    let o = 12;
+    wStr(dv, o, 'fmt '); dv.setUint32(o + 4, fmtLen, true);
+    dv.setUint16(o + 8, isF ? 3 : 1, true);              // 3 = IEEE float, 1 = PCM
+    dv.setUint16(o + 10, ch, true);
+    dv.setUint32(o + 12, sampleRate, true);
+    dv.setUint32(o + 16, sampleRate * blockAlign, true);
+    dv.setUint16(o + 20, blockAlign, true);
+    dv.setUint16(o + 22, bits, true);
+    if (isF) dv.setUint16(o + 24, 0, true);
+    o += 8 + fmtLen;
+    if (isF) { wStr(dv, o, 'fact'); dv.setUint32(o + 4, 4, true); dv.setUint32(o + 8, frames, true); o += 12; }
+    wStr(dv, o, 'data'); dv.setUint32(o + 4, dataLen, true);
+    return buf;
+  }
+
+  /* Interleave + quantize a run of channel data into WAV (LE) bytes. */
+  function packWav (channels, bits) {
+    const ch = channels.length, frames = channels[0].length;
+    const out = new Uint8Array(frames * ch * (bits / 8));
+    const dv = new DataView(out.buffer);
+    let o = 0;
+    for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) {
+      const x = channels[c][i];
+      if (bits === 32) { dv.setFloat32(o, x, true); o += 4; }
+      else if (bits === 24) {
+        const v = quantize(x, 8388607);
+        out[o] = v & 255; out[o + 1] = (v >> 8) & 255; out[o + 2] = (v >> 16) & 255;
+        o += 3;
+      } else { dv.setInt16(o, quantize(x, 32767), true); o += 2; }
+    }
+    return out;
+  }
+
+  /* channels: array of equal-length Float32Arrays.
+     bits: 16 / 24 (integer PCM) or 32 (IEEE float). */
+  function encodeWav (channels, sampleRate, bits) {
+    const head = new Uint8Array(wavHeader(channels[0].length, channels.length, sampleRate, bits));
+    const body = packWav(channels, bits);
+    const buf = new Uint8Array(head.length + body.length);
+    buf.set(head, 0); buf.set(body, head.length);
+    return buf.buffer;
+  }
+
+  /* AIFF header for a known frame count (same split as wavHeader). */
+  function aiffHeader (frames, ch, sampleRate, bits) {
+    const dataLen = frames * ch * (bits / 8);
+    const pad = dataLen & 1;                             // IFF chunks are word-aligned
+    const buf = new ArrayBuffer(12 + (8 + 18) + 16);
+    const dv = new DataView(buf);
+    wStr(dv, 0, 'FORM'); dv.setUint32(4, buf.byteLength - 8 + dataLen + pad); wStr(dv, 8, 'AIFF');
+    let o = 12;
+    wStr(dv, o, 'COMM'); dv.setUint32(o + 4, 18);
+    dv.setInt16(o + 8, ch);
+    dv.setUint32(o + 10, frames);
+    dv.setInt16(o + 14, bits);
+    writeFloat80(dv, o + 16, sampleRate);
+    o += 8 + 18;
+    wStr(dv, o, 'SSND'); dv.setUint32(o + 4, 8 + dataLen);
+    dv.setUint32(o + 8, 0); dv.setUint32(o + 12, 0);     // offset, blockSize
+    return buf;
+  }
+
+  /* Interleave + quantize a run of channel data into AIFF (BE) bytes. */
+  function packAiff (channels, bits) {
+    const ch = channels.length, frames = channels[0].length;
+    const out = new Uint8Array(frames * ch * (bits / 8));
+    const dv = new DataView(out.buffer);
+    let o = 0;
+    for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) {
+      if (bits === 24) {
+        const v = quantize(channels[c][i], 8388607);
+        out[o] = (v >> 16) & 255; out[o + 1] = (v >> 8) & 255; out[o + 2] = v & 255;
+        o += 3;
+      } else { dv.setInt16(o, quantize(channels[c][i], 32767)); o += 2; }
+    }
+    return out;
+  }
+
+  /* bits: 16 / 24 (big-endian integer PCM — plain AIFF, no AIFC). */
+  function encodeAiff (channels, sampleRate, bits) {
+    const head = new Uint8Array(aiffHeader(channels[0].length, channels.length, sampleRate, bits));
+    const body = packAiff(channels, bits);
+    const dataLen = body.length, pad = dataLen & 1;
+    const buf = new Uint8Array(head.length + dataLen + pad);
+    buf.set(head, 0); buf.set(body, head.length);        // pad byte stays zero
+    return buf.buffer;
+  }
+
+  return { encodeWav, encodeAiff, wavHeader, packWav, aiffHeader, packAiff,
+           writeFloat80, quantize };
+})();
+/*<<<END_RECORDER_CORE>>>*/
+
+
+/* ===================================================================
+   AUDIO ENGINE
+   =================================================================== */
+const LOOKAHEAD = 0.12;      // seconds of audio scheduled ahead
+const TICK_MS   = 25;
+const ACC = ['a', 'b', 'c', 'd'];
+/* deliberate monochrome: tracks are told apart by letter, position and
+   these four grey values (darkest = A) */
+const ACC_HEX = ['#141416', '#454649', '#77787c', '#a2a3a7'];
+
+let ctx = null, master = null, busGain = null, analyser = null, noiseBuf = null;
+let anaBuf = null, recTap = null, transportT0 = 0, revIR = null;
+
+function initAudio () {
+  if (ctx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  try {
+    ctx = new AC(S.recSr ? { sampleRate: S.recSr } : undefined);
+  } catch (e) {
+    ctx = new AC();                                  // rate unsupported: device rate
+    toast(S.recSr + ' Hz は非対応 — ' + ctx.sampleRate + ' Hz で動作します');
+    S.recSr = 0;
+  }
+
+  busGain = ctx.createGain();
+  busGain.gain.value = 1;
+
+  // 20 Hz high-pass: kills DC offset and sub-sonic rumble from the 808 kick
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 20; hp.Q.value = 0.707;
+  const hp2 = ctx.createBiquadFilter();
+  hp2.type = 'highpass'; hp2.frequency.value = 20; hp2.Q.value = 0.707;
+
+  // brickwall-ish limiter
+  const lim = ctx.createDynamicsCompressor();
+  lim.threshold.value = -6; lim.knee.value = 0; lim.ratio.value = 20;
+  lim.attack.value = 0.002; lim.release.value = 0.12;
+
+  // final tanh soft clip — catches whatever slips past the limiter attack
+  const shaper = ctx.createWaveShaper();
+  const n = 2048, curve = new Float32Array(n), k = 1.7, norm = Math.tanh(k);
+  for (let i = 0; i < n; i++) curve[i] = Math.tanh(k * (i / (n - 1) * 2 - 1)) / norm;
+  shaper.curve = curve; shaper.oversample = '4x';
+
+  master = ctx.createGain();
+  master.gain.value = 0.35;                       // deliberately quiet on boot
+
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  anaBuf = new Float32Array(analyser.fftSize);
+
+  busGain.connect(hp).connect(hp2).connect(lim).connect(shaper)
+         .connect(master).connect(analyser).connect(ctx.destination);
+  recTap = shaper;              // recording point: post soft-clip, pre monitor volume
+
+  const len = Math.floor(ctx.sampleRate * 2);
+  noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) nd[i] = Math.random() * 2 - 1;
+
+  /* Reverb IR: one decorrelated exponential noise burst, built once and
+     shared by every track's convolver. Each track owns its convolver so
+     that its complete wet signal exists at one node -- that is what
+     makes a per-track WET stem possible at all. */
+  const irLen = Math.floor(ctx.sampleRate * 2.6);
+  revIR = ctx.createBuffer(2, irLen, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = revIR.getChannelData(c);
+    let lp = 0;
+    for (let i = 0; i < irLen; i++) {
+      const t = i / ctx.sampleRate;
+      // one-pole lowpass on the noise = darker tail, less metallic
+      lp += 0.28 * ((Math.random() * 2 - 1) - lp);
+      d[i] = lp * Math.exp(-3.1 * t) * (t < 0.012 ? t / 0.012 : 1);
+    }
+  }
+}
+
+/* Build a track's signal path. Everything the track makes -- dry, its
+   reverb return and its ping-pong (L/R) echo -- meets at tr.wetSum,
+   which is the only thing that feeds the master bus. So:
+
+     tr.node   = the DRY stem tap (post track gain, pre FX)
+     tr.wetSum = the WET stem tap (dry + that track's own FX)
+
+   The echo time follows the TRACK's own tempo, so each loop echoes in
+   its own time. The reverb is per-track (sharing one IR buffer) rather
+   than a shared bus, because a shared bus mixes the four tracks'
+   tails together and could never be split back apart per stem. */
+function ensureTrackNode (tr) {
+  if (tr.node) return;
+  tr.node = ctx.createGain();
+  tr.node.gain.value = tr.gain;
+
+  tr.wetSum = ctx.createGain();
+  tr.wetSum.gain.value = 1;
+  tr.wetSum.connect(busGain);
+  tr.node.connect(tr.wetSum);                      // dry — wired first, so the
+                                                   // track keeps sounding even if
+                                                   // an FX below fails to build
+  try {
+    tr.revSend = ctx.createGain();
+    tr.revSend.gain.value = tr.fx.rev;
+    tr.node.connect(tr.revSend);
+    tr.conv = null;
+    if (tr.fx.rev > 0) ensureReverb(tr);
+  } catch (e) { tr.revSend = null; console.error('reverb path failed:', e); }
+
+  try {
+    const send = ctx.createGain();
+    send.gain.value = tr.fx.dly;
+    const dL = ctx.createDelay(8), dR = ctx.createDelay(8);
+    const fbL = ctx.createGain(), fbR = ctx.createGain();
+    fbL.gain.value = fbR.gain.value = tr.fx.fb;
+    const pL = ctx.createStereoPanner(), pR = ctx.createStereoPanner();
+    pL.pan.value = -0.8; pR.pan.value = 0.8;
+    tr.node.connect(send).connect(dL);
+    dL.connect(pL).connect(tr.wetSum);
+    dR.connect(pR).connect(tr.wetSum);
+    dL.connect(fbL).connect(dR);                   // ping ...
+    dR.connect(fbR).connect(dL);                   // ... pong
+    tr.dlySend = send;
+    tr.dl = { dL, dR, fbL, fbR };
+    updateDelayTime(tr, true);
+  } catch (e) { tr.dlySend = null; tr.dl = null; console.error('echo path failed:', e); }
+}
+
+/* The convolver is created on the first non-zero REV send, not at
+   build time: an idle reverb must cost nothing. Four tracks only ever
+   pay for the convolvers whose knobs are actually up. */
+function ensureReverb (tr) {
+  if (tr.conv || !tr.revSend || !revIR) return;
+  tr.conv = ctx.createConvolver();
+  tr.conv.buffer = revIR;
+  tr.revSend.connect(tr.conv).connect(tr.wetSum);
+}
+
+/* delay time = the track's live tempo x note division (or the manual
+   TIME knob when the division is FREE), smoothed */
+function updateDelayTime (tr, hard) {
+  if (!tr.dl) return;
+  const sec = tr.fx.div === 'free'
+    ? Math.min(7.8, Math.max(0.01, tr.fx.time))
+    : Math.min(7.8, 60 / Math.max(20, tr.bpm) * tr.fx.div);
+  const now = ctx.currentTime;
+  for (const d of [tr.dl.dL, tr.dl.dR]) {
+    if (hard) d.delayTime.setValueAtTime(sec, now);
+    else d.delayTime.setTargetAtTime(sec, now, 0.09);
+  }
+}
+
+/*<<<VOICES>>>*/
+/* --- voice construction: only touches `ctx` and `noiseBuf`, so
+       tests/web/test_voices.js can run it against a stub AudioContext.
+
+   Edit params p:
+     wave   'auto' | 'sine' | 'triangle' | 'square' | 'sawtooth'
+     pitch  base frequency in Hz (chord voices take `cutoff` instead)
+     atk    attack seconds
+     decay  seconds
+     sus    0..1 sustain level. 0 = one-shot; >0 holds until released
+            (gated by the row's painted run) or the SUS_CAP limit.
+     tone   0..1, 0.5 = stock. Brightness (±12 dB high shelf @3 kHz)
+            plus attack hardness (0.5 -> stock attack, 1 -> half, 0 -> double).
+     snappy snare only, 0..1, 0.5 = stock. Wire/noise level; 0 = tom.
+     acc    0..1 track ACCENT: level up, and on the kick also drive
+            (tanh saturation) and a harder attack -- the analog way.
+   Every voice returns a handle; release(t) closes the gate through a
+   dedicated output gain, so no envelope automation is ever cancelled. --- */
+const SUS_CAP = 8;
+
+function noiseSrc (t, dur) {
+  const s = ctx.createBufferSource();
+  s.buffer = noiseBuf;
+  s.loop = true;
+  s.playbackRate.value = 0.9 + Math.random() * 0.2;
+  s.start(t, Math.random() * 1.5);
+  s.stop(t + dur);
+  return s;
+}
+
+/* AD(S): attack to peak, decay toward sus×peak. Returns the time at
+   which the voice's sources may safely stop. */
+function ampEnvADS (p, t, atk, peak, decay, sus) {
+  p.setValueAtTime(0.0001, t);
+  p.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + atk);
+  if (sus > 0.001) {
+    p.setTargetAtTime(Math.max(0.0002, peak * sus), t + atk, Math.max(0.005, decay) / 3);
+    p.setTargetAtTime(0.0001, t + SUS_CAP - 0.3, 0.06);   // safety fade
+    return t + SUS_CAP;
+  }
+  p.exponentialRampToValueAtTime(0.0001, t + atk + decay);
+  return t + atk + decay + 0.05;
+}
+
+/* level = ACCENT lift; the same gain is the choke/gate, so release
+   must fall from the lifted level, not from 1 */
+function mkVoice (out, level) {
+  const lvl = level || 1;
+  const choke = ctx.createGain();
+  choke.gain.value = lvl;
+  choke.connect(out);
+  return {
+    in: choke,
+    release (t) {
+      choke.gain.setValueAtTime(lvl, t);
+      choke.gain.exponentialRampToValueAtTime(0.0008, t + 0.014);
+    }
+  };
+}
+function wv (p, def) { return !p.wave || p.wave === 'auto' ? def : p.wave; }
+function toneOf (p) { return p.tone != null ? p.tone : 0.5; }
+/* TONE: 0.5 keeps the stock attack; brighter = harder, darker = softer */
+function atkOf (p, def) {
+  const a = p.atk != null ? p.atk : def;
+  return a * Math.pow(4, 0.5 - toneOf(p));
+}
+function accOf (p) { return p.acc || 0; }
+function lvlOf (p) { return 1 + 0.5 * accOf(p); }
+/* TONE brightness: ±12 dB high shelf at 3 kHz; exactly bypassed at 0.5 */
+function toneShelf (p, dest) {
+  const t = toneOf(p);
+  if (Math.abs(t - 0.5) < 0.01) return dest;
+  const sh = ctx.createBiquadFilter();
+  sh.type = 'highshelf';
+  sh.frequency.value = 3000;
+  sh.gain.value = (t - 0.5) * 24;
+  sh.connect(dest);
+  return sh;
+}
+
+const Voices = {
+  kick (t, out, lib, tune, p) {
+    const acc = accOf(p);
+    const v = mkVoice(out, lvlOf(p));
+    let dest = toneShelf(p, v.in);
+    // ACCENT drives the kick into tanh saturation, analog-style
+    if (acc > 0.01) {
+      const sh = ctx.createWaveShaper();
+      const n = 512, curve = new Float32Array(n);
+      const drive = 1 + 3 * acc, norm = Math.tanh(drive);
+      for (let i = 0; i < n; i++) curve[i] = Math.tanh(drive * (i / (n - 1) * 2 - 1)) / norm;
+      sh.curve = curve; sh.oversample = '2x';
+      sh.connect(dest);
+      dest = sh;
+    }
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = wv(p, 'sine');
+    const f0 = p.pitch * tune;
+    const atk = atkOf(p, lib === '909' ? 0.001 : 0.003) * (1 - 0.4 * acc);
+    let end;
+    if (lib === '909') {
+      o.frequency.setValueAtTime(f0 * 4.6, t);
+      o.frequency.exponentialRampToValueAtTime(f0, t + 0.032);
+      end = ampEnvADS(g.gain, t, atk, 1.0, p.decay, p.sus);
+      const cn = noiseSrc(t, 0.02), cf = ctx.createBiquadFilter(), cg = ctx.createGain();
+      cf.type = 'highpass'; cf.frequency.value = 1200;
+      ampEnvADS(cg.gain, t, 0.0005, 0.35, 0.012, 0);
+      cn.connect(cf).connect(cg).connect(dest);
+    } else {
+      o.frequency.setValueAtTime(f0 * 3.1, t);
+      o.frequency.exponentialRampToValueAtTime(f0, t + 0.065);
+      end = ampEnvADS(g.gain, t, atk, 0.95, p.decay, p.sus);
+    }
+    o.connect(g).connect(dest);
+    o.start(t); o.stop(end);
+    return v;
+  },
+
+  snare (t, out, lib, tune, p) {
+    const v = mkVoice(out, lvlOf(p));
+    const dest = toneShelf(p, v.in);
+    const bright = lib === '909';
+    const w = wv(p, 'triangle');
+    const atk = atkOf(p, 0.001);
+    [p.pitch * tune, p.pitch * 1.83 * tune].forEach((f, i) => {
+      const o = ctx.createOscillator(); o.type = w;
+      o.frequency.setValueAtTime(f, t);
+      const g = ctx.createGain();
+      const end = ampEnvADS(g.gain, t, atk, (i ? 0.22 : 0.30), p.decay * 0.7, p.sus);
+      o.connect(g).connect(dest); o.start(t); o.stop(end);
+    });
+    // SNAPPY: the wires. 0.5 = stock level, 0 = pure tone (a tom)
+    const snap = (p.snappy != null ? p.snappy : 0.5) * 2;
+    const nzLife = p.sus > 0.001 ? SUS_CAP : p.decay + 0.1;
+    const nz = noiseSrc(t, nzLife), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    if (bright) { f.type = 'highpass'; f.frequency.value = 500; }
+    else        { f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.9; }
+    ampEnvADS(g.gain, t, atk, (bright ? 0.55 : 0.40) * snap, p.decay, p.sus);
+    nz.connect(f).connect(g).connect(dest);
+    return v;
+  },
+
+  hat (t, out, lib, tune, p) {
+    const v = mkVoice(out, lvlOf(p));
+    const dest = toneShelf(p, v.in);
+    const ratios = [1, 1.4471, 1.6170, 1.9265, 2.5028, 2.6637];
+    const w = wv(p, 'square');
+    const base = p.pitch * tune;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = lib === '909' ? 9000 : 7400;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = lib === '909' ? 11000 : 9500; bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    const end = ampEnvADS(g.gain, t, atkOf(p, 0.0006), 0.28, p.decay, p.sus);
+    ratios.forEach(r => {
+      const o = ctx.createOscillator(); o.type = w;
+      o.frequency.setValueAtTime(base * r, t);
+      o.connect(hp); o.start(t); o.stop(end + 0.05);
+    });
+    hp.connect(bp).connect(g).connect(dest);
+    return v;
+  },
+
+  /* one tone into a shared destination (used by chord()).
+     A simplified Prophet-5 voice: OSC A + OSC B in a MIX, B tuned by a
+     HARM(onic) ratio, POLY-MOD sends B's audio into A's frequency. */
+  tone (t, dest, lib, freq, p) {
+    const is9 = lib === '909';
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    if (is9) {                                     // stock sweep, scaled
+      lp.Q.value = 6;
+      const cf = p.cutoff / 2600;
+      lp.frequency.setValueAtTime(Math.max(120, Math.min(9000, freq * 12 * cf)), t);
+      lp.frequency.exponentialRampToValueAtTime(
+        Math.max(100, freq * 2.2 * cf), t + Math.min(p.decay, 3) * 0.8);
+    } else {
+      lp.frequency.value = p.cutoff; lp.Q.value = 0.6;
+    }
+    const g = ctx.createGain();
+    const end = ampEnvADS(g.gain, t, atkOf(p, is9 ? 0.008 : 0.014),
+                          is9 ? 0.20 : 0.24, p.decay, p.sus);
+
+    const wA = wv(p, is9 ? 'sawtooth' : 'sine');
+    const wB = p.bwave && p.bwave !== 'auto' ? p.bwave
+             : (p.wave && p.wave !== 'auto' ? p.wave : (is9 ? 'sawtooth' : 'triangle'));
+    const mix  = p.mix  != null ? p.mix  : (is9 ? 0.5 : 0.22);
+    const harm = p.harm != null ? p.harm : (is9 ? 1 : 2);
+
+    const oA = ctx.createOscillator(); oA.type = wA;
+    oA.frequency.setValueAtTime(freq, t);
+    const oB = ctx.createOscillator(); oB.type = wB;
+    oB.frequency.setValueAtTime(freq * harm * 1.004, t);   // +7c analog drift
+    const gA = ctx.createGain(); gA.gain.value = 1 - mix;
+    const gB = ctx.createGain(); gB.gain.value = mix;
+    oA.connect(gA).connect(lp);
+    oB.connect(gB).connect(lp);
+    if ((p.pmod || 0) > 0.001) {                   // POLY-MOD: B -> A frequency
+      const mg = ctx.createGain();
+      mg.gain.value = p.pmod * freq * 6;
+      oB.connect(mg).connect(oA.frequency);
+    }
+    oA.start(t); oB.start(t);
+    oA.stop(end + 0.1); oB.stop(end + 0.1);
+    lp.connect(g).connect(dest);
+  },
+
+  /* one chord hit = all its notes under one gate/choke, plus the
+     P5 mixer's noise source shared across the hit */
+  chord (t, out, lib, freqs, p) {
+    const v = mkVoice(out, lvlOf(p));
+    freqs.forEach(f => Voices.tone(t, v.in, lib, f, p));
+    if ((p.noise || 0) > 0.001) {
+      const life = p.sus > 0.001 ? SUS_CAP : p.decay + 0.1;
+      const nz = noiseSrc(t, life);
+      const nlp = ctx.createBiquadFilter();
+      nlp.type = 'lowpass'; nlp.frequency.value = p.cutoff; nlp.Q.value = 0.5;
+      const ng = ctx.createGain();
+      ampEnvADS(ng.gain, t, atkOf(p, 0.01), 0.3 * p.noise, p.decay, p.sus);
+      nz.connect(nlp).connect(ng).connect(v.in);
+    }
+    return v;
+  }
+};
+/*<<<END_VOICES>>>*/
+
+/* ===================================================================
+   TRACK MODEL
+   =================================================================== */
+const DRUM_ROWS  = ['KICK', 'SNR', 'CH', 'OH'];
+const CHORD_ROWS = ['I', 'IV', 'V', 'vi'];
+const CHORD_INTS = { I: [0, 4, 7, 11], IV: [5, 9, 12, 16], V: [7, 11, 14, 17], vi: [9, 12, 16, 19] };
+const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const SPB = TempoCore.STEPS_PER_BEAT, SPBar = TempoCore.STEPS_PER_BAR;
+
+function blankPat () { return [0, 1, 2, 3].map(() => new Array(64).fill(false)); }
+
+/* per-voice edit params; defaults reproduce the library's stock sound */
+function defaultVp (lib) {
+  const x = lib === '909';
+  return {
+    accent: 0,
+    kick:  { wave: 'auto', pitch: x ? 48 : 50,   decay: x ? 0.40 : 0.62,   sus: 0, atk: x ? 0.001 : 0.003, tone: 0.5 },
+    snr:   { wave: 'auto', pitch: x ? 190 : 180, decay: x ? 0.26 : 0.19,   sus: 0, atk: 0.001, tone: 0.5, snappy: 0.5 },
+    ch:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.030 : 0.042, sus: 0, atk: 0.0006, tone: 0.5 },
+    oh:    { wave: 'auto', pitch: x ? 44 : 40,   decay: x ? 0.30 : 0.36,   sus: 0, atk: 0.0006, tone: 0.5 },
+    chord: { wave: 'auto', cutoff: 2600,         decay: 1.2,               sus: 0, atk: x ? 0.008 : 0.014,
+             bwave: 'auto', harm: x ? 1 : 2, mix: x ? 0.5 : 0.22, pmod: 0, noise: 0 }
+  };
+}
+
+function mkTrack (i, cfg) {
+  const t = {
+    idx: i, name: 'ABCD'[i],
+    kind: cfg.kind, lib: cfg.lib,
+    bpm: cfg.bpm, loopBars: cfg.loopBars || 1,
+    get loopSteps () { return this.loopBars * SPBar; },
+    stepIndex: 0, nextStepTime: 0,
+    catchState: null,
+    muted: false, gain: 0.25,                    // -12 dB headroom per track
+    key: 0, oct: 0, fine: 0,
+    pats: [blankPat(), blankPat(), blankPat(), blankPat()],
+    patIdx: 0,
+    vp: defaultVp(cfg.lib),                      // voice-edit params
+    wander: { on: false, dest: cfg.bpm, dwell: 2, travel: 8 },
+    fx: { rev: 0, dly: 0, div: 0.75, fb: 0.45, time: 0.35 }, // div in beats, or 'free' + time(s)
+    live: {},                                    // per-row sounding voice (mono rows)
+    sample: null,                                // {buf,name,baseBpm}
+    node: null, srcNode: null,
+    flash: 0
+  };
+  t.pat = t.pats[0];
+  (cfg.pat || []).forEach(([row, steps]) => steps.forEach(s => { t.pat[row][s] = true; }));
+  return t;
+}
+
+const tracks = [
+  mkTrack(0, { kind: 'drums', lib: '808', bpm: 120.00, loopBars: 1,
+    pat: [[0, [0, 4, 8, 12]], [1, [4, 12]], [2, [2, 6, 10, 14]], [3, [14]]] }),
+  mkTrack(1, { kind: 'chord', lib: '808', bpm: 92.00, loopBars: 2,
+    pat: [[0, [0]], [3, [8]], [1, [16]], [2, [24]]] }),
+  mkTrack(2, { kind: 'drums', lib: '909', bpm: 137.50, loopBars: 1,
+    pat: [[2, [0, 2, 3, 4, 6, 8, 10, 11, 12, 14]], [3, [6]]] }),
+  mkTrack(3, { kind: 'drums', lib: '909', bpm: 105.00, loopBars: 1,
+    pat: [[0, [0, 6, 10]], [1, [8]], [2, [3, 7, 11, 15]]] })
+];
+
+const S = {
+  playing: false,
+  masterIdx: 0,
+  selIdx: 0,                   // keyboard-focused track (numpad BPM nudge)
+  mode: 'phase', curve: 'exp', dir: 'nearest',
+  catchTime: 8.0,
+  vol: 0.35,
+  recFmt: 'wav', recBit: 24, recSr: 0, recPara: true, recWet: false, recDisk: false
+};
+
+function masterTrack () { return tracks[S.masterIdx]; }
+function tuneMul (tr) { return Math.pow(2, (tr.key + 12 * tr.oct) / 12) * Math.pow(2, tr.fine / 1200); }
+function bpmFnFor (tr) {
+  const c = tr.catchState;
+  if (!c) return () => tr.bpm;
+  if (c.fixedBpm != null) return t => TempoCore.bpmAt(tr, () => c.fixedBpm, t);
+  const m = masterTrack();
+  if (tr === m) return () => tr.bpm;
+  return t => TempoCore.bpmAt(tr, tt => TempoCore.bpmAt(m, null, tt), t);
+}
+function liveBpm (tr, t) { return bpmFnFor(tr)(t); }
+
+/* The BPM a track is heading for: the glide/catch destination if one
+   is in flight, otherwise the value it is sitting on. Knobs read this
+   so they show where the user pointed, while the big readout shows the
+   live tempo easing over. */
+function targetBpm (tr) {
+  const c = tr.catchState;
+  return c && c.fixedBpm != null ? c.fixedBpm : tr.bpm;
+}
+
+/* Every BPM change from the UI or MIDI lands here. While playing it
+   glides at the console's CATCH RATE / CURVE instead of jumping. */
+function setTrackBpm (tr, v) {
+  v = Math.min(300, Math.max(20, v));
+  if (tr.wander && tr.wander.on) {
+    tr.wander.on = false;
+    paintWander(tr);
+    toast(tr.name + ': WANDER OFF（手動変更）');
+  }
+  if (S.playing && ctx) {
+    TempoCore.beginGlide(tr, ctx.currentTime, v, { curve: S.curve, dur: S.catchTime });
+  } else {
+    tr.catchState = null;
+    tr.bpm = v;
+  }
+  renderTrackHead(tr);
+}
+
+/* ---- FILL: one bar of generated pattern, in at the next bar head,
+        out again by itself. Six template families + random jitter. ---- */
+function genFill () {
+  const P = [0, 1, 2, 3].map(() => new Array(16).fill(false));
+  const R = Math.random;
+  const t = Math.floor(R() * 6);
+  if (t === 0) {              // accelerating snare roll
+    for (let s = 0; s < 8; s += 2) P[1][s] = true;
+    for (let s = 8; s < 16; s++) P[1][s] = true;
+    P[0][0] = true;
+  } else if (t === 1) {       // kick/snare alternation into a turnaround
+    for (let s = 0; s < 16; s += 2) (s % 4 === 0 ? P[0] : P[1])[s] = true;
+    P[1][14] = P[1][15] = true;
+  } else if (t === 2) {       // half-bar break, then a roll
+    P[0][0] = true; P[2][0] = true;
+    for (let s = 10; s < 16; s++) P[1][s] = true;
+  } else if (t === 3) {       // hat rush
+    for (let s = 0; s < 16; s++) P[2][s] = true;
+    P[1][4] = P[1][12] = true; P[0][0] = P[0][8] = true;
+  } else if (t === 4) {       // syncopated kicks
+    [0, 3, 6, 10, 13].forEach(s => { P[0][s] = true; });
+    P[1][8] = true; if (R() < 0.5) P[1][15] = true;
+  } else {                    // sparse chaos
+    for (let s = 0; s < 16; s++) {
+      if (R() < 0.28) P[1][s] = true;
+      if (R() < 0.20) P[0][s] = true;
+      if (R() < 0.30) P[2][s] = true;
+    }
+    P[1][15] = true;
+  }
+  for (let r = 0; r < 4; r++)
+    for (let s = 0; s < 16; s++) if (R() < 0.06) P[r][s] = !P[r][s];
+  if (R() < 0.5) P[3][15] = true;    // open-hat tail into the downbeat
+  return P;
+}
+
+function fillNow () {
+  if (!S.playing) { toast('先に PLAY を押してください'); return; }
+  let n = 0;
+  tracks.forEach(tr => {
+    if (tr.kind !== 'drums' || tr.muted) return;
+    tr.fillPat = genFill();
+    const off = (SPBar - (tr.stepIndex % SPBar)) % SPBar;
+    tr.fillAt = tr.stepIndex + off;          // this track's next bar head
+    tr.fillUntil = tr.fillAt + SPBar;
+    n++;
+  });
+  if (n) toast('FILL — 各トラックの次の小節頭から1小節');
+}
+
+/* pattern lookup with the fill window overlaid */
+function patAt (tr, row, step, abs) {
+  if (tr.fillAt != null && abs !== undefined) {
+    if (abs >= tr.fillUntil) { tr.fillAt = null; }
+    else if (abs >= tr.fillAt) return tr.fillPat[row][abs - tr.fillAt];
+  }
+  return tr.pat[row][step];
+}
+
+/* ---- one step of one track ---- */
+function playStep (tr, step, time, abs) {
+  if (tr.muted) return;
+  const out = tr.node, lib = tr.lib, tune = tuneMul(tr);
+
+  if (tr.kind === 'sample') {
+    if (!tr.pat[0][step] || !tr.sample) return;
+    if (tr.srcNode) { try { tr.srcNode.stop(time); } catch (e) {} }
+    const s = ctx.createBufferSource();
+    s.buffer = tr.sample.buf;
+    // tape behaviour: rate follows tempo, so pitch rides the tempo curve
+    s.playbackRate.value = Math.max(0.05, liveBpm(tr, time) / tr.sample.baseBpm);
+    s.connect(out); s.start(time);
+    tr.srcNode = s;
+    return;
+  }
+
+  if (tr.kind === 'drums') {
+    const vpp = k => ({ ...tr.vp[k], acc: tr.vp.accent });
+    gateRow(tr, 0, 'kick', step, abs, time, () => Voices.kick(time, out, lib, tune, vpp('kick')));
+    gateRow(tr, 1, 'snr',  step, abs, time, () => Voices.snare(time, out, lib, tune, vpp('snr')));
+    // CH and OH share one slot: they choke each other, like real hats
+    gateRow(tr, 2, 'hat',  step, abs, time, () => Voices.hat(time, out, lib, tune, vpp('ch')));
+    gateRow(tr, 3, 'hat',  step, abs, time, () => Voices.hat(time, out, lib, tune, vpp('oh')));
+    return;
+  }
+
+  // chord: rows are scale degrees over KEY + OCTAVE + FINE
+  const chordSet = s2 => {
+    let m = 0;
+    for (let r = 0; r < 4; r++) if (tr.pat[r][s2]) m |= 1 << r;
+    return m;
+  };
+  const rootMidi = 48 + tr.key + 12 * tr.oct;
+  const freqs = [];
+  CHORD_ROWS.forEach((deg, r) => {
+    if (!tr.pat[r][step]) return;
+    CHORD_INTS[deg].forEach(iv => {
+      freqs.push(440 * Math.pow(2, (rootMidi + iv - 69) / 12) * Math.pow(2, tr.fine / 1200));
+    });
+  });
+  if (tr.vp.chord.sus > 0.001) {
+    /* gated: a chord holds while its painted cells continue; the run
+       ending (or the chord changing) closes / re-opens the gate */
+    const prevSet = chordSet((step - 1 + tr.loopSteps) % tr.loopSteps);
+    const curSet = chordSet(step);
+    if (curSet && (curSet !== prevSet || !tr.live.chord)) {
+      trig(tr, 'chord', time, () => Voices.chord(time, out, lib, freqs, tr.vp.chord), 99);
+    } else if (!curSet && prevSet) {
+      releaseSlot(tr, 'chord', time, 99);
+    }
+  } else if (freqs.length) {
+    trig(tr, 'chord', time, () => Voices.chord(time, out, lib, freqs, tr.vp.chord), 99);
+  }
+}
+
+/* Rows are mono: a new hit chokes whatever the row is still playing. */
+function trig (tr, slot, time, mk, row) {
+  const prev = tr.live[slot];
+  if (prev) prev.release(time);
+  const h = mk();
+  h._row = row;
+  tr.live[slot] = h;
+}
+function releaseSlot (tr, slot, time, row) {
+  const h = tr.live[slot];
+  if (h && h._row === row) { h.release(time); delete tr.live[slot]; }
+}
+
+/* SUSTAIN is gated by the painted run: with sus > 0, a stretch of
+   consecutive ON cells is ONE note -- it opens at the first cell and
+   releases right after the last one ("the length you clicked in").
+   With sus = 0 every ON cell is its own one-shot hit, as before. */
+function gateRow (tr, row, slot, step, abs, time, mk) {
+  const key = ['kick', 'snr', 'ch', 'oh'][row];
+  const on = patAt(tr, row, step, abs);
+  if (tr.vp[key].sus > 0.001) {
+    const prevOn = patAt(tr, row, (step - 1 + tr.loopSteps) % tr.loopSteps,
+                         abs !== undefined ? abs - 1 : undefined);
+    const owned = tr.live[slot] && tr.live[slot]._row === row;
+    // trigger at a run's first cell -- or when the row is on but silent
+    // (a fully painted row has no OFF->ON edge to catch)
+    if (on && (!prevOn || !owned)) trig(tr, slot, time, mk, row);
+    else if (!on && prevOn) releaseSlot(tr, slot, time, row);
+  } else if (on) {
+    trig(tr, slot, time, mk, row);
+  }
+}
+
+/* ===================================================================
+   SCHEDULER
+   =================================================================== */
+let timer = null;
+
+const CATCH_OPT = () => ({
+  lockDur: Math.min(30, Math.max(0.4, S.catchTime * 0.6)),
+  snapSec: 0.015,
+  maxDev: 0.6,
+  maxTries: 6
+});
+
+/* WANDER: bounce the track's BPM between its home value and DEST.
+   Arrive -> dwell for w.dwell seconds -> glide back over w.travel
+   seconds -> dwell -> ... The travel legs ride the same glide
+   machinery as every other tempo move, so they stay step-exact. */
+function wanderTick (tr, now) {
+  const w = tr.wander;
+  if (!w || !w.on) return;
+  // CATCH outranks WANDER: while anyone is catching this master, hold
+  if (tr === masterTrack() &&
+      tracks.some(o => o !== tr && o.catchState && o.catchState.fixedBpm == null)) {
+    w._phase = 'dwell';
+    w._until = now + 0.5;
+    return;
+  }
+  if (tr.catchState) {
+    if (tr.catchState.isGlide) w._phase = 'going';
+    return;                                   // still traveling
+  }
+  if (w._phase === 'going') {                 // just arrived at a turn
+    w._phase = 'dwell';
+    w._until = now + Math.max(0, w.dwell);
+    w._laps = (w._laps || 0) + 1;             // one leg completed
+    return;
+  }
+  if (w._until === undefined) { w._phase = 'dwell'; w._until = now; }
+  if (now >= w._until) {
+    const target = w._end === 'home' ? (w._home != null ? w._home : tr.bpm) : w.dest;
+    w._end = w._end === 'home' ? 'dest' : 'home';
+    if (Math.abs(target - tr.bpm) > 0.005) {
+      TempoCore.beginGlide(tr, now, Math.min(300, Math.max(20, target)),
+        { curve: S.curve, dur: Math.max(0.25, w.travel) });
+      w._phase = 'going';
+    } else {
+      w._phase = 'dwell';
+      w._until = now + Math.max(0.25, w.dwell);
+    }
+  }
+}
+
+function tick () {
+  if (!S.playing) return;
+  const now = ctx.currentTime, horizon = now + LOOKAHEAD;
+  const m = masterTrack();
+  for (const tr of tracks) wanderTick(tr, now);
+
+  for (const tr of tracks) {
+    if (!tr.catchState) continue;
+    if (tr.catchState.fixedBpm == null && tr === m) continue;  // stale catch on the new master
+    const wasGlide = tr.catchState.isGlide;
+    const ev = TempoCore.updateCatch(tr, m, now, CATCH_OPT());
+    if (ev === 'phase-locked' || ev === 'bpm-locked') {
+      if (!wasGlide) {
+        tr.flash = now;
+        toast(tr.name + ' → ' + (ev === 'bpm-locked' ? 'BPM SYNC 完了' : 'PHASE LOCK'));
+      }
+      renderTrackHead(tr);
+    }
+  }
+  for (const tr of tracks) {
+    if (tr.catchState) tr.bpm = liveBpm(tr, now);
+    updateDelayTime(tr);                 // echoes ride each track's own tempo
+    TempoCore.advance(tr, horizon, bpmFnFor(tr),
+      (step, time, abs) => playStep(tr, step, time, abs));
+  }
+}
+
+function start () {
+  initAudio();
+  if (ctx.state === 'suspended') ctx.resume();
+  tracks.forEach(tr => {
+    ensureTrackNode(tr);
+    tr.node.gain.value = tr.gain;
+  });
+  const t0 = ctx.currentTime + 0.15;
+  transportT0 = t0;
+  tracks.forEach(tr => { tr.stepIndex = 0; tr.nextStepTime = t0; tr.catchState = null; });
+  S.playing = true;
+  timer = setInterval(tick, TICK_MS);
+  document.getElementById('btnPlay').classList.add('playing');
+  document.getElementById('btnPlay').textContent = 'STOP';
+}
+
+function stop () {
+  if (Recorder.active) Recorder.end();               // async: drains, then writes files
+  S.playing = false;
+  if (timer) clearInterval(timer);
+  timer = null;
+  const tNow = ctx ? ctx.currentTime : 0;
+  tracks.forEach(tr => {
+    tr.catchState = null;
+    tr.fillAt = null;
+    if (tr.srcNode) { try { tr.srcNode.stop(); } catch (e) {} tr.srcNode = null; }
+    Object.values(tr.live).forEach(h => { try { h.release(tNow); } catch (e) {} });
+    tr.live = {};
+  });
+  document.getElementById('btnPlay').classList.remove('playing');
+  document.getElementById('btnPlay').textContent = 'PLAY';
+  renderAllHeads();
+}
+
+function alignAll () {
+  if (!S.playing) return;
+  const t0 = ctx.currentTime + 0.12;
+  tracks.forEach(tr => { tr.stepIndex = 0; tr.nextStepTime = t0; });
+  toast('位相をリセットしました');
+}
+
+function startCatch (tr) {
+  if (!S.playing) { toast('先に PLAY を押してください'); return; }
+  if (tr === masterTrack()) return;
+  // CATCH outranks WANDER: both the catcher and the target hold still
+  if (tr.wander && tr.wander.on) { tr.wander.on = false; paintWander(tr); }
+  const m = masterTrack();
+  if (m.wander && m.wander.on) {
+    m.wander.on = false;
+    if (m.catchState && m.catchState.isGlide) cancelCatch(m);
+    paintWander(m);
+    toast(m.name + ' の WANDER を停止（CATCH 優先）');
+  }
+  TempoCore.beginCatch(tr, ctx.currentTime,
+    { mode: S.mode, curve: S.curve, dir: S.dir, dur: S.catchTime });
+  renderTrackHead(tr);
+}
+function cancelCatch (tr) {
+  if (!tr.catchState) return;
+  tr.bpm = liveBpm(tr, ctx.currentTime);
+  tr.catchState = null;
+  renderTrackHead(tr);
+}
+
+/* ===================================================================
+   RECORDER — AudioWorklet capture. Every tap is told the exact start
+   and end frame, so all stems cover the identical frame range and are
+   sample-aligned regardless of when each node came online.
+   =================================================================== */
+const CAP_WORKLET = `
+class Cap extends AudioWorkletProcessor {
+  constructor () {
+    super();
+    this.b0 = []; this.b1 = []; this.n = 0;
+    this.sf = -1; this.ef = Infinity;
+    this.port.onmessage = e => {
+      const d = e.data;
+      if (d.cmd === 'start') this.sf = d.frame;
+      else if (d.cmd === 'stop') this.ef = d.frame;
+    };
+  }
+  post () {
+    if (!this.n) return;
+    const b0 = this.b0, b1 = this.b1;
+    this.port.postMessage({ b0, b1, n: this.n },
+      b0.map(a => a.buffer).concat(b1.map(a => a.buffer)));
+    this.b0 = []; this.b1 = []; this.n = 0;
+  }
+  process (inputs) {
+    const f0 = currentFrame, f1 = f0 + 128;
+    if (this.sf < 0 || f1 <= this.sf) return true;
+    const a = Math.max(0, this.sf - f0);
+    const b = Math.min(128, this.ef - f0);
+    if (b > a) {
+      const inp = inputs[0];
+      const c0 = inp && inp[0] ? inp[0].slice(a, b) : new Float32Array(b - a);
+      const c1 = inp && inp[1] ? inp[1].slice(a, b) : c0.slice();
+      this.b0.push(c0); this.b1.push(c1); this.n += b - a;
+    }
+    if (f1 >= this.ef) { this.post(); this.port.postMessage({ done: true }); return false; }
+    if (this.n >= 8192) this.post();
+    return true;
+  }
+}
+registerProcessor('pt-cap', Cap);`;
+
+const Recorder = {
+  active: false, stopping: false, taps: [], startFrame: 0, bytes: 0,
+  MAX_BYTES: 1.5e9,                       // memory mode: auto-stop before the tab dies
+  dir: null, toDisk: false, bits: 24, diskErr: false,
+
+  async ensureModule () {
+    if (ctx._ptCap) return;
+    /* data: first — Chromium rejects blob: worklet modules on file://
+       pages; Firefox rejects data: but takes blob:. Between the two,
+       every current browser loads one of them. */
+    try {
+      await ctx.audioWorklet.addModule(
+        'data:application/javascript;base64,' + btoa(CAP_WORKLET));
+    } catch (e) {
+      const url = URL.createObjectURL(new Blob([CAP_WORKLET], { type: 'application/javascript' }));
+      try { await ctx.audioWorklet.addModule(url); }
+      finally { URL.revokeObjectURL(url); }
+    }
+    ctx._ptCap = true;
+  },
+
+  async begin () {
+    if (this.active) return;
+
+    /* DISK mode: ask for the folder FIRST, while the click that armed
+       the recorder still counts as a user gesture. One folder per
+       session -- later takes stream into it without asking again. */
+    this.toDisk = false;
+    if (S.recDisk) {
+      if (!window.showDirectoryPicker) {
+        toast('このブラウザは DISK 録音非対応 — メモリ録音にします');
+      } else {
+        try {
+          if (!this.dir) this.dir = await showDirectoryPicker({ mode: 'readwrite' });
+          this.toDisk = true;
+        } catch (e) { toast('フォルダ未選択 — メモリ録音にします'); }
+      }
+    }
+
+    initAudio();
+    if (!ctx.audioWorklet || !window.AudioWorkletNode) { toast('このブラウザは AudioWorklet 非対応です'); return; }
+    if (ctx.state === 'suspended') await ctx.resume();
+    await this.ensureModule();
+    const wasPlaying = S.playing;
+    if (!wasPlaying) start();
+
+    const targets = [{ name: 'master', src: recTap }];
+    if (S.recPara) tracks.forEach(tr => {
+      if (tr.muted) return;
+      ensureTrackNode(tr);
+      // DRY = pre-FX track output, WET = that track's own FX included
+      targets.push({ name: tr.name, src: S.recWet ? tr.wetSum : tr.node });
+    });
+
+    this.bytes = 0; this.stopping = false; this.diskErr = false;
+    this.bits = S.recFmt === 'aif' && S.recBit === 32 ? 24 : S.recBit;
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
+    const ext = S.recFmt === 'aif' ? 'aif' : 'wav';
+    this.taps = targets.map(t => {
+      const node = new AudioWorkletNode(ctx, 'pt-cap',
+        { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2, channelCountMode: 'explicit' });
+      const tap = { name: t.name, node, c0: [], c1: [], frames: 0,
+                    file: 'zure-' + stamp + '-' + t.name + '.' + ext,
+                    w: null, pos: 0, headLen: 0, q: Promise.resolve() };
+      tap.donep = new Promise(res => { tap.done = res; });
+      node.port.onmessage = e => {
+        const d = e.data;
+        if (d.done) { tap.done(); return; }
+        if (this.toDisk) {
+          /* pack each chunk at the target bit depth and append; the
+             write chain keeps ordering, so memory never accumulates */
+          for (let i = 0; i < d.b0.length; i++) {
+            const bytes = S.recFmt === 'aif'
+              ? RecorderCore.packAiff([d.b0[i], d.b1[i]], this.bits)
+              : RecorderCore.packWav([d.b0[i], d.b1[i]], this.bits);
+            const pos = tap.pos; tap.pos += bytes.length;
+            tap.q = tap.q.then(() => tap.w.write({ type: 'write', position: pos, data: bytes }))
+              .catch(err => {
+                if (!this.diskErr) { this.diskErr = true; toast('DISK 書き込みエラー: ' + err.message); this.end(); }
+              });
+          }
+          tap.frames += d.n;
+          return;
+        }
+        for (const a of d.b0) tap.c0.push(a);
+        for (const a of d.b1) tap.c1.push(a);
+        tap.frames += d.n;
+        this.bytes += d.n * 8;
+        if (this.bytes > this.MAX_BYTES && !this.stopping) {
+          toast('メモリ上限に達したため録音を停止します — DISK モードなら長さ無制限です');
+          this.end();
+        }
+      };
+      t.src.connect(node);
+      return tap;
+    });
+
+    /* DISK: open one file per tap and lay down a provisional header
+       (its layout never changes -- only the sizes get rewritten at the
+       end). If the folder has gone stale, fall back to memory. */
+    if (this.toDisk) {
+      try {
+        for (const tap of this.taps) {
+          const fh = await this.dir.getFileHandle(tap.file, { create: true });
+          tap.w = await fh.createWritable();
+          const head = S.recFmt === 'aif'
+            ? RecorderCore.aiffHeader(0, 2, ctx.sampleRate, this.bits)
+            : RecorderCore.wavHeader(0, 2, ctx.sampleRate, this.bits);
+          tap.headLen = head.byteLength;
+          await tap.w.write({ type: 'write', position: 0, data: head });
+          tap.pos = tap.headLen;
+        }
+      } catch (e) {
+        toast('フォルダへ書けません — メモリ録音にします (' + e.message + ')');
+        for (const tap of this.taps) { try { if (tap.w) await tap.w.close(); } catch (_) {} tap.w = null; }
+        this.dir = null; this.toDisk = false;
+      }
+    }
+
+    /* Fresh transport: start capturing 50 ms before the first downbeat
+       so its attack is never clipped. Punch-in on a running transport:
+       just a beat's grace for the message to reach the worklets. */
+    this.startFrame = Math.round(
+      (wasPlaying ? ctx.currentTime + 0.1 : transportT0 - 0.05) * ctx.sampleRate);
+    this.taps.forEach(t => t.node.port.postMessage({ cmd: 'start', frame: this.startFrame }));
+    this.active = true;
+    paintRec();
+  },
+
+  async end () {
+    if (!this.active || this.stopping) return;
+    this.stopping = true;
+    const endFrame = Math.max(this.startFrame,
+      Math.round((ctx.currentTime + 0.06) * ctx.sampleRate));
+    this.taps.forEach(t => t.node.port.postMessage({ cmd: 'stop', frame: endFrame }));
+    await Promise.all(this.taps.map(t => t.donep));
+    this.taps.forEach(t => { try { t.node.disconnect(); } catch (e) {} });
+    this.active = false;
+    paintRec();
+
+    const sr = ctx.sampleRate;
+    const bits = this.bits;
+    const n = this.taps.length;
+    const secs = n ? this.taps[0].frames / sr : 0;
+
+    if (this.toDisk) {
+      /* Everything is already on disk -- drain the write chains, then
+         rewrite each header with the real frame count and close. */
+      toast('ファイナライズ中…');
+      for (const t of this.taps) {
+        await t.q;
+        if (!t.w) continue;
+        try {
+          const dataLen = t.pos - t.headLen;
+          if (S.recFmt === 'aif' && (dataLen & 1))       // IFF word alignment
+            await t.w.write({ type: 'write', position: t.pos, data: new Uint8Array(1) });
+          const head = S.recFmt === 'aif'
+            ? RecorderCore.aiffHeader(t.frames, 2, sr, bits)
+            : RecorderCore.wavHeader(t.frames, 2, sr, bits);
+          await t.w.write({ type: 'write', position: 0, data: head });
+          await t.w.close();
+        } catch (e) { toast('ファイナライズ失敗 (' + t.file + '): ' + e.message); }
+      }
+      this.taps = [];
+      toast(n + ' ファイル · ' + secs.toFixed(1) + ' s · ' + sr + ' Hz / ' +
+            (bits === 32 ? '32f' : bits) + 'bit をフォルダへ書き込みました');
+      return;
+    }
+
+    toast('書き出し中…');
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
+    const ext = S.recFmt === 'aif' ? 'aif' : 'wav';
+    this.taps.forEach((t, i) => {
+      const chans = [concatF32(t.c0, t.frames), concatF32(t.c1, t.frames)];
+      const buf = S.recFmt === 'aif'
+        ? RecorderCore.encodeAiff(chans, sr, bits)
+        : RecorderCore.encodeWav(chans, sr, bits);
+      downloadBlob(new Blob([buf], { type: S.recFmt === 'aif' ? 'audio/aiff' : 'audio/wav' }),
+        'zure-' + stamp + '-' + t.name + '.' + ext, i * 350);
+    });
+    this.taps = [];
+    toast(n + ' ファイル · ' + secs.toFixed(1) + ' s · ' + sr + ' Hz / ' +
+          (bits === 32 ? '32f' : bits) + 'bit を書き出しました');
+  },
+
+  toggle () { this.active ? this.end() : this.begin(); }
+};
+
+function concatF32 (list, n) {
+  const out = new Float32Array(n);
+  let o = 0;
+  for (const c of list) { out.set(c, o); o += c.length; }
+  return out;
+}
+function downloadBlob (blob, name, delay) {
+  setTimeout(() => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }, delay || 0);
+}
+function paintRec () {
+  const b = document.getElementById('btnRec');
+  b.classList.toggle('on', Recorder.active);
+  b.textContent = Recorder.active ? '■ STOP' : '● REC';
+}
+
+/* Changing the rate means a new AudioContext: tear the graph down and
+   let initAudio rebuild it at the requested rate on next use. Decoded
+   sample AudioBuffers survive -- BufferSource resamples as needed. */
+function setAudioRate (v) {
+  v = +v;
+  if (v === S.recSr) return;
+  if (S.playing || Recorder.active) { toast('レート変更は停止中のみできます'); return; }
+  S.recSr = v;
+  if (ctx) {
+    try { ctx.close(); } catch (e) {}
+    ctx = null; master = null; busGain = null; analyser = null; anaBuf = null;
+    noiseBuf = null; recTap = null; revIR = null;
+    tracks.forEach(tr => {
+      tr.node = null; tr.srcNode = null; tr.wetSum = null;
+      tr.revSend = null; tr.conv = null; tr.dlySend = null; tr.dl = null; tr.live = {};
+    });
+  }
+  toast(v ? v + ' Hz で再初期化します' : 'デバイスレートで再初期化します');
+}
+
+/* ===================================================================
+   UI — knobs
+   =================================================================== */
+class Knob {
+  constructor (el, o) {
+    this.el = el; this.o = o;
+    this.v = o.log
+      ? Math.log(o.get() / o.min) / Math.log(o.max / o.min)
+      : (o.get() - o.min) / (o.max - o.min);
+    el.classList.add('knob');
+    el.innerHTML = '<div class="dial"><i></i></div><div class="kl">' + o.label +
+                   '</div><div class="kv"></div>';
+    this.ind = el.querySelector('i');
+    this.out = el.querySelector('.kv');
+    if (o.color) this.ind.style.background = o.color;
+    el.addEventListener('pointerdown', e => this.down(e));
+    el.addEventListener('dblclick', () => { this.setVal(o.def); });
+    el.addEventListener('wheel', e => {
+      e.preventDefault();
+      this.setNorm(this.v - Math.sign(e.deltaY) * (e.shiftKey ? 0.002 : 0.02));
+    }, { passive: false });
+    this.draw();
+  }
+  val () {
+    return this.o.log
+      ? this.o.min * Math.pow(this.o.max / this.o.min, this.v)
+      : this.o.min + (this.o.max - this.o.min) * this.v;
+  }
+  setNorm (v) {
+    this.v = Math.min(1, Math.max(0, v));
+    this.o.set(this.val());
+    this.draw();
+  }
+  setVal (x) {
+    this.v = this.o.log
+      ? Math.log(x / this.o.min) / Math.log(this.o.max / this.o.min)
+      : (x - this.o.min) / (this.o.max - this.o.min);
+    this.setNorm(this.v);
+  }
+  refresh () {
+    const x = this.o.get();
+    this.v = this.o.log
+      ? Math.log(x / this.o.min) / Math.log(this.o.max / this.o.min)
+      : (x - this.o.min) / (this.o.max - this.o.min);
+    this.v = Math.min(1, Math.max(0, this.v));
+    this.draw();
+  }
+  down (e) {
+    if (Midi.armFromClick(this)) return;
+    e.preventDefault();
+    this.el.setPointerCapture(e.pointerId);
+    const y0 = e.clientY, v0 = this.v;
+    const mv = ev => {
+      const fine = ev.shiftKey ? 0.16 : 1;
+      this.setNorm(v0 + (y0 - ev.clientY) / 190 * fine);
+    };
+    const up = () => {
+      this.el.removeEventListener('pointermove', mv);
+      this.el.removeEventListener('pointerup', up);
+      this.el.removeEventListener('pointercancel', up);
+    };
+    this.el.addEventListener('pointermove', mv);
+    this.el.addEventListener('pointerup', up);
+    this.el.addEventListener('pointercancel', up);
+  }
+  draw () {
+    this.ind.style.transform = 'rotate(' + (-140 + this.v * 280) + 'deg)';
+    this.out.textContent = this.o.fmt(this.o.get());
+  }
+}
+
+/* ===================================================================
+   UI — build
+   =================================================================== */
+const knobs = { };
+const trackKnobs = [[], [], [], []];
+let kCatch = null;
+
+function segInit (id, get, set) {
+  const box = document.getElementById(id);
+  box.querySelectorAll('button').forEach(b => {
+    b.onclick = () => {
+      if (Midi.armFromClick({ el: box, isSeg: true, id, box })) return;
+      set(b.dataset.v); segPaint(id, get);
+    };
+  });
+  segPaint(id, get);
+}
+function segPaint (id, get) {
+  const box = document.getElementById(id), v = String(get());
+  box.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+}
+
+/* seconds -> "8.00 s" below a minute, "M:SS" above (3600 -> 60:00) */
+function fmtSecs (v) {
+  if (v < 60) return (v < 10 ? v.toFixed(2) : v.toFixed(1)) + ' s';
+  const t = Math.round(v);
+  return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+}
+
+function buildConsole () {
+  kCatch = new Knob(document.getElementById('kCatch'), {
+    label: 'CATCH RATE', min: 0.25, max: 3600, def: 8, log: true, id: 'catchTime',
+    get: () => S.catchTime,
+    set: v => {
+      S.catchTime = v;
+      // live re-plan: the knob steers a catch that is already running
+      if (S.playing) {
+        const now = ctx.currentTime;
+        tracks.forEach(tr => {
+          if (tr.catchState) TempoCore.retimeCatch(tr, now, S.catchTime, liveBpm(tr, now));
+        });
+      }
+    },
+    fmt: fmtSecs
+  });
+  knobs.catchTime = kCatch;
+
+  knobs.vol = new Knob(document.getElementById('kVol'), {
+    label: 'VOLUME', min: 0.0, max: 1.0, def: 0.35, id: 'vol',
+    get: () => S.vol,
+    set: v => { S.vol = v; if (master) master.gain.value = v; },
+    fmt: v => v <= 0.0005 ? '-inf' : (20 * Math.log10(v)).toFixed(1) + ' dB'
+  });
+
+  segInit('optMode',   () => S.mode,      v => S.mode = v);
+  segInit('optCurve',  () => S.curve,     v => S.curve = v);
+  segInit('optDir',    () => S.dir,       v => S.dir = v);
+  segInit('optMaster', () => S.masterIdx, v => setMaster(+v));
+
+  document.getElementById('btnCatchAll').onclick = () => tracks.forEach(tr => {
+    if (tr !== masterTrack()) startCatch(tr);
+  });
+  document.getElementById('btnCancelAll').onclick = () => tracks.forEach(cancelCatch);
+}
+
+/* Promoting a track to master drops any catch it was running toward
+   the previous master (it can't chase itself); glides survive. */
+function setMaster (i) {
+  S.masterIdx = i;
+  const m = masterTrack();
+  if (m.catchState && m.catchState.fixedBpm == null) cancelCatch(m);
+  segPaint('optMaster', () => S.masterIdx);
+  renderAllHeads();
+  paintLegend();
+}
+
+function buildRecorder () {
+  segInit('optRecFmt', () => S.recFmt, v => {
+    S.recFmt = v;
+    if (v === 'aif' && S.recBit === 32) {
+      S.recBit = 24;
+      segPaint('optRecBit', () => S.recBit);
+      toast('AIF は 16/24bit（32F は WAV のみ）');
+    }
+  });
+  segInit('optRecBit', () => S.recBit, v => {
+    if (S.recFmt === 'aif' && +v === 32) { toast('AIF は 16/24bit（32F は WAV のみ）'); return; }
+    S.recBit = +v;
+  });
+  segInit('optRecSr', () => S.recSr, v => setAudioRate(v));
+  segInit('optRecPara', () => S.recPara ? 1 : 0, v => S.recPara = v === '1');
+  segInit('optRecWet', () => S.recWet ? 1 : 0, v => S.recWet = v === '1');
+  segInit('optRecDest', () => S.recDisk ? 1 : 0, v => {
+    if (v === '1' && !window.showDirectoryPicker) {
+      toast('このブラウザは DISK 録音非対応です（Chrome / Edge で使えます）'); return;
+    }
+    S.recDisk = v === '1';
+  });
+  const b = document.getElementById('btnRec');
+  b.onclick = () => {
+    if (Midi.armFromClick({ el: b, isBtn: true, id: 'rec' })) return;
+    Recorder.toggle();
+  };
+}
+
+function trackEl (tr) { return document.getElementById('trk' + tr.idx); }
+
+function buildTracks () {
+  const host = document.getElementById('tracks');
+  host.innerHTML = '';
+  tracks.forEach(tr => {
+    const el = document.createElement('div');
+    el.className = 'trk';
+    el.id = 'trk' + tr.idx;
+    el.style.setProperty('--ac', ACC_HEX[tr.idx]);
+    el.innerHTML =
+      '<div class="thead">' +
+        '<div class="tid">' + tr.name + '</div>' +
+        '<div class="tbpm num" data-bpm title="ダブルクリックで数値入力">' +
+          '<span data-bpmv>—</span><small>BPM</small></div>' +
+        '<div class="sp"></div>' +
+        '<button class="mini" data-master>MASTER</button>' +
+        '<button class="mini" data-mute>MUTE</button>' +
+        '<button class="mini catch" data-catch>CATCH</button>' +
+      '</div>' +
+      '<div class="trow wanderRow" data-wander></div>' +
+      '<div class="trow" data-knobs></div>' +
+      '<div class="trow">' +
+        '<select class="sel" data-kind>' +
+          '<option value="drums">DRUMS</option><option value="chord">CHORD</option>' +
+          '<option value="sample">SAMPLE</option></select>' +
+        '<div class="opts" data-lib><button data-v="808">808</button><button data-v="909">909</button></div>' +
+        '<div class="opts" data-loop><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4 BARS</button></div>' +
+        '<div class="stat" data-stat></div>' +
+      '</div>' +
+      '<div class="fileRow" data-file></div>' +
+      '<div data-vedit></div>' +
+      '<div data-fx></div>' +
+      '<div class="pmRow" data-pmem></div>' +
+      '<div class="grid" data-grid></div>';
+    host.appendChild(el);
+
+    // any press inside the card focuses the track for numpad nudging
+    el.addEventListener('pointerdown', () => {
+      if (S.selIdx !== tr.idx) { S.selIdx = tr.idx; renderAllHeads(); }
+    }, true);
+    el.querySelector('[data-master]').onclick = () => setMaster(tr.idx);
+    el.querySelector('[data-mute]').onclick = () => toggleMute(tr);
+    const cb = el.querySelector('[data-catch]');
+    cb.onclick = () => {
+      if (Midi.armFromClick({ el: cb, isBtn: true, id: 'catch' + tr.idx })) return;
+      tr.catchState ? cancelCatch(tr) : startCatch(tr);
+    };
+    el.querySelector('[data-bpm]').ondblclick = () => editBpmInline(tr);
+    el.querySelector('[data-kind]').onchange = e => {
+      tr.kind = e.target.value;
+      buildTrackBody(tr); buildGrid(tr); renderTrackHead(tr);
+    };
+    el.querySelector('[data-lib]').querySelectorAll('button').forEach(b => {
+      b.onclick = () => { tr.lib = b.dataset.v; paintOpts(el, 'data-lib', tr.lib); };
+    });
+    el.querySelector('[data-loop]').querySelectorAll('button').forEach(b => {
+      b.onclick = () => {
+        tr.loopBars = +b.dataset.v;
+        paintOpts(el, 'data-loop', tr.loopBars);
+        buildGrid(tr);
+      };
+    });
+
+    buildTrackBody(tr);
+    buildGrid(tr);
+  });
+  renderAllHeads();
+}
+
+/* Inline BPM entry. prompt() would freeze the main thread and with it
+   the lookahead scheduler -- the audio would stall. An <input> swapped
+   into the header keeps everything running while the user types. */
+function editBpmInline (tr) {
+  const el = trackEl(tr);
+  const span = el.querySelector('[data-bpmv]');
+  if (span.style.display === 'none') return;           // already editing
+  const inp = document.createElement('input');
+  inp.className = 'bpmEdit num';
+  inp.type = 'text'; inp.inputMode = 'decimal';
+  inp.value = targetBpm(tr).toFixed(2);
+  span.style.display = 'none';
+  span.parentNode.insertBefore(inp, span);
+  inp.focus(); inp.select();
+  let done = false;
+  const cleanup = () => { done = true; inp.remove(); span.style.display = ''; };
+  const commit = () => {
+    if (done) return;
+    const n = parseFloat(inp.value);
+    cleanup();
+    if (isFinite(n) && n >= 20 && n <= 300) { setTrackBpm(tr, n); refreshTrackKnobs(tr); }
+  };
+  inp.onkeydown = e => {
+    e.stopPropagation();                               // keep 1-4/space shortcuts out
+    if (e.key === 'Enter') commit();
+    else if (e.key === 'Escape') cleanup();
+  };
+  inp.onblur = commit;
+}
+
+function paintOpts (el, sel, v) {
+  el.querySelector('[' + sel + ']').querySelectorAll('button')
+    .forEach(b => b.classList.toggle('on', b.dataset.v === String(v)));
+}
+
+/* per-track knob row + sample loader, rebuilt when the kind changes */
+function buildTrackBody (tr) {
+  const el = trackEl(tr);
+  const row = el.querySelector('[data-knobs]');
+  const fr = el.querySelector('[data-file]');
+  row.innerHTML = ''; fr.innerHTML = '';
+  trackKnobs[tr.idx] = [];
+
+  const add = o => {
+    const d = document.createElement('div');
+    row.appendChild(d);
+    const k = new Knob(d, o);
+    trackKnobs[tr.idx].push(k);
+    return k;
+  };
+
+  tr._bpmKnob = add({ label: 'BPM', min: 30, max: 240, def: tr.bpm, id: 'bpm' + tr.idx,
+        color: ACC_HEX[tr.idx],
+        get: () => targetBpm(tr),
+        set: v => setTrackBpm(tr, v),
+        fmt: v => v.toFixed(2) });
+
+  add({ label: 'GAIN', min: 0, max: 1, def: 0.25, id: 'gain' + tr.idx,
+        get: () => tr.gain,
+        set: v => { tr.gain = v; if (tr.node) tr.node.gain.value = v; },
+        fmt: v => v <= 0.0005 ? '-inf' : (20 * Math.log10(v)).toFixed(1) + ' dB' });
+
+  if (tr.kind === 'sample') {
+    add({ label: 'TUNE', min: -2400, max: 2400, def: 0, id: 'tune' + tr.idx,
+          get: () => tr.sample ? 1200 * Math.log2(targetBpm(tr) / tr.sample.baseBpm) : 0,
+          set: v => {
+            if (!tr.sample) return;
+            setTrackBpm(tr, tr.sample.baseBpm * Math.pow(2, v / 1200));
+            refreshTrackKnobs(tr);
+          },
+          fmt: v => (v >= 0 ? '+' : '') + v.toFixed(0) + ' ¢' });
+
+    const btn = document.createElement('button');
+    btn.className = 'fbtn'; btn.textContent = 'LOAD SAMPLE…';
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'audio/*';
+    const lbl = document.createElement('span');
+    lbl.textContent = tr.sample ? tr.sample.name : '(no sample)';
+
+    const baseLbl = document.createElement('span');
+    baseLbl.textContent = 'BASE BPM';
+    const base = document.createElement('input');
+    base.className = 'numIn';
+    base.type = 'number'; base.min = '20'; base.max = '999'; base.step = '0.01';
+    base.value = tr.sample ? tr.sample.baseBpm.toFixed(2) : '120.00';
+    base.disabled = !tr.sample;
+    base.onchange = () => {
+      const n = parseFloat(base.value);
+      if (tr.sample && isFinite(n) && n > 0) tr.sample.baseBpm = n;
+      else base.value = tr.sample ? tr.sample.baseBpm.toFixed(2) : '120.00';
+      refreshTrackKnobs(tr);
+    };
+    const fit = document.createElement('button');
+    fit.className = 'fbtn'; fit.textContent = 'FIT LOOP';
+    fit.title = 'サンプル全体がこのループ長ぴったりだとみなして原BPMを算出';
+    fit.onclick = () => {
+      if (!tr.sample) return;
+      autoBaseBpm(tr);
+      base.value = tr.sample.baseBpm.toFixed(2);
+      refreshTrackKnobs(tr);
+      toast('ループ尺から ' + tr.sample.baseBpm.toFixed(2) + ' BPM と算出しました');
+    };
+
+    btn.onclick = () => inp.click();
+    inp.onchange = async e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      initAudio();
+      try {
+        const buf = await ctx.decodeAudioData(await f.arrayBuffer());
+        // no BPM metadata in raw audio -- assume 120, let FIT/手入力 refine
+        tr.sample = { buf, name: f.name, baseBpm: 120 };
+        buildTrackBody(tr);
+        toast(f.name + ' を読み込みました（原BPM=120 と仮定）');
+      } catch (err) { toast('デコードできませんでした'); }
+    };
+    fr.append(btn, inp, lbl, baseLbl, base, fit);
+    const note = document.createElement('span');
+    note.textContent = 'テープ方式: BPM がピッチを動かします';
+    note.style.color = 'var(--dim2)';
+    fr.appendChild(note);
+  } else {
+    add({ label: 'KEY', min: 0, max: 11, def: 0, id: 'key' + tr.idx,
+          get: () => tr.key, set: v => tr.key = Math.round(v), fmt: v => KEYS[Math.round(v)] });
+    add({ label: 'OCT', min: -2, max: 2, def: 0, id: 'oct' + tr.idx,
+          get: () => tr.oct, set: v => tr.oct = Math.round(v),
+          fmt: v => (v >= 0 ? '+' : '') + Math.round(v) });
+    add({ label: 'FINE', min: -100, max: 100, def: 0, id: 'fine' + tr.idx,
+          get: () => tr.fine, set: v => tr.fine = v,
+          fmt: v => (v >= 0 ? '+' : '') + v.toFixed(0) + ' ¢' });
+  }
+
+  buildWander(tr);
+  buildVoiceEdit(tr);
+  buildFx(tr);
+  buildPatMem(tr);
+  el.querySelector('[data-kind]').value = tr.kind;
+  paintOpts(el, 'data-lib', tr.lib);
+  paintOpts(el, 'data-loop', tr.loopBars);
+  tr._shownBpm = undefined;                      // force the readout to repaint
+  Midi.paintMapped();
+}
+
+/* ---- SHIFT: jump the loop position by whole beats/bars, instantly.
+        The timing grid is untouched -- the next scheduled step simply
+        plays a different slot of the pattern, so the downbeat lands
+        somewhere new and STAYS there. ---- */
+function shiftTrack (tr, steps) {
+  tr.stepIndex += steps;
+  while (tr.stepIndex < 0) tr.stepIndex += tr.loopSteps;
+  tr.fillAt = null;                     // a pending fill loses its anchor
+  toast(tr.name + ': ' + (steps > 0 ? '+' : '') + steps / 4 + ' 拍ずらし');
+}
+
+/* ---- WANDER row: bounce between home BPM and DEST ---- */
+function paintWander (tr) {
+  const el = trackEl(tr);
+  if (!el) return;
+  const b = el.querySelector('[data-wgo]');
+  if (b) b.classList.toggle('on', !!(tr.wander && tr.wander.on));
+}
+
+function buildWander (tr) {
+  const host = trackEl(tr).querySelector('[data-wander]');
+  host.innerHTML = '';
+  const w = tr.wander;
+
+  const btn = document.createElement('button');
+  btn.className = 'mini';
+  btn.setAttribute('data-wgo', '');
+  btn.textContent = 'WANDER';
+  btn.title = 'ONの間ずっとホームBPM⇔DESTを往復する。' +
+    '折り返し地点でDWELL秒だけ滞在し、片道をTRAVEL秒かけて移動。⟲は往復した脚の数';
+  btn.onclick = () => {
+    if (Midi.armFromClick({ el: btn, isBtn: true, id: 'wander' + tr.idx })) return;
+    if (!w.on) {
+      if (tr.catchState && tr.catchState.fixedBpm == null) {
+        toast('CATCH 中は WANDER にできません（CATCH 優先）'); return;
+      }
+      if (tr === masterTrack() &&
+          tracks.some(o => o !== tr && o.catchState && o.catchState.fixedBpm == null)) {
+        toast('このトラックへ CATCH 中のため WANDER にできません'); return;
+      }
+    }
+    w.on = !w.on;
+    if (w.on) {
+      w._home = targetBpm(tr);               // where to come back to
+      w._end = 'dest';
+      w._phase = 'dwell';
+      w._laps = 0;
+      w._until = 0;                          // depart on the next tick
+      if (!S.playing) toast('WANDER は再生中に動きます');
+    } else if (tr.catchState && tr.catchState.isGlide) {
+      cancelCatch(tr);                       // freeze wherever it is
+    }
+    paintWander(tr);
+  };
+  host.appendChild(btn);
+
+  const addK = o => {
+    const dEl = document.createElement('div');
+    dEl.className = 'knob sm';
+    host.appendChild(dEl);
+    const k = new Knob(dEl, o);
+    trackKnobs[tr.idx].push(k);
+    return k;
+  };
+  addK({ label: 'DEST', min: 30, max: 240, def: w.dest, log: true,
+         id: 'wd' + tr.idx + 'D',
+         get: () => w.dest, set: v => w.dest = v,
+         fmt: v => v.toFixed(2) });
+  addK({ label: 'DWELL', min: 0, max: 30, def: w.dwell,
+         id: 'wd' + tr.idx + 'W',
+         get: () => w.dwell, set: v => w.dwell = v,
+         fmt: v => v.toFixed(1) + ' s' });   // stay at each turn-around
+  addK({ label: 'TRAVEL', min: 0.25, max: 3600, def: w.travel, log: true,
+         id: 'wd' + tr.idx + 'T',
+         get: () => w.travel, set: v => w.travel = v,
+         fmt: fmtSecs });
+
+  const st = document.createElement('span');
+  st.className = 'stat';
+  st.setAttribute('data-wstat', '');
+  host.appendChild(st);
+
+  // phase shift: one bar / one beat, backward or forward
+  const sh = document.createElement('div');
+  sh.className = 'opts sm shiftGrp';
+  sh.title = 'ループ位置を一瞬でずらす（そのまま維持）';
+  [[-16, '\u25c0BAR'], [-4, '\u25c0\u62cd'], [4, '\u62cd\u25b6'], [16, 'BAR\u25b6']].forEach(([n, nm]) => {
+    const b2 = document.createElement('button');
+    b2.textContent = nm;
+    b2.onclick = () => {
+      if (Midi.armFromClick({ el: b2, isBtn: true, id: 'shift' + tr.idx + '_' + n })) return;
+      shiftTrack(tr, n);
+    };
+    sh.appendChild(b2);
+  });
+  host.appendChild(sh);
+  paintWander(tr);
+}
+
+/* ---- per-track FX: reverb send + tempo-synced L/R echo ---- */
+const DLY_DIVS = [[0.25, '1/16'], [0.5, '1/8'], [0.75, '1/8.'], [1, '1/4'], [2, '1/2'], ['free', 'FREE']];
+
+function buildFx (tr) {
+  const host = trackEl(tr).querySelector('[data-fx]');
+  host.innerHTML = '';
+  const det = document.createElement('details');
+  det.className = 'vedit';
+  det.open = !!tr._fxOpen;
+  det.ontoggle = () => { tr._fxOpen = det.open; };
+  const sum = document.createElement('summary');
+  sum.textContent = 'FX — リバーブ / L·R エコー';
+  det.appendChild(sum);
+
+  const row = document.createElement('div');
+  row.className = 'vrow';
+  const lb = document.createElement('span');
+  lb.className = 'vlbl'; lb.textContent = 'SEND';
+  row.appendChild(lb);
+
+  const addK = o => {
+    const dEl = document.createElement('div');
+    dEl.className = 'knob sm';
+    row.appendChild(dEl);
+    const k = new Knob(dEl, o);
+    trackKnobs[tr.idx].push(k);
+    return k;
+  };
+  addK({ label: 'REV', min: 0, max: 1, def: 0, id: 'fx' + tr.idx + 'R',
+         get: () => tr.fx.rev,
+         set: v => { tr.fx.rev = v; if (tr.revSend) { tr.revSend.gain.value = v; if (v > 0) ensureReverb(tr); } },
+         fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+  addK({ label: 'ECHO', min: 0, max: 1, def: 0, id: 'fx' + tr.idx + 'D',
+         get: () => tr.fx.dly,
+         set: v => { tr.fx.dly = v; if (tr.dlySend) tr.dlySend.gain.value = v; },
+         fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+  addK({ label: 'FB', min: 0, max: 0.9, def: 0.45, id: 'fx' + tr.idx + 'F',
+         get: () => tr.fx.fb,
+         set: v => {
+           tr.fx.fb = v;
+           if (tr.dl) tr.dl.fbL.gain.value = tr.dl.fbR.gain.value = v;
+         },
+         fmt: v => (v * 100).toFixed(0) + '%' });
+  addK({ label: 'TIME', min: 0.02, max: 2, def: 0.35, log: true, id: 'fx' + tr.idx + 'T',
+         get: () => tr.fx.time,
+         set: v => {
+           // turning the manual knob claims the delay: switch to FREE
+           tr.fx.time = v;
+           if (tr.fx.div !== 'free') { tr.fx.div = 'free'; segPaint('fxT' + tr.idx, () => tr.fx.div); }
+           if (ctx) updateDelayTime(tr);
+         },
+         fmt: v => v < 1 ? (v * 1000).toFixed(0) + ' ms' : v.toFixed(2) + ' s' });
+
+  const seg = document.createElement('div');
+  seg.className = 'opts sm';
+  seg.id = 'fxT' + tr.idx;
+  DLY_DIVS.forEach(([v, nm]) => {
+    const b = document.createElement('button');
+    b.dataset.v = v; b.textContent = nm;
+    seg.appendChild(b);
+  });
+  row.appendChild(seg);
+
+  const note = document.createElement('span');
+  note.className = 'stat';
+  note.textContent = 'エコーはこのトラック自身のテンポに同期';
+  row.appendChild(note);
+
+  det.appendChild(row);
+  host.appendChild(det);
+  segInit(seg.id, () => tr.fx.div,
+    v => { tr.fx.div = v === 'free' ? 'free' : +v; if (ctx) updateDelayTime(tr); });
+}
+
+/* ---- pattern memories P1-P4 (drum tracks) ---- */
+function buildPatMem (tr) {
+  const host = trackEl(tr).querySelector('[data-pmem]');
+  host.innerHTML = '';
+  if (tr.kind !== 'drums') return;
+  for (let i = 0; i < 4; i++) {
+    const b = document.createElement('button');
+    b.className = 'mini pm' + (i === tr.patIdx ? ' on' : '');
+    b.textContent = 'P' + (i + 1);
+    b.onclick = () => {
+      tr.patIdx = i;
+      tr.pat = tr.pats[i];          // live edits already sit in their slot
+      buildGrid(tr);
+      host.querySelectorAll('button').forEach((x, j) =>
+        x.classList.toggle('on', j === i));
+    };
+    host.appendChild(b);
+  }
+}
+
+/* ---- voice editor: WAVE / PITCH(CUTOFF) / DECAY / SUS per row ---- */
+const VOICE_DEFS = {
+  drums: [
+    { slot: 'kick', label: 'KICK', pk: 'pitch',  pl: 'PITCH',  pmin: 25,  pmax: 150,  dmin: 0.03,  dmax: 3 },
+    { slot: 'snr',  label: 'SNR',  pk: 'pitch',  pl: 'PITCH',  pmin: 80,  pmax: 500,  dmin: 0.03,  dmax: 2 },
+    { slot: 'ch',   label: 'CH',   pk: 'pitch',  pl: 'PITCH',  pmin: 15,  pmax: 90,   dmin: 0.008, dmax: 1 },
+    { slot: 'oh',   label: 'OH',   pk: 'pitch',  pl: 'PITCH',  pmin: 15,  pmax: 90,   dmin: 0.02,  dmax: 3 }
+  ],
+  chord: [
+    { slot: 'chord', label: 'TONE', pk: 'cutoff', pl: 'CUTOFF', pmin: 200, pmax: 9000, dmin: 0.05, dmax: 6 }
+  ]
+};
+const WAVES = [['auto', 'AUTO'], ['sine', 'SIN'], ['triangle', 'TRI'],
+               ['square', 'SQR'], ['sawtooth', 'SAW']];
+
+function buildVoiceEdit (tr) {
+  const host = trackEl(tr).querySelector('[data-vedit]');
+  host.innerHTML = '';
+  const defs = VOICE_DEFS[tr.kind];
+  if (!defs) return;                             // sample tracks have no synth
+
+  const det = document.createElement('details');
+  det.className = 'vedit';
+  det.open = !!tr._veditOpen;
+  det.ontoggle = () => { tr._veditOpen = det.open; };
+  const sum = document.createElement('summary');
+  sum.textContent = 'VOICE EDIT — 波形 / ATK / ピッチ / ディケイ / SUS / TONE';
+  det.appendChild(sum);
+
+  if (tr.kind === 'drums') {
+    // ACCENT: level lift for the whole kit; on the kick it also adds
+    // saturation and a harder attack, like the analog circuit would
+    const kitRow = document.createElement('div');
+    kitRow.className = 'vrow';
+    const kl = document.createElement('span');
+    kl.className = 'vlbl'; kl.textContent = 'KIT';
+    kitRow.appendChild(kl);
+    const dEl = document.createElement('div');
+    dEl.className = 'knob sm';
+    kitRow.appendChild(dEl);
+    trackKnobs[tr.idx].push(new Knob(dEl, {
+      label: 'ACCENT', min: 0, max: 1, def: 0,
+      id: 'vp' + tr.idx + 'accent',
+      get: () => tr.vp.accent,
+      set: v => tr.vp.accent = v,
+      fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%'
+    }));
+    const note = document.createElement('span');
+    note.className = 'stat';
+    note.textContent = '音量+キックの歪みとアタックが連動';
+    kitRow.appendChild(note);
+    det.appendChild(kitRow);
+  }
+
+  defs.forEach(d => {
+    const p = tr.vp[d.slot];
+    const row = document.createElement('div');
+    row.className = 'vrow';
+    const lb = document.createElement('span');
+    lb.className = 'vlbl'; lb.textContent = d.label;
+    row.appendChild(lb);
+
+    const seg = document.createElement('div');
+    seg.className = 'opts sm';
+    seg.id = 'vw' + tr.idx + d.slot;
+    WAVES.forEach(([v, nm]) => {
+      const b = document.createElement('button');
+      b.dataset.v = v; b.textContent = nm;
+      seg.appendChild(b);
+    });
+    row.appendChild(seg);
+
+    const addK = o => {
+      const dEl = document.createElement('div');
+      dEl.className = 'knob sm';
+      row.appendChild(dEl);
+      const k = new Knob(dEl, o);
+      trackKnobs[tr.idx].push(k);
+      return k;
+    };
+    addK({ label: d.pl, min: d.pmin, max: d.pmax, def: p[d.pk], log: true,
+           id: 'vp' + tr.idx + d.slot + 'P',
+           get: () => tr.vp[d.slot][d.pk],
+           set: v => tr.vp[d.slot][d.pk] = v,
+           fmt: v => v >= 1000 ? (v / 1000).toFixed(2) + 'k' : v.toFixed(0) + ' Hz' });
+    addK({ label: 'ATK', min: 0.0002, max: d.slot === 'chord' ? 1 : 0.25, def: p.atk, log: true,
+           id: 'vp' + tr.idx + d.slot + 'A',
+           get: () => tr.vp[d.slot].atk,
+           set: v => tr.vp[d.slot].atk = v,
+           fmt: v => v < 0.001 ? (v * 1000).toFixed(1) + ' ms'
+                   : v < 0.1 ? (v * 1000).toFixed(0) + ' ms' : v.toFixed(2) + ' s' });
+    addK({ label: 'DECAY', min: d.dmin, max: d.dmax, def: p.decay, log: true,
+           id: 'vp' + tr.idx + d.slot + 'D',
+           get: () => tr.vp[d.slot].decay,
+           set: v => tr.vp[d.slot].decay = v,
+           fmt: v => v < 0.1 ? (v * 1000).toFixed(0) + ' ms' : v.toFixed(2) + ' s' });
+    addK({ label: 'SUS', min: 0, max: 1, def: p.sus,
+           id: 'vp' + tr.idx + d.slot + 'S',
+           get: () => tr.vp[d.slot].sus,
+           set: v => tr.vp[d.slot].sus = v,
+           fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+    if (d.slot !== 'chord') {
+      addK({ label: 'TONE', min: 0, max: 1, def: 0.5,
+             id: 'vp' + tr.idx + d.slot + 'T',
+             get: () => tr.vp[d.slot].tone,
+             set: v => tr.vp[d.slot].tone = v,
+             fmt: v => Math.abs(v - 0.5) < 0.01 ? 'FLAT' : ((v - 0.5) * 24).toFixed(1) + ' dB' });
+    }
+    if (d.slot === 'snr') {
+      addK({ label: 'SNAPPY', min: 0, max: 1, def: 0.5,
+             id: 'vp' + tr.idx + 'snrN',
+             get: () => tr.vp.snr.snappy,
+             set: v => tr.vp.snr.snappy = v,
+             fmt: v => v <= 0.005 ? 'TOM' : (v * 200).toFixed(0) + '%' });
+    }
+
+    det.appendChild(row);
+  });
+
+  if (tr.kind === 'chord') {
+    // simplified Prophet-5 section: OSC B + MIX + POLY-MOD + NOISE
+    const row = document.createElement('div');
+    row.className = 'vrow';
+    const lb = document.createElement('span');
+    lb.className = 'vlbl'; lb.textContent = 'OSC B';
+    row.appendChild(lb);
+
+    const seg = document.createElement('div');
+    seg.className = 'opts sm';
+    seg.id = 'vwB' + tr.idx;
+    WAVES.forEach(([v, nm]) => {
+      const b2 = document.createElement('button');
+      b2.dataset.v = v; b2.textContent = nm;
+      seg.appendChild(b2);
+    });
+    row.appendChild(seg);
+
+    const addK = o => {
+      const dEl = document.createElement('div');
+      dEl.className = 'knob sm';
+      row.appendChild(dEl);
+      trackKnobs[tr.idx].push(new Knob(dEl, o));
+    };
+    addK({ label: 'HARM', min: 0.5, max: 4, def: tr.vp.chord.harm, log: true,
+           id: 'vp' + tr.idx + 'chordH',
+           get: () => tr.vp.chord.harm, set: v => tr.vp.chord.harm = v,
+           fmt: v => '×' + v.toFixed(2) });
+    addK({ label: 'MIX', min: 0, max: 1, def: tr.vp.chord.mix,
+           id: 'vp' + tr.idx + 'chordM',
+           get: () => tr.vp.chord.mix, set: v => tr.vp.chord.mix = v,
+           fmt: v => 'A' + Math.round((1 - v) * 100) + ':' + Math.round(v * 100) + 'B' });
+    addK({ label: 'P.MOD', min: 0, max: 1, def: 0,
+           id: 'vp' + tr.idx + 'chordPM',
+           get: () => tr.vp.chord.pmod, set: v => tr.vp.chord.pmod = v,
+           fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+    addK({ label: 'NOISE', min: 0, max: 1, def: 0,
+           id: 'vp' + tr.idx + 'chordNZ',
+           get: () => tr.vp.chord.noise, set: v => tr.vp.chord.noise = v,
+           fmt: v => v <= 0.005 ? 'OFF' : (v * 100).toFixed(0) + '%' });
+    det.appendChild(row);
+  }
+
+  host.appendChild(det);
+  // segInit resolves by id, so wire the wave selectors once attached
+  defs.forEach(d => {
+    segInit('vw' + tr.idx + d.slot,
+      () => tr.vp[d.slot].wave, v => tr.vp[d.slot].wave = v);
+  });
+  if (tr.kind === 'chord') {
+    segInit('vwB' + tr.idx,
+      () => tr.vp.chord.bwave, v => tr.vp.chord.bwave = v);
+  }
+}
+
+/* A loop-length sample fills the loop exactly: derive its native BPM. */
+function autoBaseBpm (tr) {
+  if (!tr.sample) return;
+  const beats = tr.loopBars * TempoCore.BEATS_PER_BAR;
+  tr.sample.baseBpm = 60 * beats / tr.sample.buf.duration;
+}
+
+function refreshTrackKnobs (tr) { trackKnobs[tr.idx].forEach(k => k.refresh()); }
+
+function buildGrid (tr) {
+  const g = trackEl(tr).querySelector('[data-grid]');
+  const rows = tr.kind === 'sample' ? ['HIT'] : (tr.kind === 'chord' ? CHORD_ROWS : DRUM_ROWS);
+  const n = tr.loopSteps;
+  g.innerHTML = '';
+  rows.forEach((nm, r) => {
+    const row = document.createElement('div');
+    row.className = 'grow';
+    const lb = document.createElement('div');
+    lb.className = 'rlbl'; lb.textContent = nm;
+    const cells = document.createElement('div');
+    cells.className = 'cells';
+    cells.style.gridTemplateColumns = 'repeat(' + n + ',1fr)';
+    if (n > 32) cells.style.gap = '1px';        // 3-4 bars: keep cells usable
+    for (let s = 0; s < n; s++) {
+      const c = document.createElement('div');
+      c.className = 'cell' + (s % SPB === 0 ? ' beat' : '') + (tr.pat[r][s] ? ' on' : '');
+      c.dataset.r = r; c.dataset.s = s;
+      cells.appendChild(c);
+    }
+    /* press-and-slide painting: the first cell decides on/off, then the
+       drag applies that state to every cell it crosses in this row.
+       touch-action pan-y keeps vertical page scrolling alive on phones. */
+    let paint = null;
+    const setCell = (c, v) => {
+      tr.pat[r][+c.dataset.s] = v;
+      c.classList.toggle('on', v);
+    };
+    const cellAt = e => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const c = el && el.closest ? el.closest('.cell') : null;
+      return c && c.parentNode === cells ? c : null;
+    };
+    cells.addEventListener('pointerdown', e => {
+      const c = cellAt(e);
+      if (!c) return;
+      paint = !tr.pat[r][+c.dataset.s];
+      setCell(c, paint);
+      try { cells.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+    cells.addEventListener('pointermove', e => {
+      if (paint === null) return;
+      const c = cellAt(e);
+      if (c) setCell(c, paint);
+    });
+    const done = () => { paint = null; };
+    cells.addEventListener('pointerup', done);
+    cells.addEventListener('pointercancel', done);
+    row.append(lb, cells);
+    g.appendChild(row);
+  });
+}
+
+function renderTrackHead (tr) {
+  const el = trackEl(tr);
+  if (!el) return;
+  el.classList.toggle('master', tr === masterTrack());
+  el.classList.toggle('selected', tr.idx === S.selIdx);
+  el.querySelector('[data-master]').classList.toggle('on', tr === masterTrack());
+  el.querySelector('[data-mute]').classList.toggle('on', tr.muted);
+  const cb = el.querySelector('[data-catch]');
+  const catching = !!(tr.catchState && tr.catchState.fixedBpm == null);
+  cb.disabled = tr === masterTrack();
+  cb.classList.toggle('run', catching);
+  cb.textContent = catching ? 'CANCEL' : 'CATCH';
+}
+function renderAllHeads () { tracks.forEach(renderTrackHead); }
+
+/* one mute model behind two controls: the header A-D toggles and each
+   card's MUTE button. Muting also chokes anything still sustaining. */
+function toggleMute (tr) {
+  tr.muted = !tr.muted;
+  if (tr.muted && ctx) {
+    Object.values(tr.live).forEach(h => { try { h.release(ctx.currentTime); } catch (e) {} });
+    tr.live = {};
+  }
+  renderTrackHead(tr);
+  paintTrkTgl();
+}
+function paintTrkTgl () {
+  document.querySelectorAll('#trkTgl button').forEach(b =>
+    b.classList.toggle('on', !tracks[+b.dataset.i].muted));
+}
+
+/* ===================================================================
+   PHASE SCOPE + meters (rAF)
+   =================================================================== */
+const scope = document.getElementById('scope');
+const sctx = scope.getContext('2d');
+let peak = 0, peakHold = 0, peakHoldT = 0;
+
+function paintLegend () {
+  const L = document.getElementById('legend');
+  L.innerHTML = '';
+  tracks.forEach(tr => {
+    const d = document.createElement('div');
+    d.className = 'row';
+    d.innerHTML = '<div class="sw" style="background:' + ACC_HEX[tr.idx] + '"></div>' +
+                  '<div class="nm">' + tr.name + '</div>' +
+                  '<div class="st" id="lg' + tr.idx + '"></div>';
+    L.appendChild(d);
+  });
+}
+
+function statusText (tr, now) {
+  const c = tr.catchState;
+  if (tr === masterTrack()) {
+    let s = 'MASTER · ' + tr.bpm.toFixed(2) + ' BPM';
+    if (c && c.isGlide) s += ' → ' + c.fixedBpm.toFixed(2);
+    return s;
+  }
+  let s = tr.bpm.toFixed(2) + ' BPM';
+  if (c) {
+    if (c.isGlide) {
+      const left = Math.max(0, c.ramp.t0 + c.ramp.dur - now);
+      s += ' → ' + c.fixedBpm.toFixed(2) + ' · ' + left.toFixed(1) + 's';
+    } else if (c.stage === 'converge') {
+      const left = Math.max(0, c.ramp.t0 + c.ramp.dur - now);
+      s += ' · 収束 ' + left.toFixed(1) + 's';
+    } else {
+      const left = Math.max(0, c.lock.t0 + c.lock.dur - now);
+      s += ' · 位相合わせ ' + left.toFixed(1) + 's';
+    }
+  } else if (S.playing) {
+    const m = masterTrack();
+    const sd = 60 / (m.bpm * SPB), barDur = sd * SPBar;
+    const off = TempoCore.phaseErrorBars(tr, m, sd, 'nearest') * barDur;
+    s += ' · Δ' + (off * 1000).toFixed(0) + ' ms';
+  }
+  return s;
+}
+
+function frame () {
+  requestAnimationFrame(frame);
+  const now = ctx ? ctx.currentTime : 0;
+
+  if (analyser) {
+    analyser.getFloatTimeDomainData(anaBuf);
+    let p = 0;
+    for (let i = 0; i < anaBuf.length; i++) { const a = Math.abs(anaBuf[i]); if (a > p) p = a; }
+    peak = Math.max(p, peak * 0.86);
+    if (peak > peakHold || now - peakHoldT > 1.1) { peakHold = peak; peakHoldT = now; }
+    const pc = Math.min(1, peak);
+    document.getElementById('mFill').style.width = (pc * 100) + '%';
+    document.getElementById('mPk').style.left = (Math.min(1, peakHold) * 100) + '%';
+    document.getElementById('mDb').textContent =
+      peak < 0.0005 ? '-inf' : (20 * Math.log10(peak)).toFixed(1) + ' dB';
+    document.getElementById('clipLed').classList.toggle('on', peak >= 0.985);
+  }
+
+  document.getElementById('btnFill').classList
+    .toggle('on', tracks.some(tr => tr.fillAt != null));
+
+  // stepper readout follows the selection and the glide target
+  const selTr = tracks[S.selIdx];
+  if (selTr) {
+    document.getElementById('stSel').textContent = selTr.name;
+    document.getElementById('stBpm').textContent = targetBpm(selTr).toFixed(2);
+  }
+
+  // recorder status
+  const rs = document.getElementById('recStat');
+  if (Recorder.active && ctx) {
+    const sec = Math.max(0, now - Recorder.startFrame / ctx.sampleRate);
+    rs.innerHTML = '<b>● ' + sec.toFixed(1) + ' s</b> · ' +
+      (Recorder.bytes / 1048576).toFixed(0) + ' MB · ' +
+      Recorder.taps.length + ' ファイル · ' + ctx.sampleRate + ' Hz';
+  } else {
+    const sr = ctx ? ctx.sampleRate + ' Hz' : (S.recSr ? S.recSr + ' Hz' : 'デバイスレート');
+    rs.textContent = (S.recBit === 32 ? '32bit float' : S.recBit + 'bit') + ' ' +
+      S.recFmt.toUpperCase() + ' · ' + sr +
+      (S.recPara ? ' · パラ ON: マスター+非ミュート各トラック（ステム=' +
+        (S.recWet ? 'WET: 各トラックのFX込み' : 'DRY: FXなし') + '）' : ' · マスターのみ') +
+      (S.recDisk ? ' · DISK: フォルダへ直接書き込み・長さ無制限' : ' · MEM: 約13分でメモリ上限') +
+      ' — R キーでも開始/停止';
+  }
+
+  // wander status per track
+  tracks.forEach(tr => {
+    const el2 = trackEl(tr);
+    if (!el2) return;
+    const st = el2.querySelector('[data-wstat]');
+    if (!st) return;
+    const w = tr.wander;
+    if (!w || !w.on) { if (st.textContent) st.textContent = ''; return; }
+    const home = w._home != null ? w._home : tr.bpm;
+    const next = (w._end === 'home' ? home : w.dest).toFixed(2);
+    const lap = '\u21ba' + (w._laps || 0) + ' ';
+    if (tr.catchState && tr.catchState.isGlide) {
+      st.textContent = lap + '\u2192 ' + tr.catchState.fixedBpm.toFixed(2);
+    } else if (w._phase === 'dwell' && ctx) {
+      const left = Math.max(0, (w._until || 0) - now);
+      st.textContent = lap + '\u6ede\u5728 ' + left.toFixed(1) + 's \u2192 ' + next;
+    } else {
+      st.textContent = lap + '\u2192 ' + next;
+    }
+  });
+
+  // legend + live BPM readouts (they move continuously during a catch)
+  tracks.forEach(tr => {
+    const e = document.getElementById('lg' + tr.idx);
+    if (e) e.textContent = statusText(tr, now);
+    if (tr._shownBpm === undefined || Math.abs(tr._shownBpm - tr.bpm) > 0.005) {
+      tr._shownBpm = tr.bpm;
+      const el = trackEl(tr);
+      if (el) el.querySelector('[data-bpmv]').textContent = tr.bpm.toFixed(2);
+      if (tr._bpmKnob) tr._bpmKnob.refresh();
+    }
+  });
+
+  // scope
+  // CRT: supersampled and antialiased, with phosphor persistence --
+  // instead of clearing, the previous frame decays under translucent black,
+  // so the heads drag fine glowing trails. Fairlight monitor, not a plotter.
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.fillStyle = 'rgba(2, 9, 4, 0.13)';
+  sctx.fillRect(0, 0, scope.width, scope.height);
+  sctx.setTransform(scope.width / 460, 0, 0, scope.height / 460, 0, 0);
+  const W = 460, H = 460, cx = W / 2, cy = H / 2;
+  sctx.strokeStyle = 'rgba(90,255,160,0.07)';
+  sctx.lineWidth = 1;
+  sctx.beginPath(); sctx.moveTo(cx, 12); sctx.lineTo(cx, H - 12); sctx.stroke();
+  sctx.beginPath(); sctx.moveTo(12, cy); sctx.lineTo(W - 12, cy); sctx.stroke();
+
+  const SCOPE_HEX = ['#c8ffdc', '#7fe8a8', '#4fbf7f', '#2f8f5c'];
+  tracks.forEach((tr, i) => {
+    const R = 210 - i * 34;
+    sctx.strokeStyle = 'rgba(90,255,160,0.05)';  // faint ring track
+    sctx.lineWidth = 4;
+    sctx.beginPath(); sctx.arc(cx, cy, R, 0, Math.PI * 2); sctx.stroke();
+
+    if (!S.playing || !ctx) return;
+    const sd = 60 / (Math.max(1, liveBpm(tr, now)) * SPB);
+    const pos = TempoCore.stepPosAt(tr, now, sd);
+    const frac = ((pos % tr.loopSteps) + tr.loopSteps) % tr.loopSteps / tr.loopSteps;
+    const ang = -Math.PI / 2 + frac * Math.PI * 2;
+
+    // bar ticks
+    sctx.strokeStyle = 'rgba(120,255,175,0.20)'; sctx.lineWidth = 1;
+    for (let b = 0; b < tr.loopBars; b++) {
+      const a = -Math.PI / 2 + (b / tr.loopBars) * Math.PI * 2;
+      sctx.beginPath();
+      sctx.moveTo(cx + Math.cos(a) * (R - 9), cy + Math.sin(a) * (R - 9));
+      sctx.lineTo(cx + Math.cos(a) * (R + 9), cy + Math.sin(a) * (R + 9));
+      sctx.stroke();
+    }
+    // travelled arc
+    sctx.strokeStyle = SCOPE_HEX[i]; sctx.lineWidth = 3.5;
+    sctx.globalAlpha = 0.10;
+    sctx.beginPath(); sctx.arc(cx, cy, R, -Math.PI / 2, ang); sctx.stroke();
+    sctx.globalAlpha = 1;
+    // head
+    const fl = tr.flash && now - tr.flash < 0.5 ? 1 - (now - tr.flash) / 0.5 : 0;
+    sctx.fillStyle = SCOPE_HEX[i];
+    sctx.shadowBlur = 6 + fl * 8;                // delicate phosphor bloom
+    sctx.shadowColor = SCOPE_HEX[i];
+    sctx.beginPath();
+    sctx.arc(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R, 3.2 + fl * 3, 0, Math.PI * 2);
+    sctx.fill();
+    sctx.shadowBlur = 0;
+  });
+
+  // step highlight in the grids
+  if (S.playing) {
+    tracks.forEach(tr => {
+      const sd = 60 / (Math.max(1, liveBpm(tr, now)) * SPB);
+      const pos = Math.floor(TempoCore.stepPosAt(tr, now, sd));
+      const cur = ((pos % tr.loopSteps) + tr.loopSteps) % tr.loopSteps;
+      if (tr._lastCur === cur) return;
+      tr._lastCur = cur;
+      const el = trackEl(tr);
+      if (!el) return;
+      el.querySelectorAll('.cell.now').forEach(c => c.classList.remove('now'));
+      el.querySelectorAll('.cell[data-s="' + cur + '"]').forEach(c => c.classList.add('now'));
+    });
+  }
+}
+
+/* ===================================================================
+   MIDI (receive only — see ABOUT for why clock-out is not offered)
+   =================================================================== */
+const Midi = {
+  access: null, armed: null, learnOn: false,
+  map: JSON.parse(localStorage.getItem('zure.midi') || localStorage.getItem('polytempo.midi') || '{}'),
+
+  async enable () {
+    if (!navigator.requestMIDIAccess) { toast('このブラウザは Web MIDI 非対応です'); return; }
+    try {
+      this.access = await navigator.requestMIDIAccess();
+      this.access.inputs.forEach(i => i.onmidimessage = m => this.onMsg(m));
+      this.access.onstatechange = () => {
+        this.access.inputs.forEach(i => i.onmidimessage = m => this.onMsg(m));
+      };
+      document.getElementById('btnMidi').classList.add('on');
+      toast('MIDI 入力: ' + this.access.inputs.size + ' ポート');
+    } catch (e) { toast('MIDI を有効にできませんでした'); }
+  },
+
+  setLearn (on) {
+    this.learnOn = on;
+    if (!on) this.clearArm();
+    document.getElementById('btnLearn').classList.toggle('on', on);
+    if (on) toast('LEARN: 操作子をクリック → コントローラを動かす');
+  },
+  clearArm () {
+    document.querySelectorAll('.learn').forEach(e => e.classList.remove('learn'));
+    this.armed = null;
+  },
+  /* Called from every control's handler: swallows the click while learning. */
+  armFromClick (target) {
+    if (!this.learnOn) return false;
+    this.clearArm();
+    this.armed = target;
+    (target.el || target.box).classList.add('learn');
+    return true;
+  },
+
+  key (msg) { return msg[0] === 176 ? 'cc' + msg[1] : (msg[0] & 0xf0) === 144 ? 'note' + msg[1] : null; },
+
+  onMsg (e) {
+    const d = e.data, k = this.key(d);
+    if (!k) return;
+    if (this.armed) {
+      const t = this.armed;
+      this.map[k] = t.isSeg ? { kind: 'seg', id: t.id }
+                 : t.isBtn ? { kind: 'btn', id: t.id }
+                 : { kind: 'knob', id: t.o.id };
+      localStorage.setItem('zure.midi', JSON.stringify(this.map));
+      this.clearArm();
+      this.setLearn(false);
+      this.paintMapped();
+      toast(k + ' を割り当てました');
+      return;
+    }
+    const m = this.map[k];
+    if (!m) return;
+    const val = d[0] === 176 ? d[2] / 127 : (d[2] > 0 ? 1 : 0);
+    this.apply(m, val, d);
+  },
+
+  apply (m, val, d) {
+    if (m.kind === 'knob') {
+      const k = knobs[m.id] || this.findTrackKnob(m.id);
+      if (k) k.setNorm(val);
+      return;
+    }
+    if (m.kind === 'btn') {
+      if (val < 0.5) return;
+      if (m.id === 'rec') { Recorder.toggle(); return; }
+      if (m.id === 'fill') { fillNow(); return; }
+      if (m.id.startsWith('shift')) {
+        const mm = m.id.match(/^shift(\d)_(-?\d+)$/);
+        if (mm && tracks[+mm[1]]) shiftTrack(tracks[+mm[1]], +mm[2]);
+        return;
+      }
+      if (m.id.startsWith('wander')) {
+        const wtr = tracks[+m.id.replace('wander', '')];
+        if (wtr) {
+          const wb = trackEl(wtr).querySelector('[data-wgo]');
+          if (wb) wb.click();
+        }
+        return;
+      }
+      const i = +m.id.replace('catch', '');
+      const tr = tracks[i];
+      if (tr) tr.catchState ? cancelCatch(tr) : startCatch(tr);
+      return;
+    }
+    if (m.kind === 'seg') {
+      const box = document.getElementById(m.id);
+      const bs = box.querySelectorAll('button');
+      const i = Math.min(bs.length - 1, Math.floor(val * bs.length));
+      bs[i].click();
+    }
+  },
+  findTrackKnob (id) {
+    for (const arr of trackKnobs) for (const k of arr) if (k.o.id === id) return k;
+    return null;
+  },
+  paintMapped () {
+    const ids = new Set(Object.values(this.map).map(m => m.id));
+    Object.values(knobs).forEach(k => k.el.classList.toggle('mapped', ids.has(k.o.id)));
+    trackKnobs.forEach(arr => arr.forEach(k => k.el.classList.toggle('mapped', ids.has(k.o.id))));
+  }
+};
+
+/* ===================================================================
+   PROJECT SAVE / LOAD
+   =================================================================== */
+function saveProject () {
+  const data = {
+    v: 1, state: { ...S },
+    tracks: tracks.map(tr => ({
+      kind: tr.kind, lib: tr.lib, bpm: tr.bpm, loopBars: tr.loopBars,
+      gain: tr.gain, muted: tr.muted, key: tr.key, oct: tr.oct, fine: tr.fine,
+      pat: tr.pat.map(r => r.slice(0, 64)),          // kept for older loaders
+      pats: tr.pats.map(p => p.map(r => r.slice(0, 64))),
+      patIdx: tr.patIdx,
+      vp: JSON.parse(JSON.stringify(tr.vp)),
+      fx: { ...tr.fx },
+      wander: { on: tr.wander.on, dest: tr.wander.dest,
+                dwell: tr.wander.dwell, travel: tr.wander.travel },
+      sample: tr.sample ? { name: tr.sample.name, baseBpm: tr.sample.baseBpm } : null
+    }))
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)],
+    { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'zure-project.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function loadProject (obj) {
+  if (!obj || !obj.tracks) { toast('読み込めないファイルです'); return; }
+  Object.assign(S, obj.state || {});
+  obj.tracks.forEach((d, i) => {
+    const tr = tracks[i];
+    if (!tr) return;
+    Object.assign(tr, {
+      kind: d.kind, lib: d.lib, bpm: d.bpm, loopBars: d.loopBars,
+      gain: d.gain, muted: d.muted, key: d.key, oct: d.oct, fine: d.fine,
+      catchState: null
+    });
+    const pad64 = r => { const a = r.slice(0, 64); while (a.length < 64) a.push(false); return a; };
+    if (d.pats) {
+      tr.pats = d.pats.map(p => p.map(pad64));
+      while (tr.pats.length < 4) tr.pats.push(blankPat());
+      tr.patIdx = Math.min(3, d.patIdx || 0);
+    } else {
+      tr.pats = [d.pat.map(pad64), blankPat(), blankPat(), blankPat()];
+      tr.patIdx = 0;
+    }
+    tr.pat = tr.pats[tr.patIdx];
+    // older project files predate the voice editor / FX: fall back to defaults
+    const base = defaultVp(d.lib);
+    tr.vp = base;
+    if (d.vp) Object.keys(base).forEach(k => {
+      if (typeof base[k] === 'object') Object.assign(tr.vp[k], d.vp[k] || {});
+      else if (d.vp[k] != null) tr.vp[k] = d.vp[k];
+    });
+    tr.fx = { rev: 0, dly: 0, div: 0.75, fb: 0.45, time: 0.35, ...(d.fx || {}) };
+    tr.wander = { on: false, dest: tr.bpm, dwell: 2, travel: 8, ...(d.wander || {}) };
+    if (tr.node) tr.node.gain.value = tr.gain;
+    if (tr.revSend) { tr.revSend.gain.value = tr.fx.rev; if (tr.fx.rev > 0) ensureReverb(tr); }
+    if (tr.dlySend) tr.dlySend.gain.value = tr.fx.dly;
+    if (tr.dl) { tr.dl.fbL.gain.value = tr.dl.fbR.gain.value = tr.fx.fb; updateDelayTime(tr, true); }
+    if (d.sample && tr.sample) tr.sample.baseBpm = d.sample.baseBpm;
+  });
+  if (S.recFmt === 'aif' && S.recBit === 32) S.recBit = 24;
+  buildTracks();
+  Object.values(knobs).forEach(k => k.refresh());
+  const SEGS = {
+    optMode: () => S.mode, optCurve: () => S.curve, optDir: () => S.dir,
+    optMaster: () => S.masterIdx, optRecFmt: () => S.recFmt, optRecBit: () => S.recBit,
+    optRecSr: () => S.recSr, optRecPara: () => S.recPara ? 1 : 0,
+    optRecWet: () => S.recWet ? 1 : 0,
+    optRecDest: () => S.recDisk ? 1 : 0
+  };
+  Object.keys(SEGS).forEach(id => segPaint(id, SEGS[id]));
+  paintTrkTgl();
+  if (master) master.gain.value = S.vol;
+  paintLegend();
+  toast('プロジェクトを読み込みました' + (obj.tracks.some(t => t.sample)
+    ? '（サンプルは選び直してください）' : ''));
+}
+
+/* ===================================================================
+   misc
+   =================================================================== */
+let toastT = null;
+function toast (msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove('show'), 1900);
+}
+
+document.getElementById('btnPlay').onclick = () => S.playing ? stop() : start();
+document.getElementById('btnAlign').onclick = alignAll;
+document.getElementById('btnFill').onclick = () => {
+  if (Midi.armFromClick({ el: document.getElementById('btnFill'), isBtn: true, id: 'fill' })) return;
+  fillNow();
+};
+document.getElementById('btnMidi').onclick = () => Midi.enable();
+document.getElementById('btnLearn').onclick = () => Midi.setLearn(!Midi.learnOn);
+document.getElementById('btnSave').onclick = saveProject;
+document.getElementById('btnLoad').onclick = () => document.getElementById('fileProj').click();
+document.getElementById('fileProj').onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try { loadProject(JSON.parse(await f.text())); } catch (err) { toast('JSON を解析できません'); }
+};
+/* numpad: 1-4 select a track, +/- nudge its BPM (through the glide,
+   so nudges are musical). Shift = fine, * and / = coarse. */
+function nudgeSelected (delta) {
+  const tr = tracks[S.selIdx];
+  if (!tr) return;
+  setTrackBpm(tr, targetBpm(tr) + delta);
+  refreshTrackKnobs(tr);
+  toast(tr.name + ' → ' + targetBpm(tr).toFixed(2) + ' BPM');
+}
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code.startsWith('Numpad')) {
+    const d = e.code.slice(6);
+    if (d >= '1' && d <= '4') { S.selIdx = +d - 1; renderAllHeads(); e.preventDefault(); return; }
+    if (e.code === 'NumpadAdd')      { nudgeSelected(e.shiftKey ? 0.1 : 1); e.preventDefault(); return; }
+    if (e.code === 'NumpadSubtract') { nudgeSelected(e.shiftKey ? -0.1 : -1); e.preventDefault(); return; }
+    if (e.code === 'NumpadMultiply') { nudgeSelected(10); e.preventDefault(); return; }
+    if (e.code === 'NumpadDivide')   { nudgeSelected(-10); e.preventDefault(); return; }
+  }
+  if (e.key === '+') { nudgeSelected(1); return; }    // '+' is often Shift+'='
+  if (e.key === '-') { nudgeSelected(-1); return; }
+  if (e.code === 'Space') { e.preventDefault(); S.playing ? stop() : start(); }
+  if (e.key >= '1' && e.key <= '4') startCatch(tracks[+e.key - 1]);
+  if (e.key === '0') alignAll();
+  if (e.key === 'r' || e.key === 'R') Recorder.toggle();
+  if (e.key === 'f' || e.key === 'F') fillNow();
+});
+
+document.querySelectorAll('#trkTgl button').forEach(b => {
+  b.onclick = () => toggleMute(tracks[+b.dataset.i]);
+});
+
+/* BPM digit stepper: click = one step, hold = auto-repeat. The letter
+   button cycles the selected track. */
+document.querySelectorAll('#stepper button[data-d]').forEach(b => {
+  const d = +b.dataset.d;
+  let iv = null, to = null;
+  const fire = () => nudgeSelected(d);
+  const end = () => { clearTimeout(to); clearInterval(iv); to = iv = null; };
+  b.addEventListener('pointerdown', e => {
+    fire();
+    to = setTimeout(() => { iv = setInterval(fire, 110); }, 420);
+    try { b.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  b.addEventListener('pointerup', end);
+  b.addEventListener('pointercancel', end);
+  b.addEventListener('lostpointercapture', end);
+});
+document.getElementById('stSel').onclick = () => {
+  S.selIdx = (S.selIdx + 1) % 4;
+  renderAllHeads();
+};
+
+buildConsole();
+buildRecorder();
+buildTracks();
+paintTrkTgl();
+paintLegend();
+Midi.paintMapped();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
