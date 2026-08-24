@@ -104,7 +104,7 @@
   <div class="ctl"><label>絞り</label>
     <input id="sApt" type="range" min="0" max="100" value="38" /><span class="val" id="vApt">F4.0</span></div>
   <div class="ctl"><label>粒</label>
-    <input id="sCount" type="range" min="300" max="4000" step="100" value="1600" /><span class="val" id="vCount">1600</span></div>
+    <input id="sCount" type="range" min="500" max="24000" step="500" value="9000" /><span class="val" id="vCount">1600</span></div>
   <div id="meter"><div id="meterBass"></div></div>
   <button class="hbtn" id="bRegen">再生成 R</button>
   <button class="hbtn" id="bPat">配置 P</button>
@@ -142,7 +142,7 @@
 // ══════════════════════════════════════════════════════════════
 const cv  = document.getElementById('cv');
 const ctx = cv.getContext('2d', { alpha:false });
-let W = 0, H = 0, DPR = 1, CX = 0, CY = 0, RMAX = 1;
+let W = 0, H = 0, DPR = 1, CX = 0, CY = 0, RMAX = 1, PX = 1;
 
 const COARSE = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
 
@@ -152,6 +152,7 @@ function resize() {
   cv.width  = Math.round(W * DPR);
   cv.height = Math.round(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  PX = 1 / DPR;                          // one device pixel, in canvas units
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   CX = W / 2; CY = H / 2;
   RMAX = Math.hypot(CX, CY);
@@ -168,20 +169,6 @@ function onResize() {
 }
 window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 260));
-
-// white glow sprite — drawn additively so overlaps bloom
-const SPR = document.createElement('canvas');
-SPR.width = SPR.height = 64;
-{
-  const g = SPR.getContext('2d');
-  const rg = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  rg.addColorStop(0.00, 'rgba(255,255,255,1)');
-  rg.addColorStop(0.16, 'rgba(255,255,255,.96)');
-  rg.addColorStop(0.34, 'rgba(255,255,255,.34)');
-  rg.addColorStop(0.62, 'rgba(255,255,255,.07)');
-  rg.addColorStop(1.00, 'rgba(255,255,255,0)');
-  g.fillStyle = rg; g.fillRect(0, 0, 64, 64);
-}
 
 // unit vectors, so a defocused grain can be flung around its true
 // position without a trig call per grain per frame
@@ -294,11 +281,11 @@ let P = null;                                    // struct-of-arrays
 /** A count this screen can actually carry at 60 fps. */
 function autoCount() {
   const px = window.innerWidth * window.innerHeight;
-  let n = Math.round(px / 330);                  // ~1700 on a 900x640 desktop
+  let n = Math.round(px / 46);                   // dense enough to read as a surface
   const cores = navigator.hardwareConcurrency || 4;
-  if (cores <= 4) n *= 0.85;
-  if (COARSE) n = Math.max(n, 700);              // a phone screen still wants a field
-  return Math.max(300, Math.min(4000, Math.round(n / 100) * 100));
+  if (cores <= 4) n *= 0.8;
+  if (COARSE) n = Math.min(n, 6000);             // phones get a lighter field
+  return Math.max(500, Math.min(24000, Math.round(n / 500) * 500));
 }
 
 function allocParticles(n) {
@@ -316,7 +303,7 @@ function allocParticles(n) {
   };
   const rnd = mulberry32(seed ^ 0x9e37);
   for (let i = 0; i < n; i++) {
-    P.sz[i] = 0.80 + Math.pow(rnd(), 2.4) * 2.7;
+    P.sz[i] = 0.75 + Math.pow(rnd(), 2.6) * 1.55;
     P.ph[i] = rnd() * Math.PI * 2;
     P.sp[i] = 0.020 + rnd() * 0.052;
     P.ba[i] = (rnd() * 512) | 0;
@@ -617,7 +604,7 @@ function frame(now) {
     if (now - fpsSince > 1600) {
       const fps = fpsFrames / ((now - fpsSince) / 1000);
       if (fpsSince && fps < 42 && COUNT > 400) {
-        const n = Math.max(400, Math.round(COUNT * 0.78 / 100) * 100);
+        const n = Math.max(600, Math.round(COUNT * 0.78 / 500) * 500);
         allocParticles(n); layoutHomes();
         sCount.value = String(n); vCount.textContent = String(n);
       }
@@ -632,12 +619,11 @@ function frame(now) {
   const drive    = loud * SENS;
   const t        = now * 0.001;
 
-  // trails: brighter passages clear faster, so the field stays crisp
-  ctx.globalCompositeOperation = 'source-over';
+  // wipe to black — the field is drawn plainly, no trails, no bloom
   ctx.globalAlpha = 1;
-  ctx.fillStyle = 'rgba(0,0,0,' + (0.22 + loud * 0.16 + flash * 0.10).toFixed(3) + ')';
+  ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = '#fff';
 
   const wLen = wave ? wave.length : 0;
   const bLen = bwave ? bwave.length : 0;
@@ -645,7 +631,7 @@ function frame(now) {
   const rip  = 10 + drive * 74;            // lateral waveform ripple, px
   const waveScroll = (now * 0.12) | 0;     // taps drift so the field never freezes
   const bassScroll = (now * 0.05) | 0;
-  const sizeBoost = 1 + Math.min(1.25, bassEnv * 1.35 * SENS) + Math.min(0.55, flash * 0.55);
+  const lift = Math.min(0.30, bassEnv * 0.34 * SENS) + Math.min(0.16, flash * 0.16);
 
   // the focal plane drifts on its own and jumps on a hard low-end hit
   let zAim = Math.sin(t * 0.11) * 0.72 + rack;
@@ -702,23 +688,32 @@ function frame(now) {
     // scattered dust instead of going soft.
     const coc = Math.abs(hz - zFocus) * cocK * scale;
     let sx = px, sy = py;
-    if (coc > 0.6) {
+    if (coc > 0.5) {
       const di = ((P.ba[i] + dirScroll) & 511) << 1;
-      const rr = coc * (0.45 + 0.55 * Math.random());
+      // the offset is fixed per grain — a defocused grain sits still in the
+      // wrong place, it does not boil. Only dirScroll turns it, slowly.
+      const rr = coc * (0.32 + 0.68 * P.ph[i] * 0.15915494);
       sx += DIRS[di] * rr;
       sy += DIRS[di + 1] * rr;
     }
 
     // --- draw ------------------------------------------------
-    const sp = Math.hypot(P.vx[i], P.vy[i]);
-    const s  = (P.sz[i] * sizeBoost + Math.min(1.1, sp * 0.06)) * scale;
-    let a = 0.34 + P.sz[i] * 0.085 + drive * 0.26 + Math.min(0.20, sp * 0.018) + flash * 0.14;
-    a /= 1 + coc * 0.035;                  // the spread-out ones give up their light
-    if (coc < 1.2) a *= 1.55;              // ...and the ones on the plane keep it all
-    if (a > 0.97) a = 0.97;
+    // A plain square. Sub-pixel sizes are anti-aliased by the canvas, so
+    // the small ones land as faint specks and the field grades by density
+    // rather than by glow.
+    // never smaller than one device pixel — a sub-pixel square would just
+    // fade to grey, and these should read as specks, not mush
+    let s = P.sz[i] * scale;
+    if (s < PX) s = PX;
+    // On the focal plane a grain is plain white. Off it, its light is
+    // spread over the circle of confusion, so it dims the way a real
+    // out-of-focus point does — the plane reads as a bright dense band and
+    // everything else falls away into dust.
+    let a = (0.78 + P.sz[i] * 0.10 + drive * 0.12 + lift) / (1 + coc * 0.1667);
+    if (a > 1) a = 1;
 
     ctx.globalAlpha = a;
-    ctx.drawImage(SPR, sx - s, sy - s, s * 2, s * 2);
+    ctx.fillRect(sx - s * 0.5, sy - s * 0.5, s, s);
   }
 
   ctx.globalAlpha = 1;

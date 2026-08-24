@@ -121,8 +121,12 @@ point it at the DS-4M and every tom hit reshuffles the field.
   circle of confusion, so out-of-focus regions break up into scattered
   dust while the plane of focus stays razor sharp. The focal plane
   drifts on its own and racks to a new depth on a hard low-end hit.
-* Typed-array particle store, one additive glow sprite, 300–4000
-  grains, 60 fps on a laptop.
+* Plain rendering. No glow, no bloom, no trails: white squares on a
+  hard-black wipe, one device pixel at the smallest. Brightness comes
+  from the optics alone — a grain on the focal plane is white, and one
+  off it dims as its light spreads over the circle of confusion — so the
+  field grades by density instead of by effect.
+* Typed-array particle store, 500–24 000 grains, 60 fps on a laptop.
 
 Keys: `R` re-seed · `P` next layout · `D` built-in demo kick (works
 without a mic) · `H` hide the HUD · `F` fullscreen. Tapping the canvas
