@@ -5,8 +5,9 @@ a four-channel analog drum synthesiser in the Pollard Syndrum family.
 
 ```
 scire-h/
-├── index.html        ← single-file HTML / Web Audio clone
-└── ds4-native/       ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
+├── index.html          ← single-file HTML / Web Audio clone
+├── mic-particles.html  ← mic-reactive particle visualiser
+└── ds4-native/         ← JUCE 8 C++ plug-in (Standalone + AU + VST3)
 ```
 
 ## 1. HTML / Web Audio clone (`index.html`)
@@ -94,6 +95,61 @@ audio behaviour.
 cd ds4-native/tests
 ./run_all.sh
 ```
+
+## 3. Mic-reactive particles (`mic-particles.html`)
+
+A second self-contained page: white grains on black that move to
+whatever the microphone hears, weighted heavily towards the low end —
+point it at the DS-4M and every tom hit reshuffles the field.
+
+* Live input through `getUserMedia` with echo cancellation, noise
+  suppression and AGC all **off**, so the bass survives.
+* 4096-point FFT split into bass / low-mid / mid / high bands, plus a
+  separate twice-lowpassed (150 Hz) analyser tap for a clean sub
+  waveform.
+* Adaptive onset detection on the bass band: each hit flashes the
+  field, throws the grains outward and re-seeds their arrangement;
+  the hardest hits switch to a different layout altogether
+  (scatter / phyllotaxis / grid / rings / waves / spokes).
+* Waveform taps are bound to geometry — radius indexes the sub
+  waveform (concentric ripple), angle indexes the full-band waveform
+  (tangential shiver) — so the layout stays readable while it moves.
+* **Depth of field.** Every layout is three-dimensional (a sphere shell,
+  a tunnel of rings, a tilted plane…) and the field is shot through a
+  lens: an 絞り slider sets the f-number from f/1.4 to f/22. A grain off
+  the focal plane is not blurred — it is thrown somewhere inside its
+  circle of confusion, so out-of-focus regions break up into scattered
+  dust while the plane of focus stays razor sharp. The focal plane
+  drifts on its own and racks to a new depth on a hard low-end hit.
+* Plain rendering. No glow, no bloom, no trails: white squares on a
+  hard-black wipe, one device pixel at the smallest. Brightness comes
+  from the optics alone — a grain on the focal plane is white, and one
+  off it dims as its light spreads over the circle of confusion — so the
+  field grades by density instead of by effect.
+* Typed-array particle store, 500–24 000 grains, 60 fps on a laptop.
+
+Keys: `R` re-seed · `P` next layout · `D` built-in demo kick (works
+without a mic) · `H` hide the HUD · `F` fullscreen. Tapping the canvas
+counts as a hit.
+
+```
+open mic-particles.html      # then allow microphone access
+```
+
+### On a phone
+
+The page is built for it: grain count sized to the screen, an adaptive
+quality pass that sheds grains if the frame rate drops, touch-sized
+controls, Screen Wake Lock, safe-area padding, no rubber-band scrolling
+and an audio context that resumes when the tab comes back.
+
+One hard browser rule though — **`getUserMedia` only works in a secure
+context**, i.e. over `https://` (or `localhost`). Opening the file from
+the phone's Files app (`file://`), or over plain `http://` on the LAN,
+gives you no microphone at all; the page detects that, says so on the
+start screen and falls back to the built-in demo source. To use the mic
+on a phone, serve it over HTTPS — GitHub Pages for this repo is the
+least-effort route.
 
 ## License
 
