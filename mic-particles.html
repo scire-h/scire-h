@@ -101,6 +101,8 @@
     <input id="sSens" type="range" min="20" max="400" value="130" /><span class="val" id="vSens">1.3</span></div>
   <div class="ctl"><label>低音</label>
     <input id="sBass" type="range" min="0" max="400" value="260" /><span class="val" id="vBass">2.6</span></div>
+  <div class="ctl"><label>絞り</label>
+    <input id="sApt" type="range" min="0" max="100" value="38" /><span class="val" id="vApt">F4.0</span></div>
   <div class="ctl"><label>粒</label>
     <input id="sCount" type="range" min="300" max="4000" step="100" value="1600" /><span class="val" id="vCount">1600</span></div>
   <div id="meter"><div id="meterBass"></div></div>
@@ -181,6 +183,25 @@ SPR.width = SPR.height = 64;
   g.fillStyle = rg; g.fillRect(0, 0, 64, 64);
 }
 
+// unit vectors, so a defocused grain can be flung around its true
+// position without a trig call per grain per frame
+const DIRS = new Float32Array(1024);
+for (let i = 0; i < 512; i++) {
+  const a = i / 512 * Math.PI * 2;
+  DIRS[i * 2] = Math.cos(a); DIRS[i * 2 + 1] = Math.sin(a);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  optics — the field has depth, and only one plane of it is sharp
+// ══════════════════════════════════════════════════════════════
+const FOV = 1200, DEPTH = 340;       // perspective strength
+let FNUM = 4.0;                      // aperture, from the 絞り slider
+let zFocus = 0, rack = 0;            // focal plane, and the rack-focus kick
+
+/** Slider position (0..100) → f-number, geometric from f/1.4 to f/22. */
+function fnum(v) { return 1.4 * Math.pow(22 / 1.4, v / 100); }
+function fmtF(f) { return f < 10 ? f.toFixed(1) : String(Math.round(f)); }
+
 // ══════════════════════════════════════════════════════════════
 //  seeded RNG — a new seed == a new grain arrangement
 // ══════════════════════════════════════════════════════════════
@@ -202,17 +223,22 @@ let seed = 1234;
 
 function placeHome(name, i, n, rnd, out) {
   const R = Math.min(W, H) * 0.44;
+  out.z = 0;
   switch (name) {
-    case 'scatter': {
+    case 'scatter': {                       // a slab of dust
       out.x = rnd() * W;
       out.y = rnd() * H;
+      out.z = rnd() * 2 - 1;
       break;
     }
-    case 'phyllotaxis': {
+    case 'phyllotaxis': {                   // a sphere shell, not a disc
+      const u = (i + 0.5) / n;
+      const z = 1 - 2 * u;
+      const r = Math.sqrt(Math.max(0, 1 - z * z)) * R * 1.24;
       const a = i * 2.399963229728653 + rnd() * 0.05;
-      const r = Math.sqrt((i + 0.5) / n) * R * 1.28;
       out.x = CX + Math.cos(a) * r;
       out.y = CY + Math.sin(a) * r;
+      out.z = z * 0.95;
       break;
     }
     case 'grid': {
@@ -222,6 +248,7 @@ function placeHome(name, i, n, rnd, out) {
       const mx = W * 0.06, my = H * 0.06;
       out.x = mx + (W - 2 * mx) * (gx + 0.5) / cols + (rnd() - 0.5) * (W / cols) * 0.45;
       out.y = my + (H - 2 * my) * (gy + 0.5) / rows + (rnd() - 0.5) * (H / rows) * 0.45;
+      out.z = (gx / cols - 0.5) * 1.7;     // a plane tilted away from the lens
       break;
     }
     case 'rings': {
@@ -231,6 +258,7 @@ function placeHome(name, i, n, rnd, out) {
       const a = i * 2.399963229728653 + k;                      // golden angle, even spacing
       out.x = CX + Math.cos(a) * r;
       out.y = CY + Math.sin(a) * r * 0.96;
+      out.z = 1 - 2 * (k + 0.5) / RINGS;   // a tunnel: each ring at its own depth
       break;
     }
     case 'waves': {
@@ -241,14 +269,17 @@ function placeHome(name, i, n, rnd, out) {
       const amp = H / LINES * 0.33;
       out.x = t * W;
       out.y = H * (li + 0.5) / LINES + Math.sin(t * Math.PI * 2 * FREQ + li * 0.8) * amp;
+      out.z = 1 - 2 * (li + 0.5) / LINES;  // each line further back than the last
       break;
     }
     case 'spokes': {
       const ARMS = 16 + ((seed >> 2) % 17);
       const a = (i % ARMS) / ARMS * Math.PI * 2 + (seed % 100) * 0.01;
-      const r = Math.pow(rnd(), 0.62) * RMAX * 0.94;
+      const rr = Math.pow(rnd(), 0.62);
+      const r = rr * RMAX * 0.94;
       out.x = CX + Math.cos(a) * r + (rnd() - 0.5) * 9;
       out.y = CY + Math.sin(a) * r + (rnd() - 0.5) * 9;
+      out.z = 1 - 2 * rr;                  // a cone opening towards the lens
       break;
     }
   }
@@ -274,32 +305,35 @@ function allocParticles(n) {
   P = {
     x: new Float32Array(n), y: new Float32Array(n),
     hx: new Float32Array(n), hy: new Float32Array(n),
+    hz: new Float32Array(n),                     // depth, -1 (near) .. +1 (far)
     vx: new Float32Array(n), vy: new Float32Array(n),
     wr: new Uint16Array(n),                      // low-band tap, by radius
     wa: new Uint16Array(n),                      // full-band tap, by angle
     sz: new Float32Array(n),                     // base radius
     ph: new Float32Array(n),                     // idle drift phase
-    sp: new Float32Array(n)                      // spring stiffness
+    sp: new Float32Array(n),                     // spring stiffness
+    ba: new Uint16Array(n)                       // scatter direction, indexes DIRS
   };
   const rnd = mulberry32(seed ^ 0x9e37);
   for (let i = 0; i < n; i++) {
     P.sz[i] = 0.80 + Math.pow(rnd(), 2.4) * 2.7;
     P.ph[i] = rnd() * Math.PI * 2;
     P.sp[i] = 0.020 + rnd() * 0.052;
+    P.ba[i] = (rnd() * 512) | 0;
     P.x[i] = CX + (rnd() - 0.5) * W;
     P.y[i] = CY + (rnd() - 0.5) * H;
   }
   COUNT = n;
 }
 
-const tmp = { x:0, y:0 };
+const tmp = { x:0, y:0, z:0 };
 function layoutHomes() {
   if (!P) return;
   const name = PATTERNS[patIdx];
   const rnd = mulberry32(seed);
   for (let i = 0; i < COUNT; i++) {
     placeHome(name, i, COUNT, rnd, tmp);
-    P.hx[i] = tmp.x; P.hy[i] = tmp.y;
+    P.hx[i] = tmp.x; P.hy[i] = tmp.y; P.hz[i] = tmp.z;
     // tap the buffers by geometry, not at random: grains at the same radius
     // ride the same low-frequency crest, so the low end reads as a ripple
     const dx = tmp.x - CX, dy = tmp.y - CY;
@@ -452,6 +486,7 @@ function onOnset(strength) {
     return;
   }
   lastRegen = now;
+  if (strength > 0.45) rack = Math.random() * 1.5 - 0.75;   // rack focus
   // every low-end hit re-seeds the arrangement; the big ones change the pattern
   if (strength > 0.70 && Math.random() < 0.34) nextPattern();
   else regenerate(0.4 + strength * 1.6);
@@ -496,6 +531,7 @@ function bindRange(sid, vid, fmt, set) {
 }
 bindRange('sSens',  'vSens',  n => (n / 100).toFixed(1), n => SENS    = n / 100);
 bindRange('sBass',  'vBass',  n => (n / 100).toFixed(1), n => BASSAMT = n / 100);
+bindRange('sApt',   'vApt',   n => 'F' + fmtF(fnum(n)), n => FNUM = fnum(n));
 const sCount = $('sCount'), vCount = $('vCount');
 bindRange('sCount', 'vCount', n => String(n), n => {
   if (!P || n === COUNT) return;
@@ -599,7 +635,7 @@ function frame(now) {
   // trails: brighter passages clear faster, so the field stays crisp
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
-  ctx.fillStyle = 'rgba(0,0,0,' + (0.26 + loud * 0.16 + flash * 0.10).toFixed(3) + ')';
+  ctx.fillStyle = 'rgba(0,0,0,' + (0.22 + loud * 0.16 + flash * 0.10).toFixed(3) + ')';
   ctx.fillRect(0, 0, W, H);
   ctx.globalCompositeOperation = 'lighter';
 
@@ -611,8 +647,16 @@ function frame(now) {
   const bassScroll = (now * 0.05) | 0;
   const sizeBoost = 1 + Math.min(1.25, bassEnv * 1.35 * SENS) + Math.min(0.55, flash * 0.55);
 
+  // the focal plane drifts on its own and jumps on a hard low-end hit
+  let zAim = Math.sin(t * 0.11) * 0.72 + rack;
+  if (zAim >  1) zAim =  1; else if (zAim < -1) zAim = -1;
+  zFocus += (zAim - zFocus) * Math.min(1, 0.05 * dt);
+  rack *= Math.pow(0.985, dt);
+  const cocK = 52 / FNUM;                  // circle of confusion per unit depth
+  const dirScroll = (now * 0.02) | 0;
+
   for (let i = 0; i < COUNT; i++) {
-    const hx = P.hx[i], hy = P.hy[i];
+    const hx = P.hx[i], hy = P.hy[i], hz = P.hz[i];
     let dx = hx - CX, dy = hy - CY;
     const d = Math.hypot(dx, dy) || 1;
     const nx = dx / d, ny = dy / d;
@@ -632,8 +676,12 @@ function frame(now) {
     const ix = Math.cos(t * 0.42 + P.ph[i]) * idle;
     const iy = Math.sin(t * 0.37 + P.ph[i] * 1.7) * idle;
 
-    const tx = hx + nx * radial - ny * tang + ix;
-    const ty = hy + ny * radial + nx * tang + iy;
+    // displace in world space, then project — near grains swing wider
+    const wx = hx + nx * radial - ny * tang + ix;
+    const wy = hy + ny * radial + nx * tang + iy;
+    const scale = FOV / (FOV + hz * DEPTH);
+    const tx = CX + (wx - CX) * scale;
+    const ty = CY + (wy - CY) * scale;
 
     // --- spring ----------------------------------------------
     const k = P.sp[i] * (1 + bassEnv * 1.6);
@@ -648,14 +696,29 @@ function frame(now) {
     if (py < -m) py = H + m; else if (py > H + m) py = -m;
     P.x[i] = px; P.y[i] = py;
 
+    // --- defocus ---------------------------------------------
+    // Away from the focal plane a grain is not blurred, it is thrown
+    // somewhere inside its circle of confusion — the field dissolves into
+    // scattered dust instead of going soft.
+    const coc = Math.abs(hz - zFocus) * cocK * scale;
+    let sx = px, sy = py;
+    if (coc > 0.6) {
+      const di = ((P.ba[i] + dirScroll) & 511) << 1;
+      const rr = coc * (0.45 + 0.55 * Math.random());
+      sx += DIRS[di] * rr;
+      sy += DIRS[di + 1] * rr;
+    }
+
     // --- draw ------------------------------------------------
     const sp = Math.hypot(P.vx[i], P.vy[i]);
-    const s  = P.sz[i] * sizeBoost + Math.min(1.1, sp * 0.06);
-    let a = 0.28 + P.sz[i] * 0.085 + drive * 0.26 + Math.min(0.20, sp * 0.018) + flash * 0.14;
-    if (a > 0.95) a = 0.95;
+    const s  = (P.sz[i] * sizeBoost + Math.min(1.1, sp * 0.06)) * scale;
+    let a = 0.34 + P.sz[i] * 0.085 + drive * 0.26 + Math.min(0.20, sp * 0.018) + flash * 0.14;
+    a /= 1 + coc * 0.035;                  // the spread-out ones give up their light
+    if (coc < 1.2) a *= 1.55;              // ...and the ones on the plane keep it all
+    if (a > 0.97) a = 0.97;
 
     ctx.globalAlpha = a;
-    ctx.drawImage(SPR, px - s, py - s, s * 2, s * 2);
+    ctx.drawImage(SPR, sx - s, sy - s, s * 2, s * 2);
   }
 
   ctx.globalAlpha = 1;

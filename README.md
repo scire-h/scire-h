@@ -114,6 +114,13 @@ point it at the DS-4M and every tom hit reshuffles the field.
 * Waveform taps are bound to geometry — radius indexes the sub
   waveform (concentric ripple), angle indexes the full-band waveform
   (tangential shiver) — so the layout stays readable while it moves.
+* **Depth of field.** Every layout is three-dimensional (a sphere shell,
+  a tunnel of rings, a tilted plane…) and the field is shot through a
+  lens: an 絞り slider sets the f-number from f/1.4 to f/22. A grain off
+  the focal plane is not blurred — it is thrown somewhere inside its
+  circle of confusion, so out-of-focus regions break up into scattered
+  dust while the plane of focus stays razor sharp. The focal plane
+  drifts on its own and racks to a new depth on a hard low-end hit.
 * Typed-array particle store, one additive glow sprite, 300–4000
   grains, 60 fps on a laptop.
 
